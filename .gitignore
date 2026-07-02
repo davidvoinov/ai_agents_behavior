@@ -1,0 +1,16 @@
+# Secrets
+.env
+
+# Experiment output
+# data/
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+submission.ipynb
+Literature_Review_5_Papers.md
+
+# Supplementary — not part of the code/data release
+paper/
