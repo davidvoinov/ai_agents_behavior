@@ -3,6 +3,8 @@
 
 # Experiment output
 # data/
+notes/
+paper/
 
 # Python
 __pycache__/
@@ -11,6 +13,3 @@ __pycache__/
 
 submission.ipynb
 Literature_Review_5_Papers.md
-
-# Supplementary — not part of the code/data release
-paper/

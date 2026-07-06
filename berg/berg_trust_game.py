@@ -123,12 +123,22 @@ def make_chat_fn(mcfg: ModelConfig) -> ChatFn:
     return chat_fn
 
 
-def with_retry(fn, retries: int = 6, base_delay: float = 3.0):
+def with_retry(fn, retries: int | None = None, base_delay: float | None = None):
     """Exponential-backoff wrapper for flaky / rate-limited free endpoints.
 
-    Delays 3, 6, 12, 24, 48s (cumulative ~93s) so a per-minute rate-limit window
-    can reset and the call succeeds instead of crashing the run.
+    Defaults (6 tries, base 3s) give delays 3, 6, 12, 24, 48s (~93s total) so
+    a per-minute rate-limit window can reset. Provider-side congestion (e.g.
+    Cerebras queue_exceeded storms) can outlive that window, so both knobs
+    are overridable via env without touching call sites:
+        RETRY_TRIES       int, default 6
+        RETRY_BASE_DELAY  seconds, default 3.0
+    e.g. RETRY_TRIES=8 keeps retrying for ~12.7 min before giving up.
     """
+    import os
+    if retries is None:
+        retries = int(os.environ.get("RETRY_TRIES", "6"))
+    if base_delay is None:
+        base_delay = float(os.environ.get("RETRY_BASE_DELAY", "3.0"))
     for i in range(retries):
         try:
             return fn()
@@ -239,6 +249,20 @@ def comm_user_prompt(cfg: GameConfig, role: str, transcript: list[dict]) -> str:
     )
 
 
+def strip_private_reasoning(text: str) -> str:
+    """Remove chain-of-thought blocks a model may emit around its message.
+
+    Some reasoning models (e.g. qwen3 on Groq) return `<think>...</think>`
+    deliberation inside the content channel. That deliberation is PRIVATE
+    reasoning and must never enter the shared transcript, or the counterpart
+    would read the agent's mind (isolation violation, found 2026-07-04).
+    Handles both closed blocks and an unclosed block from truncation.
+    """
+    out = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    out = re.sub(r"<think>.*\Z", "", out, flags=re.DOTALL)  # truncated block
+    return out.strip()
+
+
 def run_communication(inv: "Agent", tru: "Agent", cfg: GameConfig,
                       comm_rounds: int) -> list[dict]:
     """Alternating messages, Investor first, for `comm_rounds` full rounds.
@@ -246,13 +270,20 @@ def run_communication(inv: "Agent", tru: "Agent", cfg: GameConfig,
     Each message is an independent model call that re-reads the shared transcript,
     so isolation holds: an agent sees only what the other *said*, never the other's
     private reasoning. The transcript is the entire cross-agent channel.
+    Raw completions are kept in the record (`raw`) for provenance, but only the
+    sanitized `message` is ever rendered to the counterpart.
     """
     transcript: list[dict] = []
     for _ in range(comm_rounds):
         for role, agent, label in (("investor", inv, cfg.investor_label),
                                     ("trustee", tru, cfg.trustee_label)):
-            msg = agent.respond(comm_user_prompt(cfg, role, transcript)).strip()
-            transcript.append({"speaker": role, "label": label, "message": msg})
+            raw = agent.respond(comm_user_prompt(cfg, role, transcript)).strip()
+            msg = strip_private_reasoning(raw)
+            if not msg:   # whole completion was reasoning (truncation) — retry once
+                raw = agent.respond(comm_user_prompt(cfg, role, transcript)).strip()
+                msg = strip_private_reasoning(raw) or "(no message)"
+            transcript.append({"speaker": role, "label": label,
+                               "message": msg, "raw": raw})
     return transcript
 
 
@@ -282,7 +313,7 @@ def trustee_user_prompt(cfg: GameConfig, sent: int, tripled: int,
                      + render_transcript(cfg, transcript))
     parts.append(
         f"The {cfg.investor_label} chose to pass X = {sent} {cfg.unit_word}. "
-        f"After tripling, you received {tripled} {cfg.unit_word} (in addition to your "
+        f"After multiplication by {cfg.multiplier}, you received {tripled} {cfg.unit_word} (in addition to your "
         f"own starting {cfg.endowment}). You may return any integer Y from 0 to {tripled}.\n"
         f"{_JSON_INSTR}"
     )
@@ -347,18 +378,26 @@ def parse_decision(text: str, lo: int, hi: int) -> tuple[int, str, bool]:
 # --------------------------------------------------------------------------- #
 def run_dyad(chat_fn: ChatFn, cfg: GameConfig, treatment: str, dyad_id: str,
              mcfg: ModelConfig, history_report: Optional[str] = None,
-             comm_rounds: int = 0) -> dict:
+             comm_rounds: int = 0,
+             trustee_chat_fn: Optional[ChatFn] = None,
+             trustee_mcfg: Optional[ModelConfig] = None) -> dict:
     """Run a single one-shot Investor->Trustee interaction and return a record.
 
     If comm_rounds > 0, a pre-play communication phase runs first (Investor and
     Trustee exchange `comm_rounds` rounds of messages); both then decide privately
     with the full transcript in context. comm_rounds = 0 is the faithful Berg game.
+
+    By default both roles use `chat_fn`/`mcfg` (same model for both, as before).
+    Pass `trustee_chat_fn`/`trustee_mcfg` to run a cross-model dyad where the
+    Trustee is played by a different model than the Investor.
     """
     with_comm = comm_rounds > 0
+    tru_chat_fn = trustee_chat_fn or chat_fn
+    tru_mcfg = trustee_mcfg or mcfg
     # Two separate agents = isolated contexts. The transcript (built below) is the
     # only information that ever crosses between them.
     inv = Agent("investor", investor_system_prompt(cfg, with_comm), chat_fn)
-    tru = Agent("trustee", trustee_system_prompt(cfg, with_comm), chat_fn)
+    tru = Agent("trustee", trustee_system_prompt(cfg, with_comm), tru_chat_fn)
 
     transcript = run_communication(inv, tru, cfg, comm_rounds) if with_comm else []
     tr_arg = transcript or None
@@ -384,6 +423,10 @@ def run_dyad(chat_fn: ChatFn, cfg: GameConfig, treatment: str, dyad_id: str,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "model": mcfg.model,
         "temperature": mcfg.temperature,
+        "investor_model": mcfg.model,
+        "trustee_model": tru_mcfg.model,
+        "investor_temperature": mcfg.temperature,
+        "trustee_temperature": tru_mcfg.temperature,
         "endowment": cfg.endowment,
         "multiplier": cfg.multiplier,
         # actions
@@ -452,14 +495,18 @@ def build_history_report(records: list[dict], cfg: GameConfig,
 def run_treatment(chat_fn: ChatFn, cfg: GameConfig, mcfg: ModelConfig,
                   treatment: str, n_dyads: int, out_path: Path,
                   history_report: Optional[str] = None,
-                  sleep_between: float = 0.0, comm_rounds: int = 0) -> list[dict]:
+                  sleep_between: float = 0.0, comm_rounds: int = 0,
+                  trustee_chat_fn: Optional[ChatFn] = None,
+                  trustee_mcfg: Optional[ModelConfig] = None) -> list[dict]:
     """Run n independent dyads for one treatment, appending JSONL as we go."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     records = []
     with out_path.open("a", encoding="utf-8") as fh:
         for i in range(n_dyads):
             rec = run_dyad(chat_fn, cfg, treatment, f"{treatment}-{i:04d}",
-                           mcfg, history_report, comm_rounds)
+                           mcfg, history_report, comm_rounds,
+                           trustee_chat_fn=trustee_chat_fn,
+                           trustee_mcfg=trustee_mcfg)
             fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
             fh.flush()
             records.append(rec)
