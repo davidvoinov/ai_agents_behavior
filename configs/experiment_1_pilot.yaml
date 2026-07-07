@@ -1,0 +1,85 @@
+# Pilot configuration for Experiment 1.
+
+experiment:
+  id: berg_no_communication
+  treatment: no_communication
+  description: Berg trust game baseline without communication or social history.
+
+sample:
+  n_pairs_per_model_pair: 10
+  pairing_stage: same_model_only
+
+model_source:
+  file: configs/models_free.yaml
+
+analysis:
+  primary_comparison_unit: model_family
+  provider_handling: record separately as the access platform
+  reporting_label: analysis_label
+  do_not_pool_by_provider_only: true
+
+generation:
+  temperature: 1.0
+  communication_rounds: 0
+  use_social_history: false
+
+output:
+  raw_path: data/raw/berg_no_communication_pilot.jsonl
+  format: jsonl
+  save_raw_prompts: true
+  save_raw_responses: true
+
+model_pairs:
+  - pair_id: gpt_oss_20b_groq_same
+    investor_model: gpt_oss_20b_groq
+    trustee_model: gpt_oss_20b_groq
+    enabled: true
+    notes: Existing GPT-OSS baseline via Groq.
+
+  - pair_id: gpt_oss_120b_cerebras_same
+    investor_model: gpt_oss_120b_cerebras
+    trustee_model: gpt_oss_120b_cerebras
+    enabled: false
+    notes: Disabled for the minimal first pilot to keep GPT-OSS at 10 pairs.
+
+  - pair_id: gpt_oss_20b_openrouter_free_same
+    investor_model: gpt_oss_20b_openrouter_free
+    trustee_model: gpt_oss_20b_openrouter_free
+    enabled: false
+    notes: Disabled for the minimal first pilot to keep GPT-OSS at 10 pairs.
+
+  - pair_id: llama_groq_same
+    investor_model: llama_groq
+    trustee_model: llama_groq
+    enabled: true
+    notes: Llama same-model pilot via Groq.
+
+  - pair_id: llama_openrouter_free_same
+    investor_model: llama_openrouter_free
+    trustee_model: llama_openrouter_free
+    enabled: false
+    notes: Enable after selecting an available free OpenRouter Llama model.
+
+  - pair_id: qwen_groq_same
+    investor_model: qwen_groq
+    trustee_model: qwen_groq
+    enabled: true
+    notes: Qwen same-model pilot via Groq.
+
+  - pair_id: qwen_openrouter_free_same
+    investor_model: qwen_openrouter_free
+    trustee_model: qwen_openrouter_free
+    enabled: false
+    notes: Enable after selecting an available free OpenRouter Qwen model.
+
+  - pair_id: gemini_free_tier_same
+    investor_model: gemini_free_tier
+    trustee_model: gemini_free_tier
+    enabled: false
+    notes: Enable after filling in the exact Gemini free-tier model ID.
+
+  - pair_id: openrouter_free_model_same
+    investor_model: openrouter_free_model
+    trustee_model: openrouter_free_model
+    enabled: false
+    notes: Enable after selecting a concrete free OpenRouter model.
