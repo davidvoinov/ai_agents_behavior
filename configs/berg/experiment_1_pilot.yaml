@@ -10,7 +10,7 @@ sample:
   pairing_stage: same_model_only
 
 model_source:
-  file: configs/models_free.yaml
+  file: configs/berg/models_free.yaml
 
 analysis:
   primary_comparison_unit: model_family
@@ -24,7 +24,7 @@ generation:
   use_social_history: false
 
 output:
-  raw_path: data/raw/berg_no_communication_pilot.jsonl
+  raw_path: data/berg/raw/berg_no_communication_pilot.jsonl
   format: jsonl
   save_raw_prompts: true
   save_raw_responses: true

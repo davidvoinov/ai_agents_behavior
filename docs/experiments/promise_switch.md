@@ -154,29 +154,30 @@ Pooled-анализ:
 Предлагаемая структура:
 
 ```text
-src/
-  agents/
-    openrouter_client.py
-    prompts.py
-  experiment/
-    design.py
-    scheduler.py
-    trial_runner.py
-    parser.py
-    metrics.py
-  analysis/
-    summarize.py
+promise_switch/
+  client.py
+  config.py
+  experiment.py
+  io.py
+  metrics.py
+  models.py
+  parser.py
+  prompts.py
+scripts/
+  run_promise_switch.py
 configs/
-  experiment_3.json
+  promise_switch/
+    config.json
 runs/
-  <run_id>/
-    manifest.json
-    models_snapshot.json
-    api_calls.jsonl
-    trials.jsonl
-    errors.jsonl
-    summary_by_model.csv
-    summary_overall.json
+  promise_switch/
+    <run_id>/
+      manifest.json
+      models_snapshot.json
+      api_calls.jsonl
+      trials.jsonl
+      errors.jsonl
+      summary_by_model.csv
+      summary_overall.json
 ```
 
 Ключевые свойства:
@@ -187,7 +188,7 @@ runs/
 - model-first coverage: при ограниченной квоте сначала покрываем максимум моделей, затем увеличиваем repeats;
 - raw-first logging: сохраняем исходный ответ до парсинга.
 
-Implementation note: текущий runner находится в `run_promise_switch.py` и пакете `src/promise_switch/`. Отдельный health-check включается флагом `--health-check`; по умолчанию он выключен, чтобы не тратить бесплатную дневную квоту до основных trials.
+Implementation note: текущий runner находится в `scripts/run_promise_switch.py` и пакете `promise_switch/`. Отдельный health-check включается флагом `--health-check`; по умолчанию он выключен, чтобы не тратить бесплатную дневную квоту до основных trials.
 
 ## 7. Точный набор API
 

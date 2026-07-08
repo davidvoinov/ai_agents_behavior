@@ -9,13 +9,20 @@ import sys
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parent
-SRC = ROOT / "src"
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "promise_switch" / "config.json"
 
 from promise_switch.config import load_config
 from promise_switch.experiment import run_experiment
+
+
+def resolve_project_path(path_value: str) -> Path:
+    path = Path(path_value)
+    return path if path.is_absolute() else PROJECT_ROOT / path
 
 
 def load_env_file(path: Path) -> None:
@@ -43,7 +50,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--config",
-        default="configs/promise_switch.json",
+        default=str(DEFAULT_CONFIG),
         help="Path to JSON config.",
     )
     parser.add_argument("--run-id", default=None, help="Optional run id.")
@@ -117,8 +124,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    load_env_file(ROOT / args.env_file)
-    config = load_config(Path(args.config))
+    load_env_file(resolve_project_path(args.env_file))
+    config = load_config(resolve_project_path(args.config))
 
     overrides = {
         "run_id": args.run_id,
@@ -143,6 +150,10 @@ def main() -> int:
         config["output_dir"] = args.output_dir
     if args.health_check:
         config["health_check_models"] = True
+    if config.get("output_dir"):
+        output_dir = Path(str(config["output_dir"]))
+        if not output_dir.is_absolute():
+            config["output_dir"] = str(PROJECT_ROOT / output_dir)
 
     if not args.dry_run and not has_real_api_key(args.api_key_env):
         print(

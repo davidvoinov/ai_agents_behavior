@@ -1,6 +1,6 @@
 {
   "experiment_name": "promise_switch",
-  "output_dir": "runs",
+  "output_dir": "runs/promise_switch",
   "seed": 20260706,
   "n_trials_per_model": 1,
   "max_models": null,

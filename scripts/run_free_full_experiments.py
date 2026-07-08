@@ -15,6 +15,7 @@ import argparse
 import json
 import os
 import re
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,6 +25,11 @@ import requests
 import yaml
 from dotenv import load_dotenv
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 try:
     from berg import berg_trust_game as B
 except ImportError:
@@ -32,8 +38,7 @@ except ImportError:
 import run_experiment_1 as strict
 
 
-ROOT = Path(__file__).resolve().parent
-DEFAULT_CONFIG = ROOT / "configs" / "free_full_experiments.yaml"
+DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "berg" / "free_full_experiments.yaml"
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -48,7 +53,7 @@ def resolve_path(path_value: str | None) -> Path | None:
     if not path_value:
         return None
     path = Path(path_value)
-    return path if path.is_absolute() else ROOT / path
+    return path if path.is_absolute() else PROJECT_ROOT / path
 
 
 def index_models(models_cfg: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -414,7 +419,7 @@ def summarize(records: list[dict[str, Any]], label: str) -> None:
 
 
 def main() -> None:
-    load_dotenv(dotenv_path=ROOT / ".env")
+    load_dotenv(dotenv_path=PROJECT_ROOT / ".env")
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default=str(DEFAULT_CONFIG))
     parser.add_argument("--dry-run", action="store_true")

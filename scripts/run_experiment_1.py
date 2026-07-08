@@ -20,9 +20,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    load_dotenv(dotenv_path=PROJECT_ROOT / ".env")
 except ImportError:
     pass
 
@@ -37,8 +42,7 @@ except ImportError:
     import berg_trust_game as B
 
 
-ROOT = Path(__file__).resolve().parent
-DEFAULT_CONFIG = ROOT / "configs" / "experiment_1_pilot.yaml"
+DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "berg" / "experiment_1_pilot.yaml"
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -49,7 +53,7 @@ def load_yaml(path: Path) -> dict[str, Any]:
     return data
 
 
-def resolve_path(path_value: str | None, base: Path = ROOT) -> Path | None:
+def resolve_path(path_value: str | None, base: Path = PROJECT_ROOT) -> Path | None:
     if not path_value:
         return None
     path = Path(path_value)

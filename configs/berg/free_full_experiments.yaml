@@ -1,7 +1,7 @@
 # Free-stage configuration for the four core Berg trust-game experiments.
 
 model_source:
-  file: configs/models_free.yaml
+  file: configs/berg/models_free.yaml
 
 models:
   - gpt_oss_20b_groq
@@ -25,7 +25,7 @@ cross_model:
   include_all_ordered_pairs: false
 
 output:
-  directory: data/raw
+  directory: data/berg/raw
   prefix: free_full_berg
 
 experiments:
