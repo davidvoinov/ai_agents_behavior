@@ -143,6 +143,11 @@ def load_models(
 ) -> list[dict[str, Any]]:
     source = str(config.get("model_source", "live"))
     exclude = {str(value) for value in config.get("exclude_model_ids", [])}
+    if source in {"provider_config", "providers"}:
+        models = models_from_provider_config(config.get("models", []), exclude)
+        write_json(run_dir / "models_snapshot.json", {"source": source, "data": models})
+        write_json(run_dir / "filtered_models.json", models)
+        return models
     if source == "config":
         model_ids = [
             str(value)
@@ -176,6 +181,36 @@ def load_models(
     write_json(run_dir / "models_snapshot.json", result.data)
     models = filter_zero_price_text_models(data, exclude)
     write_json(run_dir / "filtered_models.json", models)
+    return models
+
+
+def models_from_provider_config(
+    raw_models: Any,
+    exclude_model_ids: set[str],
+) -> list[dict[str, Any]]:
+    if not isinstance(raw_models, list):
+        raise ValueError("provider_config model_source requires a list under 'models'.")
+
+    models = []
+    for index, raw_model in enumerate(raw_models):
+        if not isinstance(raw_model, dict):
+            raise ValueError(f"Model entry #{index + 1} must be an object.")
+        model = dict(raw_model)
+        model_id = str(model.get("model_id") or model.get("id") or "").strip()
+        if not model_id:
+            raise ValueError(f"Model entry #{index + 1} is missing model_id/id.")
+        if model_id in exclude_model_ids:
+            continue
+        model["id"] = model_id
+        model.setdefault("name", model.get("analysis_label") or model_id)
+        model.setdefault("supported_parameters", [])
+        model.setdefault("architecture", {"input_modalities": ["text"], "output_modalities": ["text"]})
+        returnable = {
+            key: value
+            for key, value in model.items()
+            if key not in {"api_key", "token"}
+        }
+        models.append(returnable)
     return models
 
 
@@ -259,6 +294,10 @@ def run_trial(
     trial: dict[str, Any] = {
         "trial_id": planned["trial_id"],
         "model_id": model_id,
+        "model_name": model.get("name"),
+        "provider": model.get("provider"),
+        "model_family": model.get("model_family"),
+        "analysis_label": model.get("analysis_label"),
         "trial_index": trial_index,
         "started_at": utc_now(),
         "partner_mode": config.get("partner_mode", "scripted"),
@@ -378,20 +417,22 @@ def call_phase(
 ) -> dict[str, Any]:
     model = planned["model"]
     supported = supported_parameters(model)
+    phase_client = client_for_model(config, client, model)
+    phase_messages = apply_model_prompt_prefix(messages, model)
     max_retries = int(config.get("max_retries", 1))
     retry_sleep_s = float(config.get("retry_sleep_s", 2.0))
     result: ApiResult | None = None
 
     for attempt in range(max_retries + 1):
-        result = client.chat_completion(
+        result = phase_client.chat_completion(
             model_id=planned["model_id"],
-            messages=messages,
+            messages=phase_messages,
             max_tokens=int(config.get("max_tokens", 300)),
             temperature=float(config.get("temperature", 0.2)),
             supported_parameters=supported,
             use_response_format=bool(config.get("use_response_format", True)),
         )
-        log_api_call(run_dir, planned, phase, attempt, messages, result)
+        log_api_call(run_dir, planned, phase, attempt, phase_messages, result)
         if result.ok or result.status not in {408, 409, 429, 500, 502, 503, 504, 529}:
             break
         if attempt < max_retries and retry_sleep_s > 0:
@@ -399,6 +440,9 @@ def call_phase(
 
     assert result is not None
     content = extract_message_content(result.data)
+    phase_sleep_s = float(model.get("phase_sleep_s", config.get("phase_sleep_s", 0.0)) or 0.0)
+    if phase_sleep_s > 0:
+        time.sleep(phase_sleep_s)
     return {
         "ok": result.ok,
         "status": result.status,
@@ -412,6 +456,43 @@ def call_phase(
             "usage": (result.data or {}).get("usage") if result.data else None,
         },
     }
+
+
+def apply_model_prompt_prefix(
+    messages: list[dict[str, str]],
+    model: dict[str, Any],
+) -> list[dict[str, str]]:
+    prefix = str(model.get("prompt_prefix") or "").strip()
+    if not prefix:
+        return messages
+    out = []
+    applied = False
+    for message in messages:
+        copied = dict(message)
+        if copied.get("role") == "user" and not applied:
+            copied["content"] = f"{prefix}\n{copied.get('content', '')}"
+            applied = True
+        out.append(copied)
+    return out
+
+
+def client_for_model(
+    config: dict[str, Any],
+    default_client: OpenRouterClient,
+    model: dict[str, Any],
+) -> OpenRouterClient:
+    base_url = model.get("base_url")
+    api_key_env = model.get("api_key_env")
+    if not base_url and not api_key_env:
+        return default_client
+    api_key = os.environ.get(str(api_key_env or ""))
+    return OpenRouterClient(
+        api_key=api_key,
+        base_url=str(base_url or "https://openrouter.ai/api/v1"),
+        timeout_s=int(config.get("request_timeout_s", 90)),
+        app_title=str(config.get("app_title", "Promise Switch Experiment")),
+        http_referer=config.get("http_referer"),
+    )
 
 
 def log_api_call(
@@ -428,6 +509,8 @@ def log_api_call(
             "at": utc_now(),
             "trial_id": planned["trial_id"],
             "model_id": planned["model_id"],
+            "provider": planned.get("model", {}).get("provider"),
+            "analysis_label": planned.get("model", {}).get("analysis_label"),
             "phase": phase,
             "attempt": attempt,
             "request": {

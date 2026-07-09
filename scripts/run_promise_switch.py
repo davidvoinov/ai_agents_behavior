@@ -66,9 +66,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model-source",
-        choices=("live", "config"),
+        choices=("live", "config", "provider_config"),
         default=None,
-        help="Use live OpenRouter /models or static config model_ids.",
+        help="Use live OpenRouter /models, static OpenRouter model_ids, or provider-config models.",
     )
     parser.add_argument(
         "--n-trials",
@@ -155,7 +155,11 @@ def main() -> int:
         if not output_dir.is_absolute():
             config["output_dir"] = str(PROJECT_ROOT / output_dir)
 
-    if not args.dry_run and not has_real_api_key(args.api_key_env):
+    if (
+        not args.dry_run
+        and config.get("model_source") != "provider_config"
+        and not has_real_api_key(args.api_key_env)
+    ):
         print(
             f"Missing real {args.api_key_env}. Put it in {args.env_file} or run with --dry-run.",
             file=sys.stderr,

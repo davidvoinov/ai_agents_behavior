@@ -11,6 +11,12 @@ paper/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+.pytest_cache/
+
+# Local/editor noise
+.DS_Store
+*.log
+*.tmp
 
 submission.ipynb
 Literature_Review_5_Papers.md
