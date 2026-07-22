@@ -92,7 +92,17 @@ PACK: dict[str, ModelSpec] = {
                                   note="confirm exact Nebius model id in console"),
     "gpt-5.6-luna":     ModelSpec("gpt-5.6-luna",     "openai", "gpt-5.6-luna",         True,  1.00,  6.00, batch=True),
     "claude-sonnet-5":  ModelSpec("claude-sonnet-5",  "openrouter","anthropic/claude-sonnet-5", True, 2.00, 10.00, batch=True),
+    # Free-tier pilot fallbacks (Cerebras). Free limits 2026: 5 req/min, 30K
+    # tokens/min, 1M tokens/day, 8192-token context — pace with MIN_CALL_INTERVAL=12
+    # and keep to no_history (communication transcripts risk the 8192 cap).
+    "gpt-oss-120b":     ModelSpec("gpt-oss-120b",     "cerebras", "gpt-oss-120b",       True,  0.35,  0.75,
+                                  note="Cerebras free tier; our headline model"),
+    "glm-4.7":          ModelSpec("glm-4.7",          "cerebras", "glm-4.7",            True,  0.0,   0.0,
+                                  note="Cerebras free tier; second free model"),
 }
+
+# Free-tier pilot: no card, no DeepSeek credit needed.
+PILOT_FREE_KEYS = ["gpt-oss-120b"]
 
 # CLEAN within-family reasoning toggles (the causal test of H4). Only pairs where
 # the SAME model runs in two modes count here. GLM, Kimi, and Claude expose a

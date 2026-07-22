@@ -68,6 +68,8 @@ def main() -> None:
     temp = float(os.environ.get("LLM_TEMPERATURE", "1.0"))
     do_comm = os.environ.get("COMM", "0") == "1"
     comm_rounds = int(os.environ.get("COMM_ROUNDS", "2"))
+    # Rate pacing for capped free tiers (Cerebras free = 5 req/min -> 12s).
+    min_interval = float(os.environ.get("MIN_CALL_INTERVAL", "0"))
 
     for k in keys:
         if k not in P.PACK:
@@ -93,7 +95,7 @@ def main() -> None:
     with out_path.open("a", encoding="utf-8") as fh:
         for key in keys:
             spec = P.PACK[key]
-            mcfg = P.model_config(key, temperature=temp)
+            mcfg = P.model_config(key, temperature=temp, min_call_interval=min_interval)
             chat = B.make_chat_fn(mcfg)
             print(f"=== {key}  ({spec.provider}, {P.reasoning_class(key)}) ===")
             try:
