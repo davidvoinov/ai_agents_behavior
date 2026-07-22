@@ -40,7 +40,33 @@ RESKINS: dict[str, GameConfig] = {
         unit_word="points", currency="points",
         investor_label="Blue Player", trustee_label="Green Player",
     ),
+    # Probe D (strong-novel): a fully renarrated surface — new scenario, new
+    # role names, new units, new numbers, new multiplier — that keeps the
+    # economic structure (a one-shot sequential transfer-and-return with a
+    # multiplied transfer) while removing every cue that the paradigm is Berg.
+    # This is the far end of the surface gradient in H2/H3. The endowment 20
+    # and multiplier 4 keep the interior interesting (SPE still (0,0)).
+    "strong_novel": GameConfig(
+        endowment=20, multiplier=4,
+        currency="credits", unit_word="credits",
+        investor_label="Station Alpha", trustee_label="Station Beta",
+        study_framing="a logistics coordination simulation",
+        scenario=(
+            "Two automated orbital supply stations, Station Alpha and Station "
+            "Beta, share a power grid during a single docking window. Station "
+            "Alpha may route part of its reserve to Station Beta. Routed power "
+            "passes through an amplifier before it arrives, and Station Beta "
+            "then decides how much power to route back."
+        ),
+    ),
 }
+
+# Surfaces that keep the CANONICAL economic structure (endowment 10, x3):
+# used to test H2 (surface effect with structure held fixed).
+STRUCTURE_CANONICAL = ("canonical", "reskin")
+# Surfaces that SHIFT the economic structure: used with their structure-matched
+# wording twin to test H3 (reaction to the incentive change).
+STRUCTURE_SHIFTED = ("shifted", "reskin_shifted", "strong_novel")
 
 # Surface markers that identify the canonical study / benchmark. Re-skinned
 # prompts must contain NONE of these (checked in test_reskin.py).
