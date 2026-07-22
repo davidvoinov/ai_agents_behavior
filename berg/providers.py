@@ -42,6 +42,8 @@ PROVIDERS: dict[str, tuple[str, str, str]] = {
     "zhipu":      ("https://api.z.ai/api/paas/v4",       "ZHIPU_API_KEY",      "https://z.ai"),
     "openrouter": ("https://openrouter.ai/api/v1",      "OPENROUTER_API_KEY", "https://openrouter.ai/keys"),
     "openai":     (None,                                 "OPENAI_API_KEY",     "https://platform.openai.com/api-keys"),
+    # Anthropic's OpenAI-compatible endpoint — lets ChatOpenAI call Claude directly.
+    "anthropic":  ("https://api.anthropic.com/v1/",       "ANTHROPIC_API_KEY",  "https://console.anthropic.com"),
     # legacy free tiers kept only for reference — they cause the attrition we log.
     "groq":       ("https://api.groq.com/openai/v1",    "GROQ_API_KEY",       "https://console.groq.com/keys"),
     "cerebras":   ("https://api.cerebras.ai/v1",        "CEREBRAS_API_KEY",   "https://cloud.cerebras.ai"),
@@ -97,6 +99,11 @@ PACK: dict[str, ModelSpec] = {
     # and keep to no_history (communication transcripts risk the 8192 cap).
     "gpt-oss-120b":     ModelSpec("gpt-oss-120b",     "cerebras", "gpt-oss-120b",       True,  0.35,  0.75,
                                   note="Cerebras free tier; our headline model"),
+    # Cheap paid pilot on the Claude API (Anthropic OpenAI-compatible endpoint).
+    # Runs plain (thinking off) so output stays small. Or via openrouter as
+    # "anthropic/claude-haiku-4.5".
+    "claude-haiku-4.5": ModelSpec("claude-haiku-4.5", "anthropic", "claude-haiku-4-5",  False, 1.00,  5.00, batch=True,
+                                  note="cheapest Claude; plain mode"),
     "glm-4.7":          ModelSpec("glm-4.7",          "cerebras", "glm-4.7",            True,  0.0,   0.0,
                                   note="Cerebras free tier; second free model"),
 }
