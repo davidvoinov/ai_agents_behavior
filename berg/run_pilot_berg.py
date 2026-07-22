@@ -70,6 +70,9 @@ def main() -> None:
     comm_rounds = int(os.environ.get("COMM_ROUNDS", "2"))
     # Rate pacing for capped free tiers (Cerebras free = 5 req/min -> 12s).
     min_interval = float(os.environ.get("MIN_CALL_INTERVAL", "0"))
+    # Output headroom. Reasoning models (gpt-oss, DeepSeek Pro) need more or the
+    # think block truncates and shows up as infra 'truncated' in attrition.
+    max_tokens = int(os.environ.get("MAX_TOKENS", "1500"))
 
     for k in keys:
         if k not in P.PACK:
@@ -95,7 +98,8 @@ def main() -> None:
     with out_path.open("a", encoding="utf-8") as fh:
         for key in keys:
             spec = P.PACK[key]
-            mcfg = P.model_config(key, temperature=temp, min_call_interval=min_interval)
+            mcfg = P.model_config(key, temperature=temp, min_call_interval=min_interval,
+                                  max_tokens=max_tokens)
             chat = B.make_chat_fn(mcfg)
             print(f"=== {key}  ({spec.provider}, {P.reasoning_class(key)}) ===")
             try:

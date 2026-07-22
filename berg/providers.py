@@ -99,6 +99,10 @@ PACK: dict[str, ModelSpec] = {
     # and keep to no_history (communication transcripts risk the 8192 cap).
     "gpt-oss-120b":     ModelSpec("gpt-oss-120b",     "cerebras", "gpt-oss-120b",       True,  0.35,  0.75,
                                   note="Cerebras free tier; our headline model"),
+    # Same headline model on Nebius (no throttling). Confirm the exact id in the
+    # Nebius console; the HF-style path is openai/gpt-oss-120b.
+    "gpt-oss-120b-nebius": ModelSpec("gpt-oss-120b-nebius", "nebius", "openai/gpt-oss-120b", True, 0.10, 0.40,
+                                  note="gpt-oss-120b via Nebius, no rate limit; raise MAX_TOKENS for reasoning"),
     # Cheap paid pilot on the Claude API (Anthropic OpenAI-compatible endpoint).
     # Runs plain (thinking off) so output stays small. Or via openrouter as
     # "anthropic/claude-haiku-4.5".
