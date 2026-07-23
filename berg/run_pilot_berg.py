@@ -119,8 +119,9 @@ def main() -> None:
                     recs = B.run_treatment(chat, cfg, mcfg, "no_history", n, out_path.with_suffix(".raw.jsonl"))
                 except Exception as e:
                     cause = ATT.classify_exception(e)
-                    print(f"  {surface:16} ABORTED [{cause}]: {e}")
-                    att.add(cell=cell, dyad_id="cell", role="run", cause=cause)
+                    print(f"  {surface:16} ABORTED [{cause}]: {type(e).__name__}: {e}")
+                    att.add(cell=cell, dyad_id="cell", role="run", cause=cause,
+                            snippet=f"{type(e).__name__}: {e}")
                     continue
                 n_behav = tag_and_write(recs, fh, surface=surface, model_key=key)
                 for _ in range(len(recs) - n_behav):
