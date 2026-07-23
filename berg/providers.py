@@ -92,6 +92,12 @@ PACK: dict[str, ModelSpec] = {
                                   note="GLM has a thinking flag; add a nothink twin here if a toggle pair is wanted"),
     "kimi-k2.6":        ModelSpec("kimi-k2.6",        "nebius", "moonshotai/Kimi-K2.6", True,  0.60,  2.50,
                                   note="confirm exact Nebius model id in console"),
+    # Conversational, HIGH baseline trust — the models that escape the gpt-oss
+    # floor so H2/H3 surface effects are visible with real variance.
+    "llama-3.3-70b":    ModelSpec("llama-3.3-70b",    "nebius", "meta-llama/Llama-3.3-70B-Instruct", False, 0.13, 0.40,
+                                  note="June pilot sent ~5.5; best model to SEE the surface effect"),
+    "mistral-small":    ModelSpec("mistral-small",    "nebius", "mistralai/Mistral-Small-Instruct-2409", False, 0.10, 0.30,
+                                  note="conversational; confirm exact Nebius id"),
     "gpt-5.6-luna":     ModelSpec("gpt-5.6-luna",     "openai", "gpt-5.6-luna",         True,  1.00,  6.00, batch=True),
     "claude-sonnet-5":  ModelSpec("claude-sonnet-5",  "openrouter","anthropic/claude-sonnet-5", True, 2.00, 10.00, batch=True),
     # Free-tier pilot fallbacks (Cerebras). Free limits 2026: 5 req/min, 30K
