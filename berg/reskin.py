@@ -59,14 +59,23 @@ RESKINS: dict[str, GameConfig] = {
             "then decides how much power to route back."
         ),
     ),
+    # Structure-matched control for strong_novel: canonical wording at the SAME
+    # economics (endowment 20, x4). strong_novel vs this isolates the narrative
+    # and label effect at the far end (a clean H2 point), while this vs canonical
+    # isolates the reaction to the (20, x4) structure (a clean H3 point).
+    "strong_control": GameConfig(endowment=20, multiplier=4),
 }
 
-# Surfaces that keep the CANONICAL economic structure (endowment 10, x3):
-# used to test H2 (surface effect with structure held fixed).
-STRUCTURE_CANONICAL = ("canonical", "reskin")
-# Surfaces that SHIFT the economic structure: used with their structure-matched
-# wording twin to test H3 (reaction to the incentive change).
-STRUCTURE_SHIFTED = ("shifted", "reskin_shifted", "strong_novel")
+# H2 pairs: (recognizable wording, de-recognized wording) at MATCHED structure.
+# Within a pair the incentives are identical and only the surface changes.
+SURFACE_PAIRS = [
+    ("canonical", "reskin"),            # structure (10, x3)
+    ("shifted", "reskin_shifted"),      # structure (12, x2)
+    ("strong_control", "strong_novel"), # structure (20, x4)
+]
+# The recognizable wording of each structure, for the H3 reaction contrast
+# (canonical -> shifted -> strong_control changes only the economics).
+STRUCTURE_ANCHORS = ("canonical", "shifted", "strong_control")
 
 # Surface markers that identify the canonical study / benchmark. Re-skinned
 # prompts must contain NONE of these (checked in test_reskin.py).

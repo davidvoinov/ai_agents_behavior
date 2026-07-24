@@ -63,7 +63,7 @@ def main() -> None:
     keys = [k.strip() for k in os.environ.get(
         "MODELS", ",".join(P.PILOT_KEYS)).split(",") if k.strip()]
     surfaces = [s.strip() for s in os.environ.get(
-        "SURFACES", "canonical,reskin,shifted,reskin_shifted,strong_novel").split(",") if s.strip()]
+        "SURFACES", "canonical,reskin,shifted,reskin_shifted,strong_control,strong_novel").split(",") if s.strip()]
     n = int(os.environ.get("PILOT_N", "20"))
     temp = float(os.environ.get("LLM_TEMPERATURE", "1.0"))
     do_comm = os.environ.get("COMM", "0") == "1"
