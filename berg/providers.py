@@ -79,11 +79,14 @@ PACK: dict[str, ModelSpec] = {
                                   toggle="deepseek", note="reasoning arm of the DeepSeek toggle"),
     "deepseek-v4-flash":ModelSpec("deepseek-v4-flash","deepseek", "deepseek-v4-flash", False, 0.14,  0.28,
                                   toggle="deepseek", note="plain arm of the DeepSeek toggle"),
-    "qwen3-think":      ModelSpec("qwen3-think",      "nebius", "Qwen/Qwen3-235B-A22B", True,  0.20,  0.60,
+    # Qwen3-32B is the hybrid model that supports the enable_thinking flag, so it
+    # gives the CLEAN same-weights think/no-think toggle. The 2507 checkpoints on
+    # Nebius are instruct-only (no thinking) and cannot toggle.
+    "qwen3-think":      ModelSpec("qwen3-think",      "nebius", "Qwen/Qwen3-32B", True,  0.10,  0.30,
                                   toggle="qwen3", note="reasoning arm; enable_thinking default True"),
-    "qwen3-nothink":    ModelSpec("qwen3-nothink",    "nebius", "Qwen/Qwen3-235B-A22B", False, 0.20,  0.60,
+    "qwen3-nothink":    ModelSpec("qwen3-nothink",    "nebius", "Qwen/Qwen3-32B", False, 0.10,  0.30,
                                   extra_body=QWEN_NO_THINK, toggle="qwen3",
-                                  note="plain arm; same weights, thinking OFF"),
+                                  note="plain arm; same weights, thinking OFF via extra_body"),
     # fixed-mode models: no clean documented on/off flag, so each is one point on
     # the BETWEEN-model reasoning-vs-plain axis rather than a within-family toggle.
     "minimax-m2":       ModelSpec("minimax-m2",       "nebius", "MiniMaxAI/MiniMax-M2", True,  0.30,  1.20,
@@ -107,7 +110,7 @@ PACK: dict[str, ModelSpec] = {
                                   note="Cerebras free tier; our headline model"),
     # Same headline model on Nebius (no throttling). Confirm the exact id in the
     # Nebius console; the HF-style path is openai/gpt-oss-120b.
-    "gpt-oss-120b-nebius": ModelSpec("gpt-oss-120b-nebius", "nebius", "openai/gpt-oss-120b", True, 0.10, 0.40,
+    "gpt-oss-120b-nebius": ModelSpec("gpt-oss-120b-nebius", "nebius", "openai/gpt-oss-120b", True, 0.15, 0.60,
                                   note="gpt-oss-120b via Nebius, no rate limit; raise MAX_TOKENS for reasoning"),
     # Cheap paid pilot on the Claude API (Anthropic OpenAI-compatible endpoint).
     # Runs plain (thinking off) so output stays small. Or via openrouter as
