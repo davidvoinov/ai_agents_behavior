@@ -1,0 +1,2 @@
+{"cell": "qwen3-think/smoke", "dyad_id": "smoke", "role": "smoke", "cause": "connection", "category": "infrastructure", "snippet": ""}
+{"cell": "qwen3-nothink/smoke", "dyad_id": "smoke", "role": "smoke", "cause": "connection", "category": "infrastructure", "snippet": ""}
