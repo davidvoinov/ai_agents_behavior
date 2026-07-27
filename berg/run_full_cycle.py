@@ -111,6 +111,7 @@ def main() -> None:
     temp = float(os.environ.get("LLM_TEMPERATURE", "1.0"))
     max_tokens = int(os.environ.get("MAX_TOKENS", "1500"))
     min_iv = float(os.environ.get("MIN_CALL_INTERVAL", "0"))
+    max_consec_infra = int(os.environ.get("MAX_CONSEC_INFRA", "8"))
     dry = os.environ.get("DRY", "0") == "1"
 
     for m in models:
@@ -172,10 +173,16 @@ def main() -> None:
             print(f"    SMOKE FAILED [{ATT.classify_exception(e)}] -> skip {model}: {e}")
             continue
 
+        consec_infra = 0
+        abort = False
         with out.open("a", encoding="utf-8") as fh:
             for surface in surfaces:
+                if abort:
+                    break
                 cfg = R.RESKINS[surface]
                 for condition in conditions:
+                    if abort:
+                        break
                     hist, cr, valence = condition_setup(cfg, condition, comm_rounds)
                     cell = f"{tag}/{surface}/{condition}"
                     ok = fail = skip = 0
@@ -191,7 +198,15 @@ def main() -> None:
                         except Exception as e:
                             att.add(cell=cell, dyad_id=did, role="dyad",
                                     cause=ATT.classify_exception(e), snippet=f"{type(e).__name__}: {e}")
+                            consec_infra += 1
+                            if consec_infra >= max_consec_infra:
+                                print(f"    ABORT {tag}: {consec_infra} consecutive infrastructure "
+                                      f"failures (provider wall or credit exhausted). "
+                                      f"Fix and re-run the same command to resume.")
+                                abort = True
+                                break
                             continue   # not marked done -> retried on resume
+                        consec_infra = 0
                         rec.update(surface=surface, model_key=model,
                                    reasoning_class=P.reasoning_class(model),
                                    condition=condition, valence=valence)
