@@ -86,8 +86,10 @@ class ModelConfig:
     temperature: float = 1.0                # >0 so dyads vary — DO NOT use 0 here
     max_tokens: int = 1500                   # headroom for reasoning models (was 800 -> truncation)
     request_timeout: int = 60
-    hard_timeout: float = 150.0              # wall-clock cap per call; a stalled request that the
-                                             # client timeout misses is aborted here (raised -> retried)
+    hard_timeout: float = 300.0              # wall-clock cap per call; a stalled request that the
+                                             # client timeout misses is aborted here (raised -> retried).
+                                             # 300s is well above a legit slow reasoning generation
+                                             # (~130s at 23 tok/s x 3000 tokens) and well below a true hang.
     min_call_interval: float = 0.0           # min seconds between EVERY API call (rate-limit pacing)
     # Provider-specific body, e.g. the reasoning on/off toggle. Examples:
     #   Qwen3 no-think: {"chat_template_kwargs": {"enable_thinking": False}}
