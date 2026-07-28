@@ -40,6 +40,7 @@ import re
 import time
 import random
 import statistics
+import concurrent.futures as _futures
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -85,6 +86,8 @@ class ModelConfig:
     temperature: float = 1.0                # >0 so dyads vary — DO NOT use 0 here
     max_tokens: int = 1500                   # headroom for reasoning models (was 800 -> truncation)
     request_timeout: int = 60
+    hard_timeout: float = 150.0              # wall-clock cap per call; a stalled request that the
+                                             # client timeout misses is aborted here (raised -> retried)
     min_call_interval: float = 0.0           # min seconds between EVERY API call (rate-limit pacing)
     # Provider-specific body, e.g. the reasoning on/off toggle. Examples:
     #   Qwen3 no-think: {"chat_template_kwargs": {"enable_thinking": False}}
@@ -96,6 +99,11 @@ class ModelConfig:
 # LLM client (injectable)                                                     #
 # --------------------------------------------------------------------------- #
 ChatFn = Callable[[str, str], str]   # (system_prompt, user_prompt) -> completion text
+
+# Shared pool for the per-call wall-clock timeout in make_chat_fn. A request the
+# client timeout fails to interrupt is abandoned here (the worker thread may leak,
+# but the circuit breaker aborts a model after a short run of such failures).
+_HARD_POOL = _futures.ThreadPoolExecutor(max_workers=16)
 
 
 def make_chat_fn(mcfg: ModelConfig) -> ChatFn:
@@ -128,7 +136,12 @@ def make_chat_fn(mcfg: ModelConfig) -> ChatFn:
             wait = mcfg.min_call_interval - (time.time() - last_call[0])
             if wait > 0:
                 time.sleep(wait)
-        resp = llm.invoke([SystemMessage(content=system), HumanMessage(content=user)])
+        fut = _HARD_POOL.submit(
+            lambda: llm.invoke([SystemMessage(content=system), HumanMessage(content=user)]))
+        try:
+            resp = fut.result(timeout=mcfg.hard_timeout)
+        except _futures.TimeoutError:
+            raise TimeoutError(f"chat call exceeded hard timeout {mcfg.hard_timeout}s")
         last_call[0] = time.time()
         return resp.content if isinstance(resp.content, str) else str(resp.content)
 
