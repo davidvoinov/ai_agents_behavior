@@ -27,22 +27,27 @@ JUDGE_SYSTEM = (
 
 _JUDGE_JSON = (
     'Respond with ONLY this JSON object: {"explicit_agreement": <true|false>, '
-    '"agreement_type": "<none|amount|rule|equal_split>", '
+    '"agreement_type": "<none|amount|rule>", "equality_framing": <true|false>, '
     '"promise_investor": <true|false>, "promise_trustee": <true|false>, '
     '"agreed_send": <integer|null>, "agreed_return": <integer|null>, '
     '"conditions": "<short text or empty>"}'
 )
 
 CODEBOOK_BRIEF = (
-    "An explicit_agreement requires a stated joint plan for the transfer and/or "
-    "return that both parties acknowledge. One party stating an intention is a "
-    "promise, not an agreement. Vague goodwill is not an agreement unless it "
-    "fixes an amount or a rule. agreement_type: amount = a specific number is "
-    "named; rule = a contingent rule; equal_split = the plan divides the final "
-    "pie equally; none = no agreement."
+    'Code this transcript with codebook v2. '
+    'explicit_agreement is True only if one party states a plan for the transfer, the return, or both, given as a number or a proportional rule, AND the other party affirms that same plan by agreeing, committing to perform it, or restating it approvingly. '
+    'An unanswered proposal is False wherever it appears, including the final message, because silence is not affirmation. A counter-proposal that is itself unanswered is False. '
+    "Goodwill without a number or a rule, such as 'I will be fair' or 'I will return a generous amount', is never a plan or an affirmation. "
+    'A plan for the transfer alone counts if affirmed. A plan to transfer nothing counts if both state it. '
+    'agreement_type in strict priority order: amount if the agreed plan fixes at least one specific number; otherwise rule if a proportional or contingent rule is agreed; otherwise none when explicit_agreement is False. '
+    "equality_framing is True if the parties justify the plan by equality of the final payoffs, for example 'we both end with 14'. It is independent of the type. "
+    "promise_investor and promise_trustee are True only if all three hold for that party: first person about their own future action with a committing verb (will, I'll, commit, promise, guarantee, honor, plan to, intend to, agree to, proceed with); a specific quantity or an explicit proportional rule, where a floor such as 'at least 6' qualifies; and no hedge of uncertainty. "
+    "These do NOT qualify: considering, thinking of, might, maybe, could, perhaps, leaning toward, open to, aim to, hope to, would be happy to, and hypothetical framing such as 'let us say I send 5'. "
+    "A conditional of the form 'if you send X, I will return Y' does qualify. "
+    'agreed_send and agreed_return: record a number only when the party who would perform it stated it and the other did not object. Use null for a range, for a rule with no number, and whenever explicit_agreement is False.'
 )
 
-CATEGORICAL = ["explicit_agreement", "agreement_type",
+CATEGORICAL = ["explicit_agreement", "agreement_type", "equality_framing",
                "promise_investor", "promise_trustee"]
 
 
@@ -62,11 +67,14 @@ def _coerce(data: dict) -> dict:
         except (TypeError, ValueError):
             return None
     at = str(data.get("agreement_type", "none")).strip().lower()
-    if at not in ("none", "amount", "rule", "equal_split"):
+    if at == "equal_split":      # v1 label folded into v2 scheme
+        at = "amount"
+    if at not in ("none", "amount", "rule"):
         at = "none"
     return {
         "explicit_agreement": b(data.get("explicit_agreement", False)),
         "agreement_type": at,
+        "equality_framing": b(data.get("equality_framing", False)),
         "promise_investor": b(data.get("promise_investor", False)),
         "promise_trustee": b(data.get("promise_trustee", False)),
         "agreed_send": i(data.get("agreed_send")),

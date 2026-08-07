@@ -1,71 +1,113 @@
-# Communication codebook (Berg trust game, communication condition)
+# Communication codebook, version 2
 
 Purpose. Turn free-form pre-play transcripts into structured variables so that
-H6 (communication raises agreements, and formation dissociates from execution)
-can be tested. Every communication dyad is coded twice, once by a human and once
-by an LLM judge, and agreement between the two is reported as Cohen's kappa
-(PI directive 2026-07-22, point 6). Coding is done on the transcript ONLY, never
-on the private reasoning or the realized transfer, so a coder cannot be biased by
-the outcome.
+H6 can be tested. Every transcript is coded twice by independent coders and
+agreement is reported as Cohen's kappa for each categorical variable.
+
+## Revision history
+
+**v1 (2026-08-07).** First draft. Validation on 60 transcripts against an
+independent coder failed the reliability threshold on every categorical
+variable, with kappa 0.487 for `explicit_agreement`, 0.438 for `agreement_type`,
+0.250 for `promise_trustee`, and −0.027 for `promise_investor`. Numeric fields
+agreed at 100%, so the failure was in the category boundaries and not in reading
+the text. Three defects were identified. The acknowledgment requirement did not
+say whether an unanswered proposal counts. The definition of a promise did not
+say whether hedged intentions count. The type taxonomy mixed what was agreed
+with how it was justified, and gave no priority between an amount and an equal
+split.
+
+**v2 (2026-08-07).** Current version. Adds the decision rules below, separates
+equality framing from the agreement type, and requires recoding from scratch.
 
 ## Unit of coding
 
-One transcript = the full message exchange of one dyad before the private
-decisions. Code the transcript as a whole, not message by message.
+One transcript, coded as a whole. Code only what the transcript states. Never
+use the realized transfer or return, which are coded separately.
 
 ## Variables
 
-1. `explicit_agreement` (bool). True only if the two parties arrive at a stated
-   joint plan for the transfer and/or the return that both acknowledge. A single
-   party stating an intention is not an agreement. Vague goodwill
-   ("let's both be fair") is not an agreement unless it fixes an amount or a rule.
+**1. `explicit_agreement` (bool).**
 
-2. `agreement_type` (one of `none`, `amount`, `rule`, `equal_split`).
-   - `amount`  a specific transfer and/or return is named (e.g. send 10, return 15).
-   - `rule`    a contingent rule is agreed (e.g. "return double what you receive").
-   - `equal_split` the plan divides the final pie equally.
-   - `none`    no explicit agreement.
+Code True only if both of the following hold.
 
-3. `promise_investor` (bool). The first mover states a commitment about the
-   amount it will send.
+- One party states a plan for the transfer, the return, or both, given either as
+  a number or as a proportional rule.
+- The other party affirms that same plan, by agreeing, by committing to perform
+  it, or by restating it approvingly.
 
-4. `promise_trustee` (bool). The second mover states a commitment about the
-   amount it will return.
+Decision rules.
 
-5. `agreed_send` (int or null). The transfer the plan specifies, if any.
+- An unanswered proposal is False, wherever it appears, including the final
+  message. Silence is not affirmation.
+- A proposal answered by a different counter-proposal that is itself unanswered
+  is False.
+- Expressions of goodwill without a number or a rule, such as "I will be fair"
+  or "I will return a generous amount", never constitute a plan or an
+  affirmation.
+- A plan for the transfer alone counts if it is affirmed, even when the return
+  is left open.
+- A plan to transfer nothing counts if both parties state it.
 
-6. `agreed_return` (int or null). The return the plan specifies, if any.
+**2. `agreement_type`** — one of `none`, `amount`, `rule`. Apply in strict
+priority order.
 
-7. `conditions` (short text). Any conditions attached to the plan
-   ("I will return 15 only if you send at least 8"). Empty if none.
+1. `amount` if the agreed plan fixes at least one specific number.
+2. `rule` if no number is fixed but a proportional or contingent rule is agreed,
+   such as "half of what you receive".
+3. `none` if `explicit_agreement` is False.
 
-## Compliance (computed, not coded)
+**3. `equality_framing` (bool).** True if the parties justify the plan by the
+equality of the final payoffs, for example "we both end with 14". This records
+how the plan was justified and is independent of the type. A plan with numbers
+that is justified by equality is `amount` with `equality_framing` True.
 
-Compliance is derived by comparing the coded plan to the realized decisions.
+**4. `promise_investor` (bool)** and **5. `promise_trustee` (bool).**
 
-- `investor_complied` = `sent == agreed_send` (within 0 tolerance; report also a
-  within-1 variant).
-- `trustee_complied` = `returned == agreed_return`.
-- A dyad enters the compliance table only if `explicit_agreement` is True.
+Code True only if all three hold for that party.
 
-The headline table is **incidence of agreement → compliance rate**, by cell
-(surface × condition × model pair). Incidence = share of dyads with
-`explicit_agreement`. Compliance = share of agreeing dyads whose realized
-behavior matched the plan. The dissociation in H6 is a high incidence with a
-low compliance.
+- First person and about the party's own future action, using a committing verb,
+  namely will, I'll, commit, promise, guarantee, honor, plan to, intend to,
+  agree to, or proceed with.
+- A specific quantity or an explicit proportional rule. A floor such as "at
+  least 6" or "at least half" qualifies.
+- No hedge of uncertainty. The following do not qualify, namely considering,
+  thinking of, might, maybe, could, perhaps, leaning toward, open to, aim to,
+  hope to, would be happy to, and any purely hypothetical framing such as "let
+  us say I send 5" or "if I were to send 5".
 
-## Double coding and reliability
+A conditional commitment of the form "if you send X, I will return Y" qualifies,
+since the condition is the other party's move and not the speaker's uncertainty.
 
-- Human codes a random sample (target ≥ 20% of transcripts, minimum 100).
-- The LLM judge codes all transcripts.
-- Report Cohen's kappa on the overlapping sample for each categorical variable
-  (`explicit_agreement`, `agreement_type`, `promise_investor`, `promise_trustee`).
-- Kappa below 0.6 on a variable means the definition is unreliable; revise this
-  codebook and recode before using that variable in a test.
+**6. `agreed_send` (int or null)** and **7. `agreed_return` (int or null).**
 
-## Judge independence
+Record a number only when the party who would perform it stated that number and
+the other party did not object. Record null for a range, for a rule without a
+number, and whenever `explicit_agreement` is False.
 
-The judge model must not be one of the models under study for that dyad, to avoid
-a model grading its own transcripts. Use a cheap neutral judge (e.g. DeepSeek V4
-Flash) for the full pass and a stronger model on the human-overlap sample as a
-second check.
+**8. `conditions` (short text).** Any condition attached to the plan. Empty if
+none.
+
+## Compliance, computed and not coded
+
+- `investor_complied` is `sent == agreed_send`, reported also with a tolerance of one.
+- `trustee_complied` is `returned == agreed_return`.
+- Only transcripts with `explicit_agreement` True enter the compliance table.
+
+The headline table is incidence of agreement against compliance rate, by cell.
+The dissociation in H6 is a high incidence together with a low compliance.
+
+## Reliability
+
+Two independent coders code the same sample without seeing each other's codes.
+Cohen's kappa is reported for `explicit_agreement`, `agreement_type`,
+`equality_framing`, `promise_investor`, and `promise_trustee`. A variable with
+kappa below 0.6 is unreliable, and its definition is revised and the sample
+recoded before that variable is used in any test. The codebook version is
+frozen after validation and any later amendment is given a new version number.
+
+## Coder independence
+
+The automated coder must not be a model under study in the dyad. Transcripts
+produced by Qwen3-32B are coded by gpt-oss-120b, which is a different family.
+Coding runs at temperature 0 so that a re-run reproduces the codes.
