@@ -4,7 +4,7 @@ compare_coders.py — Cohen's kappa between two coding records, plus the
 incidence-of-agreement -> compliance table once a coder is validated.
 
 Usage:
-    python compare_coders.py data/coding/coder_claude.jsonl data/coding/judge_gpt-oss-120b-nebius.jsonl
+    python compare_coders.py data/coding/coder_b_v1.jsonl data/coding/judge_gpt-oss-120b-nebius.jsonl
 """
 import json, sys, collections
 import code_comm as CC
