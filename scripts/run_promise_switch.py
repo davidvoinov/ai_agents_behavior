@@ -1,181 +1,116 @@
 #!/usr/bin/env python3
-"""CLI entrypoint for Experiment 3: Promise Switch."""
+"""Create or resume a crash-safe Promise Switch execution run."""
 
 from __future__ import annotations
 
 import argparse
-import os
+import json
 import sys
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = SCRIPT_DIR.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "promise_switch" / "config.json"
-
-from promise_switch.config import load_config
-from promise_switch.experiment import run_experiment
-
-
-def resolve_project_path(path_value: str) -> Path:
-    path = Path(path_value)
-    return path if path.is_absolute() else PROJECT_ROOT / path
+from promise_switch.execution.rate_limit import RateLimitPolicy
+from promise_switch.execution.retry import RetryPolicy
+from promise_switch.execution.runner import (
+    ExecutionParameters,
+    PromiseSwitchRunner,
+    parameters_from_manifest,
+)
+from promise_switch.providers import create_model_config
 
 
-def load_env_file(path: Path) -> None:
-    if not path.exists():
-        return
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        if key and key not in os.environ:
-            os.environ[key] = value
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser(description=__doc__)
+    result.add_argument("--run-id")
+    result.add_argument("--resume", metavar="RUN_ID")
+    result.add_argument("--provider")
+    result.add_argument("--model", help="Promise Switch model alias, e.g. qwen3_32b")
+    result.add_argument("--reasoning-mode", choices=("on", "off", "unavailable"))
+    result.add_argument("--n-per-condition", type=int)
+    result.add_argument("--seed", type=int)
+    result.add_argument("--output-dir", type=Path, default=Path("runs/promise_switch"))
+    result.add_argument("--temperature", type=float)
+    result.add_argument("--max-tokens", type=int)
+    result.add_argument("--message-max-tokens", type=int)
+    result.add_argument("--requests-per-minute", type=int)
+    result.add_argument("--tokens-per-minute", type=int)
+    result.add_argument("--minimum-interval-seconds", type=float)
+    result.add_argument("--dry-run", action="store_true", default=None)
+    return result
 
 
-def has_real_api_key(env_var: str) -> bool:
-    value = os.environ.get(env_var, "").strip()
-    return len(value) > 30 and value.startswith("sk-or-")
+def main(argv: list[str] | None = None) -> int:
+    args = parser().parse_args(argv)
+    invocation = tuple(sys.argv if argv is None else ["run_promise_switch.py", *argv])
+    if args.resume:
+        if args.run_id and args.run_id != args.resume:
+            raise SystemExit("--run-id cannot differ from --resume")
+        run_dir = args.output_dir / args.resume
+        parameters = parameters_from_manifest(run_dir)
+        _reject_resume_overrides(args, parameters)
+        runner = PromiseSwitchRunner(parameters)
+        print(json.dumps(runner.preflight_estimate(), indent=2, sort_keys=True))
+        print(json.dumps(runner.run(resume=True), indent=2, sort_keys=True))
+        return 0
 
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Run the Vanberg-style Promise Switch experiment."
+    missing = [name for name in ("run_id", "provider", "model", "n_per_condition", "seed")
+               if getattr(args, name) is None]
+    if missing:
+        raise SystemExit("Missing required new-run arguments: " + ", ".join("--" + x.replace("_", "-") for x in missing))
+    model_config = create_model_config(
+        provider=args.provider, model_alias=args.model, reasoning_mode=args.reasoning_mode,
     )
-    parser.add_argument(
-        "--config",
-        default=str(DEFAULT_CONFIG),
-        help="Path to JSON config.",
+    max_tokens = args.max_tokens or 256
+    parameters = ExecutionParameters(
+        run_id=args.run_id,
+        output_dir=args.output_dir,
+        n_per_condition=args.n_per_condition,
+        seed=args.seed,
+        model_configs=(model_config,),
+        temperature=0.0 if args.temperature is None else args.temperature,
+        message_max_tokens=args.message_max_tokens or max_tokens,
+        decision_max_tokens=max_tokens,
+        retry_policy=RetryPolicy(),
+        rate_limit_policy=RateLimitPolicy(
+            requests_per_minute=args.requests_per_minute or 30,
+            tokens_per_minute=args.tokens_per_minute,
+            max_concurrency=1,
+            minimum_interval_seconds=(2.0 if args.minimum_interval_seconds is None
+                                      else args.minimum_interval_seconds),
+        ),
+        dry_run=bool(args.dry_run),
+        cli_invocation=invocation,
     )
-    parser.add_argument("--run-id", default=None, help="Optional run id.")
-    parser.add_argument(
-        "--resume",
-        action="store_true",
-        help="Resume an existing run directory with the same run id.",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Create manifest and planned trials without API calls.",
-    )
-    parser.add_argument(
-        "--model-source",
-        choices=("live", "config", "provider_config"),
-        default=None,
-        help="Use live OpenRouter /models, static OpenRouter model_ids, or provider-config models.",
-    )
-    parser.add_argument(
-        "--n-trials",
-        type=int,
-        default=None,
-        help="Override n_trials_per_model.",
-    )
-    parser.add_argument(
-        "--max-models",
-        type=int,
-        default=None,
-        help="Limit models after filtering and shuffling.",
-    )
-    parser.add_argument(
-        "--model-offset",
-        type=int,
-        default=None,
-        help="Skip this many models after filtering/shuffling, for chunked runs.",
-    )
-    parser.add_argument(
-        "--no-shuffle",
-        action="store_true",
-        help="Keep model order from the config/catalog for deterministic chunks.",
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=None,
-        help="Override randomization seed.",
-    )
-    parser.add_argument(
-        "--health-check",
-        action="store_true",
-        help="Run a short API health-check for each planned model before trials.",
-    )
-    parser.add_argument(
-        "--output-dir",
-        default=None,
-        help="Override output directory.",
-    )
-    parser.add_argument(
-        "--api-key-env",
-        default="OPENROUTER_API_KEY",
-        help="Environment variable containing the OpenRouter API key.",
-    )
-    parser.add_argument(
-        "--env-file",
-        default=".env",
-        help="Local env file to load before reading the API key.",
-    )
-    return parser.parse_args()
-
-
-def main() -> int:
-    args = parse_args()
-    load_env_file(resolve_project_path(args.env_file))
-    config = load_config(resolve_project_path(args.config))
-
-    overrides = {
-        "run_id": args.run_id,
-        "resume": args.resume,
-        "dry_run": args.dry_run,
-        "api_key_env": args.api_key_env,
-        "health_check": args.health_check,
-    }
-    if args.model_source is not None:
-        config["model_source"] = args.model_source
-    if args.n_trials is not None:
-        config["n_trials_per_model"] = args.n_trials
-    if args.max_models is not None:
-        config["max_models"] = args.max_models
-    if args.model_offset is not None:
-        config["model_offset"] = args.model_offset
-    if args.no_shuffle:
-        config["shuffle_models"] = False
-    if args.seed is not None:
-        config["seed"] = args.seed
-    if args.output_dir is not None:
-        config["output_dir"] = args.output_dir
-    if args.health_check:
-        config["health_check_models"] = True
-    if config.get("output_dir"):
-        output_dir = Path(str(config["output_dir"]))
-        if not output_dir.is_absolute():
-            config["output_dir"] = str(PROJECT_ROOT / output_dir)
-
-    if (
-        not args.dry_run
-        and config.get("model_source") != "provider_config"
-        and not has_real_api_key(args.api_key_env)
-    ):
-        print(
-            f"Missing real {args.api_key_env}. Put it in {args.env_file} or run with --dry-run.",
-            file=sys.stderr,
-        )
-        return 2
-
-    result = run_experiment(config=config, overrides=overrides)
-    print(f"Run directory: {result['run_dir']}")
-    print(f"Models planned: {result['models_planned']}")
-    print(f"Trials planned: {result['trials_planned']}")
-    if result.get("trials_completed") is not None:
-        print(f"Trials completed: {result['trials_completed']}")
-        print(f"Trials partial/failed: {result['trials_partial_or_failed']}")
-    if result.get("dry_run"):
-        print("Dry-run only: no API calls were made.")
+    runner = PromiseSwitchRunner(parameters)
+    print(json.dumps(runner.preflight_estimate(), indent=2, sort_keys=True))
+    print(json.dumps(runner.run(), indent=2, sort_keys=True))
     return 0
+
+
+def _reject_resume_overrides(args: argparse.Namespace, parameters: ExecutionParameters) -> None:
+    expected = {
+        "provider": parameters.model_configs[0].provider,
+        "model": parameters.model_configs[0].model_alias,
+        "reasoning_mode": parameters.model_configs[0].reasoning_mode,
+        "n_per_condition": parameters.n_per_condition,
+        "seed": parameters.seed,
+        "temperature": parameters.temperature,
+        "message_max_tokens": parameters.message_max_tokens,
+        "requests_per_minute": parameters.rate_limit_policy.requests_per_minute,
+        "tokens_per_minute": parameters.rate_limit_policy.tokens_per_minute,
+        "minimum_interval_seconds": parameters.rate_limit_policy.minimum_interval_seconds,
+    }
+    for name, value in expected.items():
+        supplied = getattr(args, name, None)
+        if supplied is not None and supplied != value:
+            raise SystemExit(f"Incompatible resume override --{name.replace('_', '-')}")
+    if args.max_tokens is not None and args.max_tokens != parameters.decision_max_tokens:
+        raise SystemExit("Incompatible resume override --max-tokens")
+    if args.dry_run is not None and bool(args.dry_run) != parameters.dry_run:
+        raise SystemExit("Incompatible resume override --dry-run")
 
 
 if __name__ == "__main__":

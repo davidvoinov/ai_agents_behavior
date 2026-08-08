@@ -1,5 +1,4 @@
 langchain-openai>=0.2
 langchain-core>=0.3
 python-dotenv>=1.0
-PyYAML>=6.0
-requests>=2.32
+certifi>=2024.0

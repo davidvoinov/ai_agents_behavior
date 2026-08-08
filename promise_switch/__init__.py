@@ -1,3 +1,5 @@
-"""Promise Switch experiment runner."""
+"""Autonomous foundation for the six-condition Promise Switch experiment."""
 
-__version__ = "0.1.0"
+from .version import EXPERIMENT_VERSION, PROMPT_VERSION, prompt_templates_hash
+
+__all__ = ["EXPERIMENT_VERSION", "PROMPT_VERSION", "prompt_templates_hash"]
