@@ -51,6 +51,13 @@ MODEL_DEFINITIONS: dict[tuple[str, str], ModelDefinition] = {
             "off": {"chat_template_kwargs": {"enable_thinking": False}},
         },
     ),
+    ("nebius", "llama_3_3_70b"): ModelDefinition(
+        provider="nebius",
+        model_alias="llama_3_3_70b",
+        model_id="meta-llama/Llama-3.3-70B-Instruct",
+        reasoning_capability="fixed_off",
+        default_reasoning_mode="off",
+    ),
 }
 
 

@@ -81,7 +81,10 @@ class ArchitectureTests(unittest.TestCase):
     def test_semantic_versions_and_prompt_hash(self):
         self.assertEqual(EXPERIMENT_VERSION, "promise_switch_v1")
         self.assertEqual(PROMPT_VERSION, "promise_switch_v1")
-        self.assertEqual(prompt_templates_hash(), prompt_templates_hash())
+        self.assertEqual(
+            prompt_templates_hash(),
+            "17b5f31eaac9d9f2742d74a01fae17bc4a93a847d33f49d1016392035a8f175c",
+        )
         self.assertEqual(len(prompt_templates_hash()), 64)
 
 
@@ -262,6 +265,43 @@ class ProviderClientSchemaTests(unittest.TestCase):
         self.assertIn("nebius", on.base_url)
         self.assertTrue(on.provider_request_kwargs["chat_template_kwargs"]["enable_thinking"])
         self.assertFalse(off.provider_request_kwargs["chat_template_kwargs"]["enable_thinking"])
+
+    def test_llama_config_is_fixed_off_and_has_no_qwen_thinking_kwargs(self):
+        config = create_model_config(provider="nebius", model_alias="llama_3_3_70b")
+        self.assertEqual(config.provider, "nebius")
+        self.assertEqual(config.model_alias, "llama_3_3_70b")
+        self.assertEqual(config.model_id, "meta-llama/Llama-3.3-70B-Instruct")
+        self.assertEqual(config.reasoning_capability, "fixed_off")
+        self.assertEqual(config.reasoning_mode, "off")
+        self.assertEqual(config.api_key_env, "NEBIUS_API_KEY")
+        self.assertEqual(config.provider_request_kwargs, {})
+        with self.assertRaises(ValueError):
+            create_model_config(
+                provider="nebius", model_alias="llama_3_3_70b", reasoning_mode="on"
+            )
+
+    def test_llama_request_is_secret_free_and_has_no_thinking_toggle(self):
+        secret = "llama-secret-value-that-must-not-serialize"
+        previous = os.environ.get("NEBIUS_API_KEY")
+        os.environ["NEBIUS_API_KEY"] = secret
+        try:
+            config = create_model_config(
+                provider="nebius", model_alias="llama_3_3_70b", reasoning_mode="off"
+            )
+            request = ProviderAgnosticClient(config).build_request(
+                messages=[{"role": "user", "content": "offline"}],
+                temperature=0,
+                max_tokens=64,
+            )
+            self.assertNotIn("chat_template_kwargs", request.body)
+            self.assertNotIn("enable_thinking", json.dumps(request.body))
+            self.assertNotIn(secret, json.dumps(config.to_dict()))
+            self.assertNotIn(secret, json.dumps(request.to_log_dict()))
+        finally:
+            if previous is None:
+                os.environ.pop("NEBIUS_API_KEY", None)
+            else:
+                os.environ["NEBIUS_API_KEY"] = previous
 
     def test_serializable_records_have_no_api_secret_field_or_value(self):
         secret = "secret-value-that-must-not-serialize"

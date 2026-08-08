@@ -48,6 +48,16 @@
           "enable_thinking": false
         }
       }
+    },
+    {
+      "provider": "nebius",
+      "model_alias": "llama_3_3_70b",
+      "model_id": "meta-llama/Llama-3.3-70B-Instruct",
+      "reasoning_capability": "fixed_off",
+      "reasoning_mode": "off",
+      "api_key_env": "NEBIUS_API_KEY",
+      "base_url": "https://api.studio.nebius.com/v1/",
+      "provider_request_kwargs": {}
     }
   ]
 }
