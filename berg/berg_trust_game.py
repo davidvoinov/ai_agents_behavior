@@ -68,6 +68,12 @@ class GameConfig:
     unit_word: str = "dollars"
     investor_label: str = "Investor"
     trustee_label: str = "Trustee"
+    # Optional narrative preamble and study framing. Left empty/default the
+    # wording is the mechanics-only baseline. Set both to build a "strong-novel"
+    # surface that removes every cue identifying the paradigm while preserving
+    # the economic structure (see reskin.RESKINS["strong_novel"]).
+    scenario: str = ""
+    study_framing: str = "an economic decision-making study"
 
 
 @dataclass
@@ -80,6 +86,10 @@ class ModelConfig:
     max_tokens: int = 1500                   # headroom for reasoning models (was 800 -> truncation)
     request_timeout: int = 60
     min_call_interval: float = 0.0           # min seconds between EVERY API call (rate-limit pacing)
+    # Provider-specific body, e.g. the reasoning on/off toggle. Examples:
+    #   Qwen3 no-think: {"chat_template_kwargs": {"enable_thinking": False}}
+    #   passed straight through to the OpenAI-compatible endpoint.
+    extra_body: Optional[dict] = None
 
 
 # --------------------------------------------------------------------------- #
@@ -107,6 +117,8 @@ def make_chat_fn(mcfg: ModelConfig) -> ChatFn:
     )
     if mcfg.base_url:
         kwargs["base_url"] = mcfg.base_url
+    if mcfg.extra_body:
+        kwargs["extra_body"] = mcfg.extra_body
     llm = ChatOpenAI(**kwargs)
 
     last_call = [0.0]   # throttle state: timestamp of the previous call
@@ -177,7 +189,8 @@ class Agent:
 # --------------------------------------------------------------------------- #
 def _rules_block(cfg: GameConfig) -> str:
     e, m = cfg.endowment, cfg.multiplier
-    return (
+    intro = (cfg.scenario.strip() + "\n\n") if getattr(cfg, "scenario", "") else ""
+    return intro + (
         f"The rules of the interaction:\n"
         f"- There are two participants: an {cfg.investor_label} and a {cfg.trustee_label}.\n"
         f"- Each participant is given {e} {cfg.unit_word} to start.\n"
@@ -212,7 +225,7 @@ _COMM_NOTE = (
 
 def investor_system_prompt(cfg: GameConfig, with_comm: bool = False) -> str:
     base = (
-        f"You are the {cfg.investor_label} in an economic decision-making study.\n\n"
+        f"You are the {cfg.investor_label} in {cfg.study_framing}.\n\n"
         f"{_rules_block(cfg)}\n\n"
         f"You must decide X: how many {cfg.unit_word} (an integer from 0 to "
         f"{cfg.endowment}) to pass to the {cfg.trustee_label}."
@@ -222,7 +235,7 @@ def investor_system_prompt(cfg: GameConfig, with_comm: bool = False) -> str:
 
 def trustee_system_prompt(cfg: GameConfig, with_comm: bool = False) -> str:
     base = (
-        f"You are the {cfg.trustee_label} in an economic decision-making study.\n\n"
+        f"You are the {cfg.trustee_label} in {cfg.study_framing}.\n\n"
         f"{_rules_block(cfg)}\n\n"
         f"You must decide Y: how many {cfg.unit_word} to return to the "
         f"{cfg.investor_label}."
