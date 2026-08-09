@@ -303,6 +303,44 @@ class ProviderClientSchemaTests(unittest.TestCase):
             else:
                 os.environ["NEBIUS_API_KEY"] = previous
 
+    def test_gpt_oss_config_is_fixed_on_with_low_reasoning_effort(self):
+        config = create_model_config(provider="nebius", model_alias="gpt_oss_120b_nebius")
+        self.assertEqual(config.provider, "nebius")
+        self.assertEqual(config.model_alias, "gpt_oss_120b_nebius")
+        self.assertEqual(config.model_id, "openai/gpt-oss-120b")
+        self.assertEqual(config.reasoning_capability, "fixed_on")
+        self.assertEqual(config.reasoning_mode, "on")
+        self.assertEqual(config.api_key_env, "NEBIUS_API_KEY")
+        self.assertEqual(config.provider_request_kwargs, {"reasoning_effort": "low"})
+        with self.assertRaises(ValueError):
+            create_model_config(
+                provider="nebius", model_alias="gpt_oss_120b_nebius", reasoning_mode="off"
+            )
+
+    def test_gpt_oss_request_has_no_qwen_kwargs_and_serializes_no_secret(self):
+        secret = "gpt-oss-secret-value-that-must-not-serialize"
+        previous = os.environ.get("NEBIUS_API_KEY")
+        os.environ["NEBIUS_API_KEY"] = secret
+        try:
+            config = create_model_config(
+                provider="nebius", model_alias="gpt_oss_120b_nebius", reasoning_mode="on"
+            )
+            request = ProviderAgnosticClient(config).build_request(
+                messages=[{"role": "user", "content": "offline"}],
+                temperature=0,
+                max_tokens=2048,
+            )
+            self.assertEqual(request.body["reasoning_effort"], "low")
+            self.assertNotIn("chat_template_kwargs", request.body)
+            self.assertNotIn("enable_thinking", json.dumps(request.body))
+            self.assertNotIn(secret, json.dumps(config.to_dict()))
+            self.assertNotIn(secret, json.dumps(request.to_log_dict()))
+        finally:
+            if previous is None:
+                os.environ.pop("NEBIUS_API_KEY", None)
+            else:
+                os.environ["NEBIUS_API_KEY"] = previous
+
     def test_serializable_records_have_no_api_secret_field_or_value(self):
         secret = "secret-value-that-must-not-serialize"
         previous = os.environ.get("NEBIUS_API_KEY")

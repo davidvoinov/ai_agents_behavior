@@ -58,6 +58,18 @@
       "api_key_env": "NEBIUS_API_KEY",
       "base_url": "https://api.studio.nebius.com/v1/",
       "provider_request_kwargs": {}
+    },
+    {
+      "provider": "nebius",
+      "model_alias": "gpt_oss_120b_nebius",
+      "model_id": "openai/gpt-oss-120b",
+      "reasoning_capability": "fixed_on",
+      "reasoning_mode": "on",
+      "api_key_env": "NEBIUS_API_KEY",
+      "base_url": "https://api.studio.nebius.com/v1/",
+      "provider_request_kwargs": {
+        "reasoning_effort": "low"
+      }
     }
   ]
 }

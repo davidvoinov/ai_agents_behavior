@@ -58,6 +58,14 @@ MODEL_DEFINITIONS: dict[tuple[str, str], ModelDefinition] = {
         reasoning_capability="fixed_off",
         default_reasoning_mode="off",
     ),
+    ("nebius", "gpt_oss_120b_nebius"): ModelDefinition(
+        provider="nebius",
+        model_alias="gpt_oss_120b_nebius",
+        model_id="openai/gpt-oss-120b",
+        reasoning_capability="fixed_on",
+        default_reasoning_mode="on",
+        request_kwargs_by_mode={"on": {"reasoning_effort": "low"}},
+    ),
 }
 
 
