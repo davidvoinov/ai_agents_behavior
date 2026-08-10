@@ -70,6 +70,46 @@
       "provider_request_kwargs": {
         "reasoning_effort": "low"
       }
+    },
+    {
+      "provider": "nebius",
+      "model_alias": "deepseek_v4_pro_nebius",
+      "model_id": "deepseek-ai/DeepSeek-V4-Pro",
+      "reasoning_capability": "unavailable",
+      "reasoning_mode": "unavailable",
+      "api_key_env": "NEBIUS_API_KEY",
+      "base_url": "https://api.studio.nebius.com/v1/",
+      "provider_request_kwargs": {}
+    },
+    {
+      "provider": "nebius",
+      "model_alias": "kimi_k3_nebius",
+      "model_id": "moonshotai/Kimi-K3",
+      "reasoning_capability": "unavailable",
+      "reasoning_mode": "unavailable",
+      "api_key_env": "NEBIUS_API_KEY",
+      "base_url": "https://api.studio.nebius.com/v1/",
+      "provider_request_kwargs": {}
+    },
+    {
+      "provider": "nebius",
+      "model_alias": "minimax_m3_nebius",
+      "model_id": "MiniMaxAI/MiniMax-M3",
+      "reasoning_capability": "unavailable",
+      "reasoning_mode": "unavailable",
+      "api_key_env": "NEBIUS_API_KEY",
+      "base_url": "https://api.studio.nebius.com/v1/",
+      "provider_request_kwargs": {}
+    },
+    {
+      "provider": "nebius",
+      "model_alias": "glm_5_2_nebius",
+      "model_id": "zai-org/GLM-5.2",
+      "reasoning_capability": "unavailable",
+      "reasoning_mode": "unavailable",
+      "api_key_env": "NEBIUS_API_KEY",
+      "base_url": "https://api.studio.nebius.com/v1/",
+      "provider_request_kwargs": {}
     }
   ]
 }

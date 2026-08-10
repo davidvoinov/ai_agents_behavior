@@ -341,6 +341,50 @@ class ProviderClientSchemaTests(unittest.TestCase):
             else:
                 os.environ["NEBIUS_API_KEY"] = previous
 
+    def test_stage6b_configs_use_conservative_standard_chat_requests(self):
+        expected = {
+            "deepseek_v4_pro_nebius": "deepseek-ai/DeepSeek-V4-Pro",
+            "kimi_k3_nebius": "moonshotai/Kimi-K3",
+            "minimax_m3_nebius": "MiniMaxAI/MiniMax-M3",
+            "glm_5_2_nebius": "zai-org/GLM-5.2",
+        }
+        secret = "stage6b-secret-value-that-must-not-serialize"
+        previous = os.environ.get("NEBIUS_API_KEY")
+        os.environ["NEBIUS_API_KEY"] = secret
+        try:
+            for alias, model_id in expected.items():
+                with self.subTest(alias=alias):
+                    config = create_model_config(provider="nebius", model_alias=alias)
+                    self.assertEqual(config.model_id, model_id)
+                    self.assertEqual(config.reasoning_capability, "unavailable")
+                    self.assertEqual(config.reasoning_mode, "unavailable")
+                    self.assertEqual(config.provider_request_kwargs, {})
+                    request = ProviderAgnosticClient(config).build_request(
+                        messages=[{"role": "user", "content": "offline"}],
+                        temperature=0,
+                        max_tokens=2048,
+                    )
+                    self.assertEqual(
+                        set(request.body), {"model", "messages", "temperature", "max_tokens"}
+                    )
+                    self.assertNotIn("chat_template_kwargs", request.body)
+                    self.assertNotIn("enable_thinking", json.dumps(request.body))
+                    self.assertNotIn("reasoning_effort", request.body)
+                    self.assertNotIn(secret, json.dumps(config.to_dict()))
+                    self.assertNotIn(secret, json.dumps(request.to_log_dict()))
+                    for forbidden_mode in ("on", "off"):
+                        with self.assertRaises(ValueError):
+                            create_model_config(
+                                provider="nebius",
+                                model_alias=alias,
+                                reasoning_mode=forbidden_mode,
+                            )
+        finally:
+            if previous is None:
+                os.environ.pop("NEBIUS_API_KEY", None)
+            else:
+                os.environ["NEBIUS_API_KEY"] = previous
+
     def test_serializable_records_have_no_api_secret_field_or_value(self):
         secret = "secret-value-that-must-not-serialize"
         previous = os.environ.get("NEBIUS_API_KEY")

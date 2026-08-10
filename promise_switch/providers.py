@@ -66,6 +66,34 @@ MODEL_DEFINITIONS: dict[tuple[str, str], ModelDefinition] = {
         default_reasoning_mode="on",
         request_kwargs_by_mode={"on": {"reasoning_effort": "low"}},
     ),
+    ("nebius", "deepseek_v4_pro_nebius"): ModelDefinition(
+        provider="nebius",
+        model_alias="deepseek_v4_pro_nebius",
+        model_id="deepseek-ai/DeepSeek-V4-Pro",
+        reasoning_capability="unavailable",
+        default_reasoning_mode="unavailable",
+    ),
+    ("nebius", "kimi_k3_nebius"): ModelDefinition(
+        provider="nebius",
+        model_alias="kimi_k3_nebius",
+        model_id="moonshotai/Kimi-K3",
+        reasoning_capability="unavailable",
+        default_reasoning_mode="unavailable",
+    ),
+    ("nebius", "minimax_m3_nebius"): ModelDefinition(
+        provider="nebius",
+        model_alias="minimax_m3_nebius",
+        model_id="MiniMaxAI/MiniMax-M3",
+        reasoning_capability="unavailable",
+        default_reasoning_mode="unavailable",
+    ),
+    ("nebius", "glm_5_2_nebius"): ModelDefinition(
+        provider="nebius",
+        model_alias="glm_5_2_nebius",
+        model_id="zai-org/GLM-5.2",
+        reasoning_capability="unavailable",
+        default_reasoning_mode="unavailable",
+    ),
 }
 
 
