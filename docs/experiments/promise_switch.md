@@ -2,7 +2,8 @@
 
 Promise Switch is an autonomous package. It has no runtime dependency on Berg.
 The frozen scientific foundation is separated from the crash-safe execution
-layer, and no inferential analysis or semantic transcript coding is performed.
+layer. Offline model-specific analysis and codebook validation are available;
+they do not perform model calls or replace mechanical decision parsing.
 
 ## Package boundaries
 
@@ -17,6 +18,9 @@ promise_switch/
 ├── providers.py
 ├── client.py
 ├── parser.py
+├── artifacts.py
+├── analysis.py
+├── codebook.py
 └── execution/
     ├── planner.py
     ├── state.py
@@ -105,8 +109,19 @@ python3 -B scripts/inspect_promise_switch_run.py \
   /private/tmp/promise-switch-dry-runs/local-dry-run
 ```
 
-## Deferred scientific work
+## Offline analysis and codebook validation
 
-Semantic transcript coding, automatic judges, human coding UI, Cohen's kappa,
-H8/H9/H10 inference, Holm correction, power analysis, and scientific pilots are
-intentionally deferred. No real provider call is part of the offline test suite.
+`scripts/analyze_promise_switch_runs.py` accepts only current-schema execution
+runs that are not marked invalid. It reports primary results independently for
+each provider/model/reasoning configuration. The confirmatory family is H8
+(Induced No-Switch vs No Communication), H9 (Induced No-Switch vs Induced
+Switch), and H10 (Induced No-Switch vs Expectation Without Own Promise), with
+Holm correction across those three tests. Voluntary No-Switch vs Switch is a
+secondary randomized ITT analysis; the explicit-promiser subset is a further
+selected-subgroup secondary analysis.
+
+`codebook.py` validates semantic coding records and derives compliance from the
+mechanically parsed final action. It never rewrites that action. Actual human
+and independent-LLM coding, a meaningful Cohen-kappa estimate, executable power
+analysis, and confirmatory collection remain deferred. No real provider call is
+part of the offline test suite.

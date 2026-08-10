@@ -57,6 +57,7 @@ class ArchitectureTests(unittest.TestCase):
         expected = {
             "__init__.py", "version.py", "design.py", "prompts.py",
             "randomization.py", "schemas.py", "providers.py", "client.py", "parser.py",
+            "analysis.py", "artifacts.py", "codebook.py",
         }
         actual = {path.name for path in (ROOT / "promise_switch").glob("*.py")}
         self.assertEqual(actual, expected)
