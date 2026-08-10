@@ -21,6 +21,7 @@ promise_switch/
 ├── artifacts.py
 ├── analysis.py
 ├── codebook.py
+├── power.py
 └── execution/
     ├── planner.py
     ├── state.py
@@ -122,6 +123,26 @@ selected-subgroup secondary analysis.
 
 `codebook.py` validates semantic coding records and derives compliance from the
 mechanically parsed final action. It never rewrites that action. Actual human
-and independent-LLM coding, a meaningful Cohen-kappa estimate, executable power
-analysis, and confirmatory collection remain deferred. No real provider call is
-part of the offline test suite.
+and independent-LLM coding, a meaningful Cohen-kappa estimate, final sample-size
+selection, and confirmatory collection remain deferred. No real provider call
+is part of the offline test suite.
+
+## Offline power planning
+
+`scripts/power_promise_switch.py` emits a deterministic JSON grid for the
+equal-arm binary comparisons underlying H8-H10. It uses the large-sample,
+two-sided z test for two independent proportions, with pooled variance under the
+null and unpooled variance under the alternative. It does not calculate Fisher
+exact power. The default grid covers reference rates 0.10-0.70, absolute MDEs
+0.15/0.20/0.25/0.30 in both valid directions, completed n=50/75/100 per arm,
+and alpha 0.05 plus 0.05/3. The latter is a conservative Bonferroni planning
+sensitivity; it is not identical to and does not replace confirmatory Holm.
+
+The same output reports minimum equal-arm n for 80% and 90% approximate power,
+planning-only attrition inflation, and exact base calls for eight- and
+eleven-configuration scenarios. It does not select final n or alter the actual
+attrition/replacement policy.
+
+```bash
+python3 -B scripts/power_promise_switch.py
+```
