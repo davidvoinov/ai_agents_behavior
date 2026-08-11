@@ -46,6 +46,11 @@ The balanced allocator accepts only recorded `MessageEvent` records and assigns
 Switch/No-Switch 1:1 from the seed without using response content. Exactly one
 assigned final prompt is then available to a future runner.
 
+Stable internal identifiers retain `voluntary_promise_*` for artifact
+compatibility. Scientific/user-facing labels are **Voluntary Message--No-Switch**
+and **Voluntary Message--Switch** because message opportunity is not evidence
+that the resulting content is a promise.
+
 ## Model-facing output
 
 Final decisions must use:
@@ -74,12 +79,18 @@ complete pre-API plan. Append-only, fsync-backed JSONL logs then record every AP
 attempt, message event, post-message assignment, terminal trial, and error.
 `run_state.json` is replaced atomically after each state transition.
 
-New runs use `runs/promise_switch/<run_id>/` and the
-`promise_switch_execution_v1` schema. Resume rejects legacy runs, changed prompt
-hashes, changed experiment versions, and incompatible parameter overrides.
+New runs use the `promise_switch_execution_v2` schema and must declare exactly
+one dataset role: `technical`, `pilot`, `confirmatory`, or `synthetic`. Resume
+rejects legacy runs, changed prompt hashes, changed experiment versions, and
+incompatible parameter overrides.
 Durable successful responses are reused after a crash instead of being called
 again. Behavioral failures remain original missing-action ITT observations and
 are never retried; retry is limited to infrastructure failures.
+
+Exhausting the bounded infrastructure path pauses the batch for manual review
+before another trial. Current-schema resume and analysis also validate the
+deterministic plan and reject duplicate or cross-linked journals instead of
+silently collapsing them.
 
 The default rate policy is deliberately conservative: 30 requests/minute, one
 sequential request at a time, and a two-second minimum interval. A provider
@@ -113,19 +124,25 @@ python3 -B scripts/inspect_promise_switch_run.py \
 ## Offline analysis and codebook validation
 
 `scripts/analyze_promise_switch_runs.py` accepts only current-schema execution
-runs that are not marked invalid. It reports primary results independently for
+runs that are complete, integrity-valid, and explicitly match one requested
+`--dataset-role pilot` or `--dataset-role confirmatory`. Technical, synthetic,
+legacy pre-role, mixed-role, and invalid runs cannot enter this loader. It
+reports primary results independently for
 each provider/model/reasoning configuration. The confirmatory family is H8
 (Induced No-Switch vs No Communication), H9 (Induced No-Switch vs Induced
 Switch), and H10 (Induced No-Switch vs Expectation Without Own Promise), with
-Holm correction across those three tests. Voluntary No-Switch vs Switch is a
-secondary randomized ITT analysis; the explicit-promiser subset is a further
+Holm correction across those three tests. Voluntary Message--No-Switch versus
+Voluntary Message--Switch is a secondary randomized ITT analysis; the
+explicit-promiser subset is a further
 selected-subgroup secondary analysis.
 
 `codebook.py` validates semantic coding records and derives compliance from the
 mechanically parsed final action. It never rewrites that action. Actual human
-and independent-LLM coding, a meaningful Cohen-kappa estimate, final sample-size
-selection, and confirmatory collection remain deferred. No real provider call
-is part of the offline test suite.
+coding, selection of an independent LLM judge after discussion with David, a
+meaningful Cohen-kappa estimate, and the final semantic codebook freeze remain
+deferred. The future confirmatory target is `n=100` completed observations per
+condition per model configuration; this does not authorize collection. No real
+provider call is part of the offline test suite.
 
 ## Offline power planning
 
@@ -146,3 +163,10 @@ attrition/replacement policy.
 ```bash
 python3 -B scripts/power_promise_switch.py
 ```
+
+## Production-readiness audit
+
+The Stage 6E stop/pause matrix, dataset-isolation rules, `n=100` offline plan
+validation, sampling audit, output-token evidence, nomenclature mapping, and
+deferred decisions are recorded in
+`docs/experiments/promise_switch_production_readiness.md`.

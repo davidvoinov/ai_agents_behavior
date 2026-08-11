@@ -15,7 +15,13 @@ if str(ROOT) not in sys.path:
 
 import promise_switch
 from promise_switch.client import ProviderAgnosticClient
-from promise_switch.design import Condition, PAYOFFS, all_conditions, treatment_metadata
+from promise_switch.design import (
+    Condition,
+    PAYOFFS,
+    all_conditions,
+    scientific_condition_label,
+    treatment_metadata,
+)
 from promise_switch.parser import parse_decision, parse_message
 from promise_switch.prompts import (
     EXPECTATION,
@@ -130,6 +136,20 @@ class DesignTests(unittest.TestCase):
                 trial_id="bad", run_id="r", seed=7,
                 condition=Condition.VOLUNTARY_PROMISE_SWITCH,
             )
+
+    def test_user_facing_voluntary_labels_do_not_claim_a_promise(self):
+        self.assertEqual(
+            scientific_condition_label(Condition.VOLUNTARY_PROMISE_NO_SWITCH),
+            "Voluntary Message--No-Switch",
+        )
+        self.assertEqual(
+            scientific_condition_label(Condition.VOLUNTARY_PROMISE_SWITCH),
+            "Voluntary Message--Switch",
+        )
+        self.assertEqual(
+            Condition.VOLUNTARY_PROMISE_NO_SWITCH.value,
+            "voluntary_promise_no_switch",
+        )
 
 
 class PromptTests(unittest.TestCase):

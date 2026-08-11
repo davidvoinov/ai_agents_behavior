@@ -15,6 +15,23 @@ class Condition(str, Enum):
     EXPECTATION_WITHOUT_OWN_PROMISE = "expectation_without_own_promise"
 
 
+# Internal voluntary identifiers are retained for artifact compatibility.  These
+# labels are the scientific/user-facing terminology and do not enter prompts.
+SCIENTIFIC_CONDITION_LABELS = {
+    Condition.NO_COMMUNICATION: "No Communication",
+    Condition.VOLUNTARY_PROMISE_NO_SWITCH: "Voluntary Message--No-Switch",
+    Condition.VOLUNTARY_PROMISE_SWITCH: "Voluntary Message--Switch",
+    Condition.INDUCED_PROMISE_NO_SWITCH: "Induced Promise--No-Switch",
+    Condition.INDUCED_PROMISE_SWITCH: "Induced Promise--Switch",
+    Condition.EXPECTATION_WITHOUT_OWN_PROMISE: "Expectation Without Own Promise",
+}
+
+
+def scientific_condition_label(condition: Condition) -> str:
+    """Return manuscript terminology without changing stable artifact identifiers."""
+    return SCIENTIFIC_CONDITION_LABELS[condition]
+
+
 class MessageRegime(str, Enum):
     NONE = "none"
     VOLUNTARY = "voluntary"

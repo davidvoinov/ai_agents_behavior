@@ -29,6 +29,11 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--provider")
     result.add_argument("--model", help="Promise Switch model alias, e.g. qwen3_32b")
     result.add_argument("--reasoning-mode", choices=("on", "off", "unavailable"))
+    result.add_argument(
+        "--dataset-role",
+        choices=("technical", "pilot", "confirmatory", "synthetic"),
+        help="required scientific purpose for every new non-dry run",
+    )
     result.add_argument("--n-per-condition", type=int)
     result.add_argument("--seed", type=int)
     result.add_argument("--output-dir", type=Path, default=Path("runs/promise_switch"))
@@ -60,6 +65,16 @@ def main(argv: list[str] | None = None) -> int:
                if getattr(args, name) is None]
     if missing:
         raise SystemExit("Missing required new-run arguments: " + ", ".join("--" + x.replace("_", "-") for x in missing))
+    if args.dry_run:
+        if args.dataset_role not in {None, "synthetic"}:
+            raise SystemExit("--dry-run requires --dataset-role synthetic")
+        dataset_role = "synthetic"
+    else:
+        if args.dataset_role is None:
+            raise SystemExit("Missing required new-run argument: --dataset-role")
+        if args.dataset_role == "synthetic":
+            raise SystemExit("--dataset-role synthetic requires --dry-run")
+        dataset_role = args.dataset_role
     model_config = create_model_config(
         provider=args.provider, model_alias=args.model, reasoning_mode=args.reasoning_mode,
     )
@@ -70,6 +85,7 @@ def main(argv: list[str] | None = None) -> int:
         n_per_condition=args.n_per_condition,
         seed=args.seed,
         model_configs=(model_config,),
+        dataset_role=dataset_role,
         temperature=0.0 if args.temperature is None else args.temperature,
         message_max_tokens=args.message_max_tokens or max_tokens,
         decision_max_tokens=max_tokens,
@@ -95,6 +111,7 @@ def _reject_resume_overrides(args: argparse.Namespace, parameters: ExecutionPara
         "provider": parameters.model_configs[0].provider,
         "model": parameters.model_configs[0].model_alias,
         "reasoning_mode": parameters.model_configs[0].reasoning_mode,
+        "dataset_role": parameters.dataset_role,
         "n_per_condition": parameters.n_per_condition,
         "seed": parameters.seed,
         "temperature": parameters.temperature,

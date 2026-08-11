@@ -16,7 +16,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from promise_switch.artifacts import read_jsonl, validate_run_directory
-from promise_switch.design import Condition, treatment_metadata
+from promise_switch.design import Condition, scientific_condition_label, treatment_metadata
 from promise_switch.parser import parse_decision
 from promise_switch.prompts import final_decision_messages
 
@@ -27,8 +27,12 @@ def numeric_summary(values: list[float | int]) -> dict[str, float | int | None]:
                                 "median": statistics.median(values), "max": max(values)})
 
 
-def audit(run_dir: Path, *, include_invalid: bool = False) -> dict[str, Any]:
-    manifest = validate_run_directory(run_dir, allow_invalid=include_invalid)
+def audit(
+    run_dir: Path, *, include_invalid: bool = False, include_legacy: bool = False,
+) -> dict[str, Any]:
+    manifest = validate_run_directory(
+        run_dir, allow_invalid=include_invalid, allow_legacy=include_legacy,
+    )
     plans = read_jsonl(run_dir / "planned_trials.jsonl")
     messages = read_jsonl(run_dir / "message_events.jsonl")
     assignments = read_jsonl(run_dir / "assignments.jsonl")
@@ -75,8 +79,13 @@ def audit(run_dir: Path, *, include_invalid: bool = False) -> dict[str, Any]:
         )
     return {
         "run_id": manifest["run_id"],
+        "dataset_role": manifest.get("dataset_role", "legacy_unclassified_development"),
         "invalid_concurrent_execution": (run_dir / "INVALID_CONCURRENT_EXECUTION.json").exists(),
         "model_configurations": manifest["model_configurations"],
+        "condition_labels": {
+            condition.value: scientific_condition_label(condition)
+            for condition in Condition
+        },
         "temperature": manifest["temperature"],
         "token_limits": manifest["token_limits"],
         "rows": {"planned": len(plans), "messages": len(messages), "assignments": len(assignments),
@@ -123,12 +132,20 @@ def main() -> int:
         "--include-invalid", action="store_true",
         help="permit explicit technical inspection of runs marked invalid",
     )
+    parser.add_argument(
+        "--include-legacy", action="store_true",
+        help="permit explicit technical inspection of pre-role execution schemas",
+    )
     args = parser.parse_args()
     resolved = [run_dir.resolve() for run_dir in args.run_dirs]
     if len(resolved) != len(set(resolved)):
         raise SystemExit("A run directory may be supplied only once")
     try:
-        reports = [audit(run_dir, include_invalid=args.include_invalid)
+        reports = [audit(
+            run_dir,
+            include_invalid=args.include_invalid,
+            include_legacy=args.include_legacy,
+        )
                    for run_dir in sorted(resolved)]
     except ValueError as error:
         raise SystemExit(str(error)) from error

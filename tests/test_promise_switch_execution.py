@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 from promise_switch.client import RequestSpec
 from promise_switch.design import Condition
+from promise_switch.artifacts import validate_run_integrity
 from promise_switch.execution.attrition import classify_transport
 from promise_switch.execution.lock import RunLockError, RunWriterLock
 from promise_switch.execution.planner import plan_trials
@@ -28,7 +29,8 @@ from promise_switch.execution.state import TrialState, transition
 from promise_switch.execution.storage import FILES, RunStorage
 from promise_switch.execution.transport import normalize_reasoning_content
 from promise_switch.providers import create_model_config
-from promise_switch.schemas import NormalizedResponse
+from promise_switch.randomization import allocate_voluntary_pool
+from promise_switch.schemas import MessageEvent, NormalizedResponse
 from promise_switch.version import prompt_templates_hash
 
 
@@ -82,9 +84,13 @@ class ExecutionTestCase(unittest.TestCase):
         self.temp.cleanup()
 
     def params(self, run_id="run", n=1, seed=17, **kwargs):
+        dry_run = bool(kwargs.get("dry_run", False))
         return ExecutionParameters(
             run_id=run_id, output_dir=self.output, n_per_condition=n, seed=seed,
             model_configs=kwargs.pop("model_configs", (self.config,)),
+            dataset_role=kwargs.pop(
+                "dataset_role", "synthetic" if dry_run else "technical",
+            ),
             retry_policy=kwargs.pop("retry_policy", RetryPolicy(
                 max_retries=2, base_delay_seconds=0, max_delay_seconds=0,
                 jitter_fraction=0,
@@ -318,6 +324,18 @@ class AttritionRetryTests(ExecutionTestCase):
         finished = self.runner(params, transport).run(resume=True)
         self.assertEqual(finished["run_status"], "COMPLETED")
 
+    def test_22b_exhausted_infrastructure_pauses_batch_for_review(self):
+        unavailable = NormalizedResponse(
+            status="error", raw_response="model unavailable", http_status=404,
+        )
+        params = self.params()
+        transport = FakeTransport([unavailable])
+        paused = self.runner(params, transport).run()
+        self.assertEqual(paused["run_status"], "PAUSED_INFRASTRUCTURE_REVIEW")
+        self.assertTrue(paused["paused_infrastructure_review"])
+        self.assertEqual(len(transport.calls), 1)
+        self.assertEqual(paused["pause_detail"]["failure_reason"], "model_unavailable")
+
 
 class ResumeSafetyTests(ExecutionTestCase):
     def test_23_incompatible_resume_rejected(self):
@@ -361,6 +379,7 @@ class ResumeSafetyTests(ExecutionTestCase):
         PromiseSwitchRunner(params).run()
         manifest = RunStorage(params.run_dir).read_manifest()
         self.assertEqual(manifest["prompt_hash"], prompt_templates_hash())
+        self.assertEqual(manifest["dataset_role"], "synthetic")
 
 
 class RateLimitAndProviderTests(ExecutionTestCase):
@@ -547,6 +566,78 @@ class WriterLockTests(ExecutionTestCase):
         )
         self.assertIn("[INVALID RUN MARKER]", result.stdout)
         self.assertIn("INVALID_CONCURRENT_EXECUTION", result.stdout)
+
+    def test_43_duplicate_journal_rows_fail_integrity_before_resume(self):
+        params = self.params(dry_run=True)
+        PromiseSwitchRunner(params).run()
+        storage = RunStorage(params.run_dir)
+        duplicate = storage.read_jsonl("assignments.jsonl")[0]
+        storage.append("assignments.jsonl", duplicate)
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            validate_run_integrity(params.run_dir)
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            PromiseSwitchRunner(params).run(resume=True)
+
+    def test_44_confirmatory_role_requires_approved_n_and_real_transport(self):
+        with self.assertRaisesRegex(ValueError, "n=100"):
+            self.params(dataset_role="confirmatory", n=99)
+        with self.assertRaisesRegex(ValueError, "dry_run"):
+            self.params(dataset_role="confirmatory", n=100, dry_run=True)
+        params = self.params(dataset_role="confirmatory", n=100)
+        self.assertEqual(params.dataset_role, "confirmatory")
+
+    def test_45_n100_plan_and_voluntary_allocation_are_offline_and_exact(self):
+        first = plan_trials(
+            run_id="offline-confirmatory-fixture", seed=20260811,
+            n_per_condition=100, model_configs=(self.config,),
+        )
+        second = plan_trials(
+            run_id="offline-confirmatory-fixture", seed=20260811,
+            n_per_condition=100, model_configs=(self.config,),
+        )
+        self.assertEqual(first, second)
+        self.assertEqual(len(first), 600)
+        voluntary = [plan for plan in first if plan.planned_regime == "voluntary"]
+        self.assertEqual(len(voluntary), 200)
+        fixed_counts = Counter(
+            plan.final_condition for plan in first if plan.final_condition is not None
+        )
+        self.assertEqual(set(fixed_counts.values()), {100})
+        events = [MessageEvent(
+            message_event_id=f"event:{plan.trial_id}", trial_id=plan.trial_id,
+            timestamp="2026-08-11T00:00:00Z", raw_message=f"content-{index}",
+            message_recorded=True,
+        ) for index, plan in enumerate(voluntary)]
+        assignments = allocate_voluntary_pool(seed=17, message_events=events)
+        changed_content = [MessageEvent(
+            message_event_id=event.message_event_id, trial_id=event.trial_id,
+            timestamp=event.timestamp, raw_message="changed", message_recorded=True,
+        ) for event in events]
+        repeated = allocate_voluntary_pool(seed=17, message_events=changed_content)
+        self.assertEqual(
+            [(row.trial_id, row.condition) for row in assignments],
+            [(row.trial_id, row.condition) for row in repeated],
+        )
+        voluntary_counts = Counter(row.condition for row in assignments)
+        self.assertEqual(set(voluntary_counts.values()), {100})
+        self.assertEqual(len({row.trial_id for row in assignments}), 200)
+        states = {plan.trial_id: TrialState.PLANNED for plan in first}
+        conditions = {plan.trial_id: plan.final_condition for plan in first}
+        self.assertEqual(len(balanced_pending_order(first, states, conditions)), 600)
+        self.assertEqual(len(json.loads(json.dumps({
+            key: value.value for key, value in states.items()
+        }))), 600)
+
+    def test_46_condition_label_leakage_stops_before_transport(self):
+        params = self.params()
+        transport = FakeTransport()
+        with patch(
+            "promise_switch.execution.runner.voluntary_message_messages",
+            return_value=[{"role": "user", "content": "Voluntary Message--Switch"}],
+        ):
+            with self.assertRaisesRegex(RuntimeError, "condition-label leakage"):
+                self.runner(params, transport).run()
+        self.assertEqual(transport.calls, [])
 
     @staticmethod
     def _journal_snapshot(params):

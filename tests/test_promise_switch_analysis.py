@@ -16,6 +16,7 @@ from promise_switch.design import Condition
 from promise_switch.execution.attrition import classify_decision_output, classify_transport
 from promise_switch.parser import parse_decision
 from promise_switch.schemas import NormalizedResponse
+from promise_switch.version import PROMPT_VERSION, prompt_templates_hash
 
 def row(condition: Condition, action: str, *, mode: str = "off") -> dict[str, str]:
     return {"provider": "test", "model": "model", "reasoning_mode": mode,
@@ -76,6 +77,14 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(
             output["secondary_analyses"]["voluntary_itt"]["classification"],
             "secondary_randomized_intention_to_treat",
+        )
+        self.assertEqual(
+            output["secondary_analyses"]["voluntary_itt"]["treatment_label"],
+            "Voluntary Message--No-Switch",
+        )
+        self.assertEqual(
+            output["condition_labels"][Condition.VOLUNTARY_PROMISE_SWITCH.value],
+            "Voluntary Message--Switch",
         )
         self.assertEqual(
             output["secondary_analyses"]["voluntary_explicit_promisers"]["classification"],
@@ -193,19 +202,32 @@ class AnalysisTests(unittest.TestCase):
     def test_invalid_and_legacy_runs_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             run_dir = Path(directory)
-            manifest = {"execution_schema_version": "promise_switch_execution_v1",
-                        "experiment_version": "promise_switch_v1"}
+            manifest = {
+                "execution_schema_version": "promise_switch_execution_v2",
+                "experiment_version": "promise_switch_v1",
+                "prompt_version": PROMPT_VERSION,
+                "prompt_hash": prompt_templates_hash(),
+                "dataset_role": "pilot",
+                "dry_run": False,
+            }
             (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
             (run_dir / "trials.jsonl").write_text("", encoding="utf-8")
             self.assertEqual(validate_run_directory(run_dir), manifest)
+            with self.assertRaisesRegex(ValueError, "dataset role"):
+                validate_run_directory(run_dir, required_dataset_role="confirmatory")
             (run_dir / "INVALID_CONCURRENT_EXECUTION.json").write_text("{}", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "INVALID_CONCURRENT_EXECUTION"):
                 validate_run_directory(run_dir)
             validate_run_directory(run_dir, allow_invalid=True)
             (run_dir / "INVALID_CONCURRENT_EXECUTION.json").unlink()
-            (run_dir / "manifest.json").write_text(json.dumps({"experiment_name": "legacy"}), encoding="utf-8")
+            legacy = {
+                "execution_schema_version": "promise_switch_execution_v1",
+                "experiment_version": "promise_switch_v1",
+            }
+            (run_dir / "manifest.json").write_text(json.dumps(legacy), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "legacy or incompatible"):
                 validate_run_directory(run_dir)
+            self.assertEqual(validate_run_directory(run_dir, allow_legacy=True), legacy)
 
 
 if __name__ == "__main__":

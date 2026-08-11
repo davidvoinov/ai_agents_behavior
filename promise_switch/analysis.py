@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from math import comb, erf, sqrt
 from typing import Any, Iterable, Mapping, Sequence
 
-from .design import Condition
+from .design import Condition, scientific_condition_label
 
 ModelKey = tuple[str, str, str]
 
@@ -106,7 +106,9 @@ def binary_contrast(rows: Sequence[Mapping[str, Any]], contrast: Contrast) -> di
     return {
         "name": contrast.name,
         "treatment": contrast.treatment.value,
+        "treatment_label": scientific_condition_label(contrast.treatment),
         "reference": contrast.reference.value,
+        "reference_label": scientific_condition_label(contrast.reference),
         "treatment_n": n_t,
         "treatment_cooperate": c_t,
         "treatment_rate": c_t / n_t,
@@ -187,6 +189,10 @@ def analyze_by_model(
                 selected["status"] = "not_estimable_empty_arm"
         output[key] = {
             "analysis_scope": "model_configuration_specific_primary",
+            "condition_labels": {
+                condition.value: scientific_condition_label(condition)
+                for condition in Condition
+            },
             "condition_counts": counts,
             "confirmatory_contrasts": confirmatory,
             "secondary_analyses": {

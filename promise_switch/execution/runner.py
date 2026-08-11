@@ -10,10 +10,11 @@ import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Literal, Mapping, Sequence
 
+from ..artifacts import validate_run_integrity
 from ..client import CompletionTransport, ProviderAgnosticClient, RequestSpec
-from ..design import Condition, treatment_metadata
+from ..design import Condition, scientific_condition_label, treatment_metadata
 from ..parser import parse_decision, parse_message
 from ..prompts import final_decision_messages, voluntary_message_messages
 from ..randomization import allocate_voluntary_pool, assign_fixed_trial, plan_fixed_trial
@@ -40,7 +41,8 @@ from .state import RunStatus, TrialState, is_terminal, transition
 from .storage import RunStorage
 from .transport import OpenAICompatibleTransport
 
-EXECUTION_SCHEMA_VERSION = "promise_switch_execution_v1"
+EXECUTION_SCHEMA_VERSION = "promise_switch_execution_v2"
+DatasetRole = Literal["technical", "pilot", "confirmatory", "synthetic"]
 Hook = Callable[[str, Mapping[str, Any]], None]
 
 
@@ -51,6 +53,7 @@ class ExecutionParameters:
     n_per_condition: int
     seed: int
     model_configs: tuple[ModelConfig, ...]
+    dataset_role: DatasetRole
     temperature: float = 0.0
     message_max_tokens: int = 256
     decision_max_tokens: int = 256
@@ -70,6 +73,12 @@ class ExecutionParameters:
             raise ValueError("n_per_condition must be positive")
         if not self.model_configs:
             raise ValueError("At least one model configuration is required")
+        if self.dataset_role not in {"technical", "pilot", "confirmatory", "synthetic"}:
+            raise ValueError("dataset_role must explicitly classify every run")
+        if self.dry_run != (self.dataset_role == "synthetic"):
+            raise ValueError("dry_run must be true exactly for synthetic runs")
+        if self.dataset_role == "confirmatory" and self.n_per_condition != 100:
+            raise ValueError("confirmatory runs require the approved completed-cell target n=100")
 
 
 class DeterministicDryRunTransport(CompletionTransport):
@@ -122,6 +131,7 @@ class PromiseSwitchRunner:
         self.api_attempts: list[dict[str, Any]] = []
         self.run_status = RunStatus.CREATED
         self.pause_detail: dict[str, Any] | None = None
+        self.manifest: dict[str, Any] = {}
         self._limiters: dict[str, RateLimiter] = {}
         self._configs = {model_config_id(config): config for config in parameters.model_configs}
         self._default_dry_transport = DeterministicDryRunTransport()
@@ -156,7 +166,10 @@ class PromiseSwitchRunner:
                     continue
                 if self._process_trial(self._plan(trial_id)):
                     progressed = True
-                if self.run_status == RunStatus.PAUSED_PROVIDER_QUOTA:
+                if self.run_status in {
+                    RunStatus.PAUSED_PROVIDER_QUOTA,
+                    RunStatus.PAUSED_INFRASTRUCTURE_REVIEW,
+                }:
                     self._persist_state()
                     return self.technical_summary()
             if all(is_terminal(state) for state in self.states.values()):
@@ -184,7 +197,11 @@ class PromiseSwitchRunner:
                 "estimated_tokens": "unknown",
                 "estimated_cost": "unknown",
             })
-        return {"run_id": self.parameters.run_id, "model_configurations": configs}
+        return {
+            "run_id": self.parameters.run_id,
+            "dataset_role": self.parameters.dataset_role,
+            "model_configurations": configs,
+        }
 
     def technical_summary(self) -> dict[str, Any]:
         completed_actions = sum(
@@ -223,6 +240,9 @@ class PromiseSwitchRunner:
             "infrastructure_failures": infrastructure,
             "behavioral_failures": behavioral,
             "paused_quota": self.run_status == RunStatus.PAUSED_PROVIDER_QUOTA,
+            "paused_infrastructure_review": (
+                self.run_status == RunStatus.PAUSED_INFRASTRUCTURE_REVIEW
+            ),
             "pause_detail": self.pause_detail,
             "counts_by_model_provider_reasoning_condition": cells,
         }
@@ -234,8 +254,8 @@ class PromiseSwitchRunner:
             n_per_condition=self.parameters.n_per_condition,
             model_configs=self.parameters.model_configs,
         )
-        manifest = self._manifest()
-        self.storage.create_manifest(manifest)
+        self.manifest = self._manifest()
+        self.storage.create_manifest(self.manifest)
         self.storage.append_many("planned_trials.jsonl", (plan.to_dict() for plan in self.plans))
         self.states = {plan.trial_id: TrialState.PLANNED for plan in self.plans}
         self._persist_state()
@@ -244,6 +264,7 @@ class PromiseSwitchRunner:
         manifest = self.storage.read_manifest()
         if manifest.get("execution_schema_version") != EXECUTION_SCHEMA_VERSION:
             raise ValueError("Refusing to resume a legacy or incompatible Promise Switch run")
+        validate_run_integrity(self.parameters.run_dir)
         if manifest.get("experiment_version") != EXPERIMENT_VERSION:
             raise ValueError("Experiment version differs from immutable manifest")
         if manifest.get("prompt_version") != PROMPT_VERSION:
@@ -253,6 +274,7 @@ class PromiseSwitchRunner:
         expected = self._normalized_parameters()
         if manifest.get("normalized_execution_parameters") != expected:
             raise ValueError("Resume parameters are incompatible with immutable manifest")
+        self.manifest = manifest
         self.plans = tuple(PlannedTrial(**row) for row in self.storage.read_jsonl("planned_trials.jsonl"))
         if not self.plans:
             raise ValueError("Run has no durable planned trials")
@@ -342,6 +364,9 @@ class PromiseSwitchRunner:
                 attempt_number=attempt_number,
             )
             self._set_state(plan.trial_id, TrialState.FAILED_INFRASTRUCTURE_FINAL)
+            self._pause_infrastructure_review(
+                plan, "message", outcome, response, attempt_number,
+            )
             return
         parsed = parse_message(response.raw_response)
         behavioral = classify_message_output(parsed)
@@ -419,6 +444,9 @@ class PromiseSwitchRunner:
                 failure_reason=outcome.cause, attempt_number=attempt_number,
             )
             self._set_state(plan.trial_id, TrialState.FAILED_INFRASTRUCTURE_FINAL)
+            self._pause_infrastructure_review(
+                plan, "final_decision", outcome, response, attempt_number,
+            )
             return
         parsed = parse_decision(response.raw_response)
         behavioral = classify_decision_output(parsed)
@@ -441,6 +469,7 @@ class PromiseSwitchRunner:
         self, plan: PlannedTrial, stage: str,
         messages: Sequence[dict[str, str]], max_tokens: int,
     ) -> tuple[NormalizedResponse | None, AttritionOutcome, int]:
+        self._assert_runtime_identity(plan, messages)
         reusable = self._reusable_attempt(plan.trial_id, stage)
         if reusable:
             response = _response_from_record(reusable)
@@ -612,6 +641,30 @@ class PromiseSwitchRunner:
         })
         self._persist_state()
 
+    def _pause_infrastructure_review(
+        self,
+        plan: PlannedTrial,
+        stage: str,
+        outcome: AttritionOutcome,
+        response: NormalizedResponse,
+        attempt_number: int,
+    ) -> None:
+        """Pause the batch after one trial exhausts its bounded infrastructure path."""
+        self.run_status = RunStatus.PAUSED_INFRASTRUCTURE_REVIEW
+        self.pause_detail = sanitize_for_serialization({
+            "provider": plan.provider,
+            "model": plan.model,
+            "stage": stage,
+            "trial_id": plan.trial_id,
+            "timestamp": self.timestamp(),
+            "failure_reason": outcome.cause,
+            "attempt_number": attempt_number,
+            "http_status": response.http_status,
+            "provider_request_id": response.provider_request_id,
+            "required_action": "manual infrastructure review before resume",
+        })
+        self._persist_state()
+
     def _set_state(self, trial_id: str, target: TrialState) -> None:
         current = self.states[trial_id]
         if current == target:
@@ -642,6 +695,7 @@ class PromiseSwitchRunner:
         return sanitize_for_serialization({
             "execution_schema_version": EXECUTION_SCHEMA_VERSION,
             "run_id": self.parameters.run_id,
+            "dataset_role": self.parameters.dataset_role,
             "experiment_version": EXPERIMENT_VERSION,
             "prompt_version": PROMPT_VERSION,
             "prompt_hash": prompt_templates_hash(),
@@ -673,6 +727,7 @@ class PromiseSwitchRunner:
     def _normalized_parameters(self) -> dict[str, Any]:
         return sanitize_for_serialization({
             "run_id": self.parameters.run_id,
+            "dataset_role": self.parameters.dataset_role,
             "n_per_condition": self.parameters.n_per_condition,
             "seed": self.parameters.seed,
             "model_configurations": [config.to_dict() for config in self.parameters.model_configs],
@@ -683,6 +738,29 @@ class PromiseSwitchRunner:
             "rate_limit_policy": self.parameters.rate_limit_policy.to_dict(),
             "dry_run": self.parameters.dry_run,
         })
+
+    def _assert_runtime_identity(
+        self, plan: PlannedTrial, messages: Sequence[dict[str, str]],
+    ) -> None:
+        """Stop before transport if frozen identity or prompt isolation changed mid-run."""
+        if not self.manifest:
+            raise RuntimeError("Run manifest is unavailable before provider request")
+        if self.manifest.get("experiment_version") != EXPERIMENT_VERSION:
+            raise RuntimeError("Catastrophic run-integrity failure: experiment version mismatch")
+        if self.manifest.get("prompt_version") != PROMPT_VERSION:
+            raise RuntimeError("Catastrophic run-integrity failure: prompt version mismatch")
+        if self.manifest.get("prompt_hash") != prompt_templates_hash():
+            raise RuntimeError("Catastrophic run-integrity failure: frozen prompt hash changed")
+        if self.manifest.get("dataset_role") != self.parameters.dataset_role:
+            raise RuntimeError("Catastrophic run-integrity failure: dataset role mismatch")
+        config = self._configs.get(plan.config_id)
+        if config is None or plan.model != config.model_id or plan.provider != config.provider:
+            raise RuntimeError("Catastrophic run-integrity failure: model/config mismatch")
+        prompt_text = json.dumps(list(messages), ensure_ascii=False).casefold()
+        labels = [condition.value for condition in Condition]
+        labels += [scientific_condition_label(condition) for condition in Condition]
+        if any(label.casefold() in prompt_text for label in labels):
+            raise RuntimeError("Catastrophic run-integrity failure: condition-label leakage")
 
     def _reusable_attempt(self, trial_id: str, stage: str) -> dict[str, Any] | None:
         rows = [row for row in self.api_attempts
@@ -719,12 +797,15 @@ class PromiseSwitchRunner:
 
 def parameters_from_manifest(run_dir: Path) -> ExecutionParameters:
     manifest = RunStorage(run_dir).read_manifest()
+    if manifest.get("execution_schema_version") != EXECUTION_SCHEMA_VERSION:
+        raise ValueError("Refusing to resume a legacy or incompatible Promise Switch run")
     normalized = manifest.get("normalized_execution_parameters", {})
     configs = tuple(ModelConfig(**row) for row in normalized.get("model_configurations", []))
     return ExecutionParameters(
         run_id=normalized["run_id"], output_dir=run_dir.parent,
         n_per_condition=int(normalized["n_per_condition"]), seed=int(normalized["seed"]),
-        model_configs=configs, temperature=float(normalized["temperature"]),
+        model_configs=configs, dataset_role=normalized["dataset_role"],
+        temperature=float(normalized["temperature"]),
         message_max_tokens=int(normalized["message_max_tokens"]),
         decision_max_tokens=int(normalized["decision_max_tokens"]),
         retry_policy=RetryPolicy(**normalized["retry_policy"]),
