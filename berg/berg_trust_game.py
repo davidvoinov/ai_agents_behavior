@@ -39,6 +39,7 @@ import json
 import re
 import time
 import random
+import math
 import statistics
 import concurrent.futures as _futures
 from dataclasses import dataclass, field, asdict
@@ -75,6 +76,11 @@ class GameConfig:
     # the economic structure (see reskin.RESKINS["strong_novel"]).
     scenario: str = ""
     study_framing: str = "an economic decision-making study"
+    # Positive control for the incentive axis. The second mover must return at
+    # least this fraction of the amount received. With k*multiplier > 1 the
+    # first mover's payoff strictly increases in the transfer, so an agent that
+    # responds to incentives MUST move with k. Default 0 leaves the game unchanged.
+    min_return_frac: float = 0.0
 
 
 @dataclass
@@ -202,6 +208,13 @@ class Agent:
 # --------------------------------------------------------------------------- #
 # Prompts (neutral, mechanics-only baseline — wording is itself an IV later)  #
 # --------------------------------------------------------------------------- #
+def min_return(cfg: GameConfig, tripled: int) -> int:
+    """Enforced floor on the second mover's return, rounded up."""
+    if cfg.min_return_frac <= 0:
+        return 0
+    return min(tripled, math.ceil(cfg.min_return_frac * tripled))
+
+
 def _rules_block(cfg: GameConfig) -> str:
     e, m = cfg.endowment, cfg.multiplier
     intro = (cfg.scenario.strip() + "\n\n") if getattr(cfg, "scenario", "") else ""
@@ -213,7 +226,13 @@ def _rules_block(cfg: GameConfig) -> str:
         f"to the {cfg.trustee_label}.\n"
         f"- Any amount passed is multiplied by {m} on the way, so the {cfg.trustee_label} "
         f"receives {m}*X.\n"
-        f"- The {cfg.trustee_label} then chooses an integer amount Y, from 0 to {m}*X, to return.\n"
+        + (f"- The {cfg.trustee_label} then chooses an integer amount Y, from 0 to {m}*X, to return.\n"
+           if cfg.min_return_frac <= 0 else
+           f"- The {cfg.trustee_label} is REQUIRED to return at least "
+           f"{int(round(cfg.min_return_frac*100))}% of the amount received, and chooses an integer "
+           f"amount Y, from that required minimum up to {m}*X, to return. This minimum is enforced "
+           f"by the rules and is not a matter of the {cfg.trustee_label}'s discretion.\n")
+        + ""
         f"- Final outcomes: the {cfg.investor_label} ends with {e} - X + Y; "
         f"the {cfg.trustee_label} ends with {e} + {m}*X - Y.\n"
         f"- This is a single, one-time, anonymous interaction. The participants do not "
@@ -342,7 +361,8 @@ def trustee_user_prompt(cfg: GameConfig, sent: int, tripled: int,
     parts.append(
         f"The {cfg.investor_label} chose to pass X = {sent} {cfg.unit_word}. "
         f"After multiplication by {cfg.multiplier}, you received {tripled} {cfg.unit_word} (in addition to your "
-        f"own starting {cfg.endowment}). You may return any integer Y from 0 to {tripled}.\n"
+        f"own starting {cfg.endowment}). You may return any integer Y from "
+        f"{min_return(cfg, tripled)} to {tripled}.\n"
         f"{_JSON_INSTR}"
     )
     return "\n\n".join(parts)
@@ -439,7 +459,7 @@ def run_dyad(chat_fn: ChatFn, cfg: GameConfig, treatment: str, dyad_id: str,
     # --- Trustee decides (sees the action + transcript, never the Investor's reasoning) ---
     tru_user = trustee_user_prompt(cfg, sent, tripled, history_report, tr_arg)
     tru_raw = tru.respond(tru_user)
-    returned, tru_reasoning, tru_clean = parse_decision(tru_raw, 0, tripled)
+    returned, tru_reasoning, tru_clean = parse_decision(tru_raw, min_return(cfg, tripled), tripled)
 
     # --- Payoffs ---
     inv_payoff = cfg.endowment - sent + returned
@@ -457,6 +477,7 @@ def run_dyad(chat_fn: ChatFn, cfg: GameConfig, treatment: str, dyad_id: str,
         "trustee_temperature": tru_mcfg.temperature,
         "endowment": cfg.endowment,
         "multiplier": cfg.multiplier,
+        "min_return_frac": cfg.min_return_frac,
         # actions
         "sent": sent,
         "tripled": tripled,

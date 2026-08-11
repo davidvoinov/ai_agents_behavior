@@ -59,6 +59,17 @@ RESKINS: dict[str, GameConfig] = {
             "then decides how much power to route back."
         ),
     ),
+    # Social but NON-PARADIGMATIC labels at the canonical economics. Depositor and
+    # Custodian carry a social obligation to return, like Investor and Trustee, but
+    # they are not the labels of the published paradigm and are not the labels of
+    # another famous experiment. Against canonical (identical payoffs, identical
+    # units, only the role words differ) this separates the social meaning of the
+    # words from the identity of the study: semantic priming predicts
+    # canonical ~ social_nonparadigm > reskin, while a recollection of the
+    # paradigm predicts canonical > social_nonparadigm ~ reskin.
+    "social_nonparadigm": GameConfig(
+        investor_label="Depositor", trustee_label="Custodian",
+    ),
     # Structure-matched control for strong_novel: canonical wording at the SAME
     # economics (endowment 20, x4). strong_novel vs this isolates the narrative
     # and label effect at the far end (a clean H2 point), while this vs canonical
@@ -73,6 +84,9 @@ SURFACE_PAIRS = [
     ("shifted", "reskin_shifted"),      # structure (12, x2)
     ("strong_control", "strong_novel"), # structure (20, x4)
 ]
+# Three-way ladder at the canonical economics (10, x3) that separates the social
+# meaning of the role words from the identity of the paradigm.
+LABEL_LADDER = ("canonical", "social_nonparadigm", "reskin")
 # The recognizable wording of each structure, for the H3 reaction contrast
 # (canonical -> shifted -> strong_control changes only the economics).
 STRUCTURE_ANCHORS = ("canonical", "shifted", "strong_control")
