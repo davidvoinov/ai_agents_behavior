@@ -42,6 +42,7 @@ from .storage import RunStorage
 from .transport import OpenAICompatibleTransport
 
 EXECUTION_SCHEMA_VERSION = "promise_switch_execution_v2"
+BEHAVIORAL_PARSER_FAILURE_REVIEW_COUNT = 2
 DatasetRole = Literal["technical", "pilot", "confirmatory", "synthetic"]
 Hook = Callable[[str, Mapping[str, Any]], None]
 
@@ -54,7 +55,8 @@ class ExecutionParameters:
     seed: int
     model_configs: tuple[ModelConfig, ...]
     dataset_role: DatasetRole
-    temperature: float = 0.0
+    temperature: float = 1.0
+    temperature_override_authorized: bool = False
     message_max_tokens: int | None = None
     decision_max_tokens: int | None = None
     output_cap_override_authorized: bool = False
@@ -80,6 +82,11 @@ class ExecutionParameters:
             raise ValueError("dry_run must be true exactly for synthetic runs")
         if self.dataset_role == "confirmatory" and self.n_per_condition != 100:
             raise ValueError("confirmatory runs require the approved completed-cell target n=100")
+        if self.temperature != 1.0 and not self.temperature_override_authorized:
+            raise ValueError(
+                "experimental-agent temperature differs from the frozen production value "
+                "1.0; an explicit authorized override is required"
+            )
         validated_caps = {
             config.production_max_output_tokens for config in self.model_configs
         }
@@ -197,6 +204,7 @@ class PromiseSwitchRunner:
                 if self.run_status in {
                     RunStatus.PAUSED_PROVIDER_QUOTA,
                     RunStatus.PAUSED_INFRASTRUCTURE_REVIEW,
+                    RunStatus.PAUSED_BEHAVIORAL_PARSER_REVIEW,
                 }:
                     self._persist_state()
                     return self.technical_summary()
@@ -217,6 +225,9 @@ class PromiseSwitchRunner:
                 "provider": config.provider,
                 "model": config.model_id,
                 "reasoning_mode": config.reasoning_mode,
+                "validated_production_max_output_tokens": (
+                    config.production_max_output_tokens
+                ),
                 "target_final_cells": {condition.value: n for condition in Condition},
                 "planned_trials": 6 * n,
                 "approximate_api_calls": 8 * n,
@@ -228,6 +239,16 @@ class PromiseSwitchRunner:
         return {
             "run_id": self.parameters.run_id,
             "dataset_role": self.parameters.dataset_role,
+            "temperature": self.parameters.temperature,
+            "temperature_override_authorized": (
+                self.parameters.temperature_override_authorized
+            ),
+            "token_limits": {
+                "message": self.parameters.message_max_tokens,
+                "final_decision": self.parameters.decision_max_tokens,
+            },
+            "prompt_version": PROMPT_VERSION,
+            "prompt_hash": prompt_templates_hash(),
             "model_configurations": configs,
         }
 
@@ -242,6 +263,7 @@ class PromiseSwitchRunner:
         behavioral = sum(
             1 for row in self.trials.values() if row.get("failure_category") == "behavioral"
         )
+        parser_failures = self._behavioral_parser_failure_counts()
         cells: dict[str, dict[str, int]] = {}
         for plan in self.plans:
             assignment = self.assignments.get(plan.trial_id)
@@ -267,9 +289,17 @@ class PromiseSwitchRunner:
             "pending": sum(not is_terminal(state) for state in self.states.values()),
             "infrastructure_failures": infrastructure,
             "behavioral_failures": behavioral,
+            "behavioral_parser_failures_by_model_configuration": parser_failures,
+            "behavioral_parser_failure_review_required": any(
+                row["total"] >= BEHAVIORAL_PARSER_FAILURE_REVIEW_COUNT
+                for row in parser_failures.values()
+            ),
             "paused_quota": self.run_status == RunStatus.PAUSED_PROVIDER_QUOTA,
             "paused_infrastructure_review": (
                 self.run_status == RunStatus.PAUSED_INFRASTRUCTURE_REVIEW
+            ),
+            "paused_behavioral_parser_review": (
+                self.run_status == RunStatus.PAUSED_BEHAVIORAL_PARSER_REVIEW
             ),
             "pause_detail": self.pause_detail,
             "counts_by_model_provider_reasoning_condition": cells,
@@ -420,6 +450,10 @@ class PromiseSwitchRunner:
         self.hook("after_message_event", event)
         self._set_state(plan.trial_id, TrialState.MESSAGE_RECORDED)
         self._set_state(plan.trial_id, TrialState.ASSIGNMENT_PENDING)
+        if behavioral.category == "behavioral":
+            self._maybe_pause_behavioral_parser_review(
+                plan, "message", behavioral, attempt_number,
+            )
 
     def _allocate_ready_voluntary_pools(self) -> bool:
         changed = False
@@ -485,6 +519,9 @@ class PromiseSwitchRunner:
                 failure_reason=behavioral.cause, attempt_number=attempt_number,
             )
             self._set_state(plan.trial_id, TrialState.BEHAVIORAL_FAILURE)
+            self._maybe_pause_behavioral_parser_review(
+                plan, "final_decision", behavioral, attempt_number,
+            )
             return
         self._append_trial_result(
             plan, final_action=parsed.decision, raw_final_response=response.raw_response,
@@ -693,6 +730,65 @@ class PromiseSwitchRunner:
         })
         self._persist_state()
 
+    def _behavioral_parser_failure_counts(self) -> dict[str, dict[str, Any]]:
+        counts = {
+            config_id: {
+                "provider": config.provider,
+                "model": config.model_id,
+                "reasoning_mode": config.reasoning_mode,
+                "message": 0,
+                "final_decision": 0,
+                "total": 0,
+            }
+            for config_id, config in self._configs.items()
+        }
+        plans = {plan.trial_id: plan for plan in self.plans}
+        for trial_id, event in self.message_events.items():
+            plan = plans.get(trial_id)
+            if plan and event.get("behavioral_failure_reason"):
+                counts[plan.config_id]["message"] += 1
+        for trial_id, trial in self.trials.items():
+            plan = plans.get(trial_id)
+            if (
+                plan
+                and trial.get("failure_category") == "behavioral"
+                and int(trial.get("attempt_number") or 0) > 0
+            ):
+                counts[plan.config_id]["final_decision"] += 1
+        for row in counts.values():
+            row["total"] = row["message"] + row["final_decision"]
+        return counts
+
+    def _maybe_pause_behavioral_parser_review(
+        self,
+        plan: PlannedTrial,
+        stage: str,
+        outcome: AttritionOutcome,
+        attempt_number: int,
+    ) -> None:
+        """Pause on the second durable parser failure; compatibility remains manual."""
+        count = self._behavioral_parser_failure_counts()[plan.config_id]["total"]
+        if count < BEHAVIORAL_PARSER_FAILURE_REVIEW_COUNT:
+            return
+        self.run_status = RunStatus.PAUSED_BEHAVIORAL_PARSER_REVIEW
+        self.pause_detail = sanitize_for_serialization({
+            "provider": plan.provider,
+            "model": plan.model,
+            "reasoning_mode": plan.reasoning_mode,
+            "model_config_id": plan.config_id,
+            "stage": stage,
+            "trial_id": plan.trial_id,
+            "timestamp": self.timestamp(),
+            "failure_reason": outcome.cause,
+            "attempt_number": attempt_number,
+            "behavioral_parser_failure_count": count,
+            "review_trigger_count": BEHAVIORAL_PARSER_FAILURE_REVIEW_COUNT,
+            "required_action": (
+                "manual model-configuration response-contract review before resume"
+            ),
+        })
+        self._persist_state()
+
     def _set_state(self, trial_id: str, target: TrialState) -> None:
         current = self.states[trial_id]
         if current == target:
@@ -734,6 +830,9 @@ class PromiseSwitchRunner:
             "providers": sorted({config.provider for config in self.parameters.model_configs}),
             "reasoning_modes": sorted({config.reasoning_mode for config in self.parameters.model_configs}),
             "temperature": self.parameters.temperature,
+            "temperature_override_authorized": (
+                self.parameters.temperature_override_authorized
+            ),
             "token_limits": {"message": self.parameters.message_max_tokens,
                              "final_decision": self.parameters.decision_max_tokens},
             "max_output_tokens": (
@@ -763,6 +862,9 @@ class PromiseSwitchRunner:
             "seed": self.parameters.seed,
             "model_configurations": [config.to_dict() for config in self.parameters.model_configs],
             "temperature": self.parameters.temperature,
+            "temperature_override_authorized": (
+                self.parameters.temperature_override_authorized
+            ),
             "message_max_tokens": self.parameters.message_max_tokens,
             "decision_max_tokens": self.parameters.decision_max_tokens,
             "output_cap_override_authorized": (
@@ -840,6 +942,9 @@ def parameters_from_manifest(run_dir: Path) -> ExecutionParameters:
         n_per_condition=int(normalized["n_per_condition"]), seed=int(normalized["seed"]),
         model_configs=configs, dataset_role=normalized["dataset_role"],
         temperature=float(normalized["temperature"]),
+        temperature_override_authorized=bool(
+            normalized.get("temperature_override_authorized", False)
+        ),
         message_max_tokens=int(normalized["message_max_tokens"]),
         decision_max_tokens=int(normalized["decision_max_tokens"]),
         output_cap_override_authorized=bool(

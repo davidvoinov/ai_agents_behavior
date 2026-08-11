@@ -31,7 +31,7 @@ The operational categories are:
 | Voluntary assignment before durable message save | Catastrophic stop | State transitions and integrity validation require a durable, matching `MessageEvent`. |
 | Both voluntary branches for one trial | Catastrophic stop | One assignment per trial is enforced; duplicate assignment rows are rejected rather than collapsed. |
 | Isolated parser-invalid model output | Terminal behavioral failure | No retry; preserved as behavioral attrition under ITT. |
-| A systematic parser-failure pattern | Pause and investigate | No arbitrary numeric threshold is frozen. The pre-collection manual runbook must define who reviews an emerging pattern before resumption. |
+| A repeated parser-failure pattern | Pause and investigate | The second durable parser failure for one provider/model/reasoning configuration triggers `PAUSED_BEHAVIORAL_PARSER_REVIEW`, exposes per-configuration counts, and requires manual response-contract review before resume. |
 | Malformed provider envelope | Retryable infrastructure failure | Bounded retry; exhaustion records infrastructure attrition and pauses the batch. |
 | `finish_reason=length` / truncation | Retryable infrastructure failure | Bounded retry at the immutable limit; exhaustion pauses. The limit cannot change on resume. |
 | Quota exhaustion | Pause and investigate | Automatic `PAUSED_PROVIDER_QUOTA`; provider never changes automatically. |
@@ -42,9 +42,12 @@ The operational categories are:
 | Researcher condition-label leakage | Catastrophic stop | User-facing and internal condition labels are checked before transport and in stored attempt prompts. |
 | Frozen prompt modified during a live run | Catastrophic stop | Prompt hash is recomputed immediately before each fresh transport request. |
 
-No automatic threshold is yet frozen for declaring a pattern of behavioral
-parser failures “systematic.” That is a manual-review rule requiring approval,
-not a number to infer from the small pilots.
+The second occurrence is an operational definition of “repeated,” not a
+statistical-significance threshold or an automatic declaration that a model is
+incompatible. Every parser-invalid response remains behavioral ITT attrition:
+it is retained, not retried, not replaced, and never reclassified as
+infrastructure. The review rule does not inspect whether any valid action was
+COOPERATE or DEFECT and never changes the frozen prompt automatically.
 
 ## Dataset isolation
 
@@ -85,30 +88,38 @@ assignment, and the scheduler/state representation safely holds all 600 IDs.
 This validation is an in-memory/test-fixture exercise only. It creates no
 production run directory and performs no provider call.
 
-## Sampling and reasoning audit
+## Sampling and reasoning policy
 
-The executable runner/CLI currently defaults to temperature `0.0`, sends no
-`top_p`, `top_k`, or equivalent field, and records the selected value immutably
-per run. The older declarative `foundation.json` experiment block says
-temperature `0.2`, but the execution CLI does not load that block. Therefore the
-authoritative confirmatory temperature remains a scientific choice to freeze;
-Stage 6E does not silently resolve the discrepancy. All listed technical probes
-and pilots used temperature `0.0`.
+Future primary/confirmatory experimental-agent generation uses temperature
+`1.0` for both voluntary messages and final decisions. The foundation config,
+runner, and CLI share this default. A different runtime value requires
+`--authorize-temperature-override`; the immutable manifest records the
+effective temperature and authorization state. No `top_p`, `top_k`, or
+equivalent field is set.
+
+Historical probes and pilots retain their actual temperature `0.0` metadata and
+remain non-confirmatory development evidence; they are not rerun, rewritten, or
+relabeled. Temperature `1.0` is intended to sample behavioral variation across
+repeated trials rather than use near-deterministic decoding.
 
 | Alias / mode | Exact model ID | Provider | Current executable sampling | Reasoning control | Technically validated | Provider caveat |
 |---|---|---|---|---|---|---|
-| `qwen3_32b` off | `Qwen/Qwen3-32B` | Nebius | temperature 0.0; no top-p/top-k | `enable_thinking=false` | Yes: probe, smoke, pilot | Matched on/off control is Qwen-specific. |
-| `qwen3_32b` on | `Qwen/Qwen3-32B` | Nebius | temperature 0.0; no top-p/top-k | `enable_thinking=true` | Yes: probe, clean smoke, pilot | Hidden reasoning envelope is withheld; incomplete envelopes are truncation failures. |
-| `llama_3_3_70b` | `meta-llama/Llama-3.3-70B-Instruct` | Nebius | temperature 0.0; no top-p/top-k | fixed off | Yes: probe and pilot | No Qwen thinking field. |
-| `gpt_oss_120b_nebius` | `openai/gpt-oss-120b` | Nebius | temperature 0.0; no top-p/top-k | fixed on; `reasoning_effort=low` | Yes: one probe | Only one completion provides token evidence. |
-| `deepseek_v4_pro_nebius` | `deepseek-ai/DeepSeek-V4-Pro` | Nebius | temperature 0.0; no top-p/top-k | control unavailable | Yes: one probe | Probe reported no reasoning tokens; controllability is not established. |
-| `kimi_k3_nebius` | `moonshotai/Kimi-K3` | Nebius | temperature 0.0; no top-p/top-k | control unavailable | Yes: one probe | Provider usage included reasoning tokens. |
-| `minimax_m3_nebius` | `MiniMaxAI/MiniMax-M3` | Nebius | temperature 0.0; no top-p/top-k | control unavailable | Yes: one probe | Provider usage included reasoning tokens. |
-| `glm_5_2_nebius` | `zai-org/GLM-5.2` | Nebius | temperature 0.0; no top-p/top-k | control unavailable | Yes: one probe | Provider usage included reasoning tokens. |
+| `qwen3_32b` off | `Qwen/Qwen3-32B` | Nebius | production temperature 1.0; no top-p/top-k | `enable_thinking=false` | Yes: probe, smoke, pilot at historical 0.0 | Matched on/off control is Qwen-specific. |
+| `qwen3_32b` on | `Qwen/Qwen3-32B` | Nebius | production temperature 1.0; no top-p/top-k | `enable_thinking=true` | Yes: probe, clean smoke, pilot at historical 0.0 | Hidden reasoning envelope is withheld; incomplete envelopes are truncation failures. |
+| `llama_3_3_70b` | `meta-llama/Llama-3.3-70B-Instruct` | Nebius | production temperature 1.0; no top-p/top-k | fixed off | Yes: probe and pilot at historical 0.0 | No Qwen thinking field. |
+| `gpt_oss_120b_nebius` | `openai/gpt-oss-120b` | Nebius | production temperature 1.0; no top-p/top-k | fixed on; `reasoning_effort=low` | Yes: one probe at historical 0.0 | Only one completion provides token evidence. |
+| `deepseek_v4_pro_nebius` | `deepseek-ai/DeepSeek-V4-Pro` | Nebius | production temperature 1.0; no top-p/top-k | control unavailable | Yes: one probe at historical 0.0 | Probe reported no reasoning tokens; controllability is not established. |
+| `kimi_k3_nebius` | `moonshotai/Kimi-K3` | Nebius | production temperature 1.0; no top-p/top-k | control unavailable | Yes: one probe at historical 0.0 | Provider usage included reasoning tokens. |
+| `minimax_m3_nebius` | `MiniMaxAI/MiniMax-M3` | Nebius | production temperature 1.0; no top-p/top-k | control unavailable | Yes: one probe at historical 0.0 | Provider usage included reasoning tokens. |
+| `glm_5_2_nebius` | `zai-org/GLM-5.2` | Nebius | production temperature 1.0; no top-p/top-k | control unavailable | Yes: one probe at historical 0.0 | Provider usage included reasoning tokens. |
 
 No provider-specific temperature transformation has been observed on these
 Nebius endpoints. That is not evidence that decoding implementations are
 identical across model families.
+
+A temperature-range robustness analysis is intended as future secondary work,
+not part of primary H8-H10 inference or the current six-condition matrix. Its
+exact temperatures remain undecided; no robustness cells or runs exist.
 
 ## Output-token evidence
 
@@ -162,12 +173,13 @@ specific primary inference; and the future completed-cell target `n=100`.
 - Codebook software mechanics are validated. Human coding, selection of an
   independent LLM judge after discussion with David, actual Cohen's kappa, and
   the final semantic codebook freeze remain pending. No new Qwen data are needed
-  solely for kappa.
+  solely for kappa. The future independent judge will use temperature `0` for
+  coding reproducibility, but the judge model remains undecided; temperature
+  zero is not claimed to guarantee absolute backend determinism.
 - Proprietary GPT and Claude remain intended, expensive, and deferred.
 - Same-model/two-provider robustness remains required before final
   confirmatory collection. Cerebras GPT-OSS-120B remains the preferred
   researched candidate, not an approved or integrated choice.
-- Confirmatory temperature/sampling requires explicit scientific approval. A
-  manual criterion for pausing on a systematic behavioral parser-failure
-  pattern also remains unresolved. Output caps are specified for the current
-  eight configurations; future GPT and Claude caps require their own probes.
+- The exact secondary temperature-robustness grid remains unresolved. Output
+  caps are specified for the current eight configurations; future GPT and
+  Claude caps require their own probes.

@@ -229,6 +229,29 @@ class AnalysisTests(unittest.TestCase):
                 validate_run_directory(run_dir)
             self.assertEqual(validate_run_directory(run_dir, allow_legacy=True), legacy)
 
+    def test_nonconfirmatory_roles_cannot_enter_confirmatory_analysis(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            run_dir = Path(directory)
+            (run_dir / "trials.jsonl").write_text("", encoding="utf-8")
+            for role in ("technical", "pilot", "synthetic"):
+                manifest = {
+                    "execution_schema_version": "promise_switch_execution_v2",
+                    "experiment_version": "promise_switch_v1",
+                    "prompt_version": PROMPT_VERSION,
+                    "prompt_hash": prompt_templates_hash(),
+                    "dataset_role": role,
+                    "dry_run": role == "synthetic",
+                }
+                (run_dir / "manifest.json").write_text(
+                    json.dumps(manifest), encoding="utf-8",
+                )
+                with self.subTest(role=role), self.assertRaisesRegex(
+                    ValueError, "dataset role",
+                ):
+                    validate_run_directory(
+                        run_dir, required_dataset_role="confirmatory",
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()

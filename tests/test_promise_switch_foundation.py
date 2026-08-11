@@ -306,6 +306,7 @@ class ProviderClientSchemaTests(unittest.TestCase):
         }
         self.assertEqual(declared, expected)
         self.assertNotIn("token_limits", foundation["experiment"])
+        self.assertEqual(foundation["experiment"]["temperature"], 1.0)
 
     def test_nebius_model_configs_are_created_offline(self):
         on = create_model_config(provider="nebius", model_alias="qwen3_32b", reasoning_mode="on")

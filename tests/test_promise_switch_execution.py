@@ -252,12 +252,62 @@ class AttritionRetryTests(ExecutionTestCase):
         bad = NormalizedResponse(status="success", raw_response="not-json", http_status=200)
         transport = FakeTransport([bad])
         params = self.params()
-        self.runner(params, transport).run()
+        summary = self.runner(params, transport).run()
         first = self.rows(params, "trials.jsonl")[0]
         self.assertEqual(first["failure_category"], "behavioral")
         attempts = [r for r in self.rows(params, "api_attempts.jsonl")
                     if r["trial_id"] == first["trial_id"]]
         self.assertEqual(len(attempts), 1)
+        self.assertFalse(summary["behavioral_parser_failure_review_required"])
+        self.assertFalse(summary["paused_behavioral_parser_review"])
+
+    def test_15b_repeated_parser_failures_pause_for_manual_config_review(self):
+        class TwoInvalidDecisions(FakeTransport):
+            def __init__(inner):
+                super().__init__()
+                inner.invalid_decisions = 0
+
+            def complete(inner, request):
+                inner.calls.append(request)
+                if (
+                    request.metadata["stage"] == "final_decision"
+                    and inner.invalid_decisions < 2
+                ):
+                    inner.invalid_decisions += 1
+                    return NormalizedResponse(
+                        status="success", raw_response="not-json", http_status=200,
+                        finish_reason="stop",
+                    )
+                return success_for(request)
+
+        params = self.params()
+        transport = TwoInvalidDecisions()
+        summary = self.runner(params, transport).run()
+        self.assertEqual(summary["run_status"], "PAUSED_BEHAVIORAL_PARSER_REVIEW")
+        self.assertTrue(summary["paused_behavioral_parser_review"])
+        self.assertTrue(summary["behavioral_parser_failure_review_required"])
+        self.assertEqual(summary["pause_detail"]["behavioral_parser_failure_count"], 2)
+        self.assertIn("manual", summary["pause_detail"]["required_action"])
+        config_counts = next(iter(
+            summary["behavioral_parser_failures_by_model_configuration"].values()
+        ))
+        self.assertEqual(config_counts["message"], 0)
+        self.assertEqual(config_counts["final_decision"], 2)
+        failures = [
+            row for row in self.rows(params, "trials.jsonl")
+            if row["failure_category"] == "behavioral"
+        ]
+        self.assertEqual(len(failures), 2)
+        self.assertTrue(all(row["failure_reason"] == "invalid_output_format" for row in failures))
+        failed_attempts = [
+            row for row in self.rows(params, "api_attempts.jsonl")
+            if row["trial_id"] in {failure["trial_id"] for failure in failures}
+        ]
+        self.assertEqual(len(failed_attempts), 2)
+        resumed = self.runner(params, transport).run(resume=True)
+        self.assertEqual(resumed["run_status"], "COMPLETED")
+        self.assertEqual(resumed["behavioral_failures"], 2)
+        self.assertTrue(resumed["behavioral_parser_failure_review_required"])
 
     def test_16_transient_failure_retries_and_attempt_numbers(self):
         rate = NormalizedResponse(status="error", raw_response="slow", http_status=429)
@@ -590,6 +640,29 @@ class WriterLockTests(ExecutionTestCase):
             self.params(dataset_role="confirmatory", n=100, dry_run=True)
         params = self.params(dataset_role="confirmatory", n=100)
         self.assertEqual(params.dataset_role, "confirmatory")
+        self.assertEqual(params.temperature, 1.0)
+
+    def test_44b_temperature_defaults_to_one_and_override_is_explicitly_manifested(self):
+        params = self.params(dry_run=True)
+        PromiseSwitchRunner(params).run()
+        manifest = RunStorage(params.run_dir).read_manifest()
+        self.assertEqual(manifest["temperature"], 1.0)
+        self.assertFalse(manifest["temperature_override_authorized"])
+        request_params = self.params(run_id="temperature-requests")
+        transport = FakeTransport()
+        self.runner(request_params, transport).run()
+        self.assertTrue(transport.calls)
+        self.assertTrue(all(call.body["temperature"] == 1.0 for call in transport.calls))
+        with self.assertRaisesRegex(ValueError, "temperature.*authorized override"):
+            self.params(run_id="silent-zero", dry_run=True, temperature=0.0)
+        historical_style = self.params(
+            run_id="authorized-zero", dry_run=True, temperature=0.0,
+            temperature_override_authorized=True,
+        )
+        PromiseSwitchRunner(historical_style).run()
+        override_manifest = RunStorage(historical_style.run_dir).read_manifest()
+        self.assertEqual(override_manifest["temperature"], 0.0)
+        self.assertTrue(override_manifest["temperature_override_authorized"])
 
     def test_45_n100_plan_and_voluntary_allocation_are_offline_and_exact(self):
         first = plan_trials(
@@ -632,6 +705,46 @@ class WriterLockTests(ExecutionTestCase):
         self.assertEqual(len(json.loads(json.dumps({
             key: value.value for key, value in states.items()
         }))), 600)
+
+    def test_45b_temporary_confirmatory_manifest_has_frozen_effective_settings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            params = ExecutionParameters(
+                run_id="temporary-confirmatory-plan", output_dir=output,
+                n_per_condition=100, seed=20260811,
+                model_configs=(self.config,), dataset_role="confirmatory",
+                rate_limit_policy=RateLimitPolicy(
+                    requests_per_minute=None, tokens_per_minute=None,
+                    max_concurrency=1, minimum_interval_seconds=0,
+                ),
+            )
+            transport = FakeTransport()
+            runner = PromiseSwitchRunner(params, transport=transport)
+            runner._create_run()
+            manifest = RunStorage(params.run_dir).read_manifest()
+            plans = RunStorage(params.run_dir).read_jsonl("planned_trials.jsonl")
+            estimate = runner.preflight_estimate()["model_configurations"][0]
+            full_estimate = runner.preflight_estimate()
+            self.assertEqual(manifest["dataset_role"], "confirmatory")
+            self.assertEqual(
+                manifest["requested_completed_trials_per_final_condition"], 100,
+            )
+            self.assertEqual(len(estimate["target_final_cells"]), 6)
+            self.assertEqual(len(plans), 600)
+            self.assertEqual(sum(row["planned_regime"] == "voluntary" for row in plans), 200)
+            self.assertEqual(manifest["temperature"], 1.0)
+            self.assertFalse(manifest["temperature_override_authorized"])
+            self.assertEqual(manifest["max_output_tokens"], 256)
+            self.assertEqual(manifest["prompt_version"], "promise_switch_v1")
+            self.assertEqual(manifest["prompt_hash"], prompt_templates_hash())
+            self.assertEqual(full_estimate["dataset_role"], "confirmatory")
+            self.assertEqual(full_estimate["temperature"], 1.0)
+            self.assertEqual(full_estimate["token_limits"]["final_decision"], 256)
+            self.assertEqual(full_estimate["prompt_version"], "promise_switch_v1")
+            self.assertEqual(full_estimate["prompt_hash"], prompt_templates_hash())
+            self.assertEqual(transport.calls, [])
+            temporary_run_dir = params.run_dir
+        self.assertFalse(temporary_run_dir.exists())
 
     def test_46_condition_label_leakage_stops_before_transport(self):
         params = self.params()

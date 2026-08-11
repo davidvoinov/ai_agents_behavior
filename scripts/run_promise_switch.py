@@ -38,6 +38,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--seed", type=int)
     result.add_argument("--output-dir", type=Path, default=Path("runs/promise_switch"))
     result.add_argument("--temperature", type=float)
+    result.add_argument(
+        "--authorize-temperature-override", action="store_true", default=None,
+        help="explicitly authorize a temperature other than the frozen agent value 1.0",
+    )
     result.add_argument("--max-tokens", type=int)
     result.add_argument("--message-max-tokens", type=int)
     result.add_argument(
@@ -89,7 +93,8 @@ def main(argv: list[str] | None = None) -> int:
         seed=args.seed,
         model_configs=(model_config,),
         dataset_role=dataset_role,
-        temperature=0.0 if args.temperature is None else args.temperature,
+        temperature=1.0 if args.temperature is None else args.temperature,
+        temperature_override_authorized=bool(args.authorize_temperature_override),
         message_max_tokens=args.message_max_tokens,
         decision_max_tokens=args.max_tokens,
         output_cap_override_authorized=bool(args.authorize_output_cap_override),
@@ -130,6 +135,12 @@ def _reject_resume_overrides(args: argparse.Namespace, parameters: ExecutionPara
             raise SystemExit(f"Incompatible resume override --{name.replace('_', '-')}")
     if args.max_tokens is not None and args.max_tokens != parameters.decision_max_tokens:
         raise SystemExit("Incompatible resume override --max-tokens")
+    if (
+        args.authorize_temperature_override is not None
+        and bool(args.authorize_temperature_override)
+        != parameters.temperature_override_authorized
+    ):
+        raise SystemExit("Incompatible resume override --authorize-temperature-override")
     if (
         args.authorize_output_cap_override is not None
         and bool(args.authorize_output_cap_override)

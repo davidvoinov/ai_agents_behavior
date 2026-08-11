@@ -38,6 +38,18 @@ promise_switch/
 hash of all model-facing templates. `design.py` owns the six frozen researcher
 conditions and payoffs. Condition labels are not exposed to evaluated models.
 
+## Confirmatory prompt policy
+
+Primary H8-H10 confirmatory collection uses the single frozen Promise Switch v1
+prompt set. No prompt-variant experiment is currently planned, and prompt
+variants are not part of the primary or secondary analysis plan. The frozen v1
+templates, prompt version, and prompt hash remain unchanged.
+
+Any future prompt-robustness experiment, if one is later justified, would be a
+separate post-hoc or follow-up study outside the current Promise Switch
+pre-confirmatory scope. Alternative prompt formulations must not be generated
+or incorporated into the present collection or analysis plan.
+
 ## Voluntary boundary
 
 Voluntary trials begin unassigned. A sees the one-shot task, payoffs, B1, and the
@@ -87,6 +99,13 @@ Durable successful responses are reused after a crash instead of being called
 again. Behavioral failures remain original missing-action ITT observations and
 are never retried; retry is limited to infrastructure failures.
 
+The second durable parser failure for one provider/model/reasoning
+configuration pauses the run as `PAUSED_BEHAVIORAL_PARSER_REVIEW`. Per-config
+message/final parser-failure counts and the review flag are surfaced to the
+operator. This is an operational repeated-event trigger for manual review, not
+a significance threshold or automatic incompatibility decision; observations
+remain behavioral ITT attrition and are never deleted or replaced.
+
 Exhausting the bounded infrastructure path pauses the batch for manual review
 before another trial. Current-schema resume and analysis also validate the
 deterministic plan and reject duplicate or cross-linked journals instead of
@@ -96,6 +115,13 @@ The default rate policy is deliberately conservative: 30 requests/minute, one
 sequential request at a time, and a two-second minimum interval. A provider
 `Retry-After` value is a lower bound for exponential backoff. Explicit quota
 exhaustion atomically pauses the run as `PAUSED_PROVIDER_QUOTA` for later resume.
+
+Future primary experimental-agent requests use temperature `1.0` for voluntary
+messages and final decisions. A different runtime temperature requires explicit
+authorization, and the immutable manifest records the effective value and
+authorization. Historical temperature-0 probes/pilots remain unchanged and
+non-confirmatory. A later temperature-range robustness analysis is secondary,
+outside H8-H10 and the six-condition matrix, with exact values still undecided.
 
 ## Offline dry run
 
@@ -140,9 +166,12 @@ selected-subgroup secondary analysis.
 mechanically parsed final action. It never rewrites that action. Actual human
 coding, selection of an independent LLM judge after discussion with David, a
 meaningful Cohen-kappa estimate, and the final semantic codebook freeze remain
-deferred. The future confirmatory target is `n=100` completed observations per
-condition per model configuration; this does not authorize collection. No real
-provider call is part of the offline test suite.
+deferred. The future independent judge will use temperature `0` for coding
+reproducibility, without claiming absolute backend determinism; its model is
+still undecided and no judging is implemented. The future confirmatory target
+is `n=100` completed observations per condition per model configuration; this
+does not authorize collection. No real provider call is part of the offline
+test suite.
 
 ## Offline power planning
 

@@ -3,7 +3,7 @@
     "experiment_version": "promise_switch_v1",
     "prompt_version": "promise_switch_v1",
     "seed": 20260808,
-    "temperature": 0.2
+    "temperature": 1.0
   },
   "providers": {
     "nebius": {
