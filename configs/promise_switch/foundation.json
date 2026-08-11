@@ -3,11 +3,7 @@
     "experiment_version": "promise_switch_v1",
     "prompt_version": "promise_switch_v1",
     "seed": 20260808,
-    "temperature": 0.2,
-    "token_limits": {
-      "message_max_tokens": 200,
-      "decision_max_tokens": 250
-    }
+    "temperature": 0.2
   },
   "providers": {
     "nebius": {
@@ -27,6 +23,7 @@
       "model_id": "Qwen/Qwen3-32B",
       "reasoning_capability": "toggle",
       "reasoning_mode": "on",
+      "production_max_output_tokens": 4096,
       "api_key_env": "NEBIUS_API_KEY",
       "base_url": "https://api.studio.nebius.com/v1/",
       "provider_request_kwargs": {
@@ -41,6 +38,7 @@
       "model_id": "Qwen/Qwen3-32B",
       "reasoning_capability": "toggle",
       "reasoning_mode": "off",
+      "production_max_output_tokens": 256,
       "api_key_env": "NEBIUS_API_KEY",
       "base_url": "https://api.studio.nebius.com/v1/",
       "provider_request_kwargs": {
@@ -55,6 +53,7 @@
       "model_id": "meta-llama/Llama-3.3-70B-Instruct",
       "reasoning_capability": "fixed_off",
       "reasoning_mode": "off",
+      "production_max_output_tokens": 256,
       "api_key_env": "NEBIUS_API_KEY",
       "base_url": "https://api.studio.nebius.com/v1/",
       "provider_request_kwargs": {}
@@ -65,6 +64,7 @@
       "model_id": "openai/gpt-oss-120b",
       "reasoning_capability": "fixed_on",
       "reasoning_mode": "on",
+      "production_max_output_tokens": 2048,
       "api_key_env": "NEBIUS_API_KEY",
       "base_url": "https://api.studio.nebius.com/v1/",
       "provider_request_kwargs": {
@@ -77,6 +77,7 @@
       "model_id": "deepseek-ai/DeepSeek-V4-Pro",
       "reasoning_capability": "unavailable",
       "reasoning_mode": "unavailable",
+      "production_max_output_tokens": 2048,
       "api_key_env": "NEBIUS_API_KEY",
       "base_url": "https://api.studio.nebius.com/v1/",
       "provider_request_kwargs": {}
@@ -87,6 +88,7 @@
       "model_id": "moonshotai/Kimi-K3",
       "reasoning_capability": "unavailable",
       "reasoning_mode": "unavailable",
+      "production_max_output_tokens": 2048,
       "api_key_env": "NEBIUS_API_KEY",
       "base_url": "https://api.studio.nebius.com/v1/",
       "provider_request_kwargs": {}
@@ -97,6 +99,7 @@
       "model_id": "MiniMaxAI/MiniMax-M3",
       "reasoning_capability": "unavailable",
       "reasoning_mode": "unavailable",
+      "production_max_output_tokens": 2048,
       "api_key_env": "NEBIUS_API_KEY",
       "base_url": "https://api.studio.nebius.com/v1/",
       "provider_request_kwargs": {}
@@ -107,6 +110,7 @@
       "model_id": "zai-org/GLM-5.2",
       "reasoning_capability": "unavailable",
       "reasoning_mode": "unavailable",
+      "production_max_output_tokens": 2048,
       "api_key_env": "NEBIUS_API_KEY",
       "base_url": "https://api.studio.nebius.com/v1/",
       "provider_request_kwargs": {}

@@ -112,23 +112,34 @@ identical across model families.
 
 ## Output-token evidence
 
-There is no frozen per-model confirmatory output-limit table. The executable CLI
-default is 256 tokens for both stages unless overridden; `foundation.json`
-instead contains message 200 / decision 250 and is not consumed by the runner.
+Stage 6F freezes the current production maximum output budget per validated
+model configuration. These are non-binding caps, not requested generation
+lengths: a model that completes in 50 tokens should stop normally at about 50
+tokens. The scientific purpose is to prevent differential truncation from
+confounding treatment outcomes.
 
-| Configuration | Existing limit/evidence | Observed completion use | Assessment |
+| Configuration | Production cap | Observed completion use | Rationale |
 |---|---|---|---|
-| Qwen off | Pilot limit 256, 40 calls | max 37; no length finishes | 256 was ample in the pilot; not automatically frozen for confirmatory use. |
-| Qwen on | Clean/pilot limit 4096 | pilot max 1,402; prior truncation at 128 and 256, plus one invalid-run truncation at 2,560 | Default 256 is clearly unsafe; 4,096 was sufficient for the pilot, not yet a final guarantee. |
-| Llama | Probe/pilot limit 256 | pilot max 49; no length finishes | 256 was ample across 40 pilot calls; final policy remains unfrozen. |
-| GPT-OSS-120B | Probe limit 2,048 | 51 in one call; stop | Insufficient evidence to lower or freeze a production limit. |
-| DeepSeek V4 Pro | Probe limit 2,048 | 33 in one call; stop | Insufficient evidence. |
-| Kimi K3 | Probe limit 2,048 | 361 in one call; stop | Default 256 is demonstrably unsafe. |
-| MiniMax M3 | Probe limit 2,048 | 495 in one call; stop | Default 256 is demonstrably unsafe. |
-| GLM 5.2 | Probe limit 2,048 | 540 in one call; stop | Default 256 is demonstrably unsafe. |
+| Qwen off | 256 | pilot max 37; no length finishes | 256 was ample across the pilot. |
+| Qwen on | 4,096 | pilot max 1,402; prior truncation at 128 and 256, plus one invalid-run truncation at 2,560 | 4,096 is the validated non-binding setting. |
+| Llama | 256 | pilot max 49; no length finishes | 256 was ample across the pilot. |
+| GPT-OSS-120B | 2,048 | 51 in one technical probe; stop | Evidence is insufficient to lower the successful probe cap. |
+| DeepSeek V4 Pro | 2,048 | 33 in one technical probe; stop | Evidence is insufficient to lower the successful probe cap. |
+| Kimi K3 | 2,048 | 361 in one technical probe; stop | 256 is known to be too low. |
+| MiniMax M3 | 2,048 | 495 in one technical probe; stop | 256 is known to be too low. |
+| GLM 5.2 | 2,048 | 540 in one technical probe; stop | 256 is known to be too low. |
 
-Token limits must be selected and frozen per configuration before confirmatory
-collection. Stage 6E does not lower or change any limit.
+The model configuration is authoritative when CLI cap arguments are omitted.
+A differing `--max-tokens` or `--message-max-tokens` value requires the explicit
+`--authorize-output-cap-override` flag. The immutable manifest records both the
+effective message/final caps and whether an override was authorized. A run may
+contain multiple configurations only when their validated caps match, because
+the current runner has one immutable pair of caps per run.
+
+`finish_reason=length` remains retryable infrastructure/token-truncation failure
+under the existing bounded retry policy; it is never a normal behavioral
+observation. GPT and Claude caps remain deferred until their own technical
+probes. This output-cap decision does not resolve temperature or sampling.
 
 ## Scientific nomenclature and consistency
 
@@ -156,6 +167,7 @@ specific primary inference; and the future completed-cell target `n=100`.
 - Same-model/two-provider robustness remains required before final
   confirmatory collection. Cerebras GPT-OSS-120B remains the preferred
   researched candidate, not an approved or integrated choice.
-- Confirmatory temperature and per-configuration output-token limits require
-  explicit scientific/technical approval. A manual criterion for pausing on a
-  systematic behavioral parser-failure pattern also remains unresolved.
+- Confirmatory temperature/sampling requires explicit scientific approval. A
+  manual criterion for pausing on a systematic behavioral parser-failure
+  pattern also remains unresolved. Output caps are specified for the current
+  eight configurations; future GPT and Claude caps require their own probes.

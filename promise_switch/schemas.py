@@ -64,6 +64,7 @@ class ModelConfig(SerializableRecord):
     api_key_env: str
     reasoning_capability: Literal["toggle", "fixed_on", "fixed_off", "unavailable"]
     reasoning_mode: ReasoningMode
+    production_max_output_tokens: int
     provider_request_kwargs: dict[str, Any] = field(default_factory=dict)
     rate_limit_metadata: dict[str, Any] = field(default_factory=dict)
 

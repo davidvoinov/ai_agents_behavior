@@ -24,6 +24,7 @@ class ModelDefinition:
     reasoning_capability: Literal["toggle", "fixed_on", "fixed_off", "unavailable"]
     default_reasoning_mode: ReasoningMode
     request_kwargs_by_mode: dict[str, dict[str, Any]] = field(default_factory=dict)
+    production_max_output_tokens_by_mode: dict[str, int] = field(default_factory=dict)
 
 
 PROVIDERS: dict[str, ProviderDefinition] = {
@@ -50,6 +51,7 @@ MODEL_DEFINITIONS: dict[tuple[str, str], ModelDefinition] = {
             "on": {"chat_template_kwargs": {"enable_thinking": True}},
             "off": {"chat_template_kwargs": {"enable_thinking": False}},
         },
+        production_max_output_tokens_by_mode={"on": 4096, "off": 256},
     ),
     ("nebius", "llama_3_3_70b"): ModelDefinition(
         provider="nebius",
@@ -57,6 +59,7 @@ MODEL_DEFINITIONS: dict[tuple[str, str], ModelDefinition] = {
         model_id="meta-llama/Llama-3.3-70B-Instruct",
         reasoning_capability="fixed_off",
         default_reasoning_mode="off",
+        production_max_output_tokens_by_mode={"off": 256},
     ),
     ("nebius", "gpt_oss_120b_nebius"): ModelDefinition(
         provider="nebius",
@@ -65,6 +68,7 @@ MODEL_DEFINITIONS: dict[tuple[str, str], ModelDefinition] = {
         reasoning_capability="fixed_on",
         default_reasoning_mode="on",
         request_kwargs_by_mode={"on": {"reasoning_effort": "low"}},
+        production_max_output_tokens_by_mode={"on": 2048},
     ),
     ("nebius", "deepseek_v4_pro_nebius"): ModelDefinition(
         provider="nebius",
@@ -72,6 +76,7 @@ MODEL_DEFINITIONS: dict[tuple[str, str], ModelDefinition] = {
         model_id="deepseek-ai/DeepSeek-V4-Pro",
         reasoning_capability="unavailable",
         default_reasoning_mode="unavailable",
+        production_max_output_tokens_by_mode={"unavailable": 2048},
     ),
     ("nebius", "kimi_k3_nebius"): ModelDefinition(
         provider="nebius",
@@ -79,6 +84,7 @@ MODEL_DEFINITIONS: dict[tuple[str, str], ModelDefinition] = {
         model_id="moonshotai/Kimi-K3",
         reasoning_capability="unavailable",
         default_reasoning_mode="unavailable",
+        production_max_output_tokens_by_mode={"unavailable": 2048},
     ),
     ("nebius", "minimax_m3_nebius"): ModelDefinition(
         provider="nebius",
@@ -86,6 +92,7 @@ MODEL_DEFINITIONS: dict[tuple[str, str], ModelDefinition] = {
         model_id="MiniMaxAI/MiniMax-M3",
         reasoning_capability="unavailable",
         default_reasoning_mode="unavailable",
+        production_max_output_tokens_by_mode={"unavailable": 2048},
     ),
     ("nebius", "glm_5_2_nebius"): ModelDefinition(
         provider="nebius",
@@ -93,6 +100,7 @@ MODEL_DEFINITIONS: dict[tuple[str, str], ModelDefinition] = {
         model_id="zai-org/GLM-5.2",
         reasoning_capability="unavailable",
         default_reasoning_mode="unavailable",
+        production_max_output_tokens_by_mode={"unavailable": 2048},
     ),
 }
 
@@ -116,6 +124,9 @@ def create_model_config(
         api_key_env=provider_definition.api_key_env,
         reasoning_capability=definition.reasoning_capability,
         reasoning_mode=selected_mode,
+        production_max_output_tokens=definition.production_max_output_tokens_by_mode[
+            selected_mode
+        ],
         provider_request_kwargs=dict(definition.request_kwargs_by_mode.get(selected_mode, {})),
         rate_limit_metadata=dict(provider_definition.rate_limit_metadata),
     )

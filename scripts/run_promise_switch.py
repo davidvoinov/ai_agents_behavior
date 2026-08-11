@@ -40,6 +40,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--temperature", type=float)
     result.add_argument("--max-tokens", type=int)
     result.add_argument("--message-max-tokens", type=int)
+    result.add_argument(
+        "--authorize-output-cap-override", action="store_true", default=None,
+        help="explicitly authorize caps that differ from the validated model setting",
+    )
     result.add_argument("--requests-per-minute", type=int)
     result.add_argument("--tokens-per-minute", type=int)
     result.add_argument("--minimum-interval-seconds", type=float)
@@ -78,7 +82,6 @@ def main(argv: list[str] | None = None) -> int:
     model_config = create_model_config(
         provider=args.provider, model_alias=args.model, reasoning_mode=args.reasoning_mode,
     )
-    max_tokens = args.max_tokens or 256
     parameters = ExecutionParameters(
         run_id=args.run_id,
         output_dir=args.output_dir,
@@ -87,8 +90,9 @@ def main(argv: list[str] | None = None) -> int:
         model_configs=(model_config,),
         dataset_role=dataset_role,
         temperature=0.0 if args.temperature is None else args.temperature,
-        message_max_tokens=args.message_max_tokens or max_tokens,
-        decision_max_tokens=max_tokens,
+        message_max_tokens=args.message_max_tokens,
+        decision_max_tokens=args.max_tokens,
+        output_cap_override_authorized=bool(args.authorize_output_cap_override),
         retry_policy=RetryPolicy(),
         rate_limit_policy=RateLimitPolicy(
             requests_per_minute=args.requests_per_minute or 30,
@@ -126,6 +130,12 @@ def _reject_resume_overrides(args: argparse.Namespace, parameters: ExecutionPara
             raise SystemExit(f"Incompatible resume override --{name.replace('_', '-')}")
     if args.max_tokens is not None and args.max_tokens != parameters.decision_max_tokens:
         raise SystemExit("Incompatible resume override --max-tokens")
+    if (
+        args.authorize_output_cap_override is not None
+        and bool(args.authorize_output_cap_override)
+        != parameters.output_cap_override_authorized
+    ):
+        raise SystemExit("Incompatible resume override --authorize-output-cap-override")
     if args.dry_run is not None and bool(args.dry_run) != parameters.dry_run:
         raise SystemExit("Incompatible resume override --dry-run")
 

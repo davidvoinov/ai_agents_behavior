@@ -538,8 +538,12 @@ class WriterLockTests(ExecutionTestCase):
         self.assertEqual(len({row["trial_id"] for row in trials}), len(trials))
 
     def test_41_reasoning_token_budget_is_manifested_and_immutable_on_resume(self):
+        reasoning_on = create_model_config(
+            provider="nebius", model_alias="qwen3_32b", reasoning_mode="on",
+        )
         params = self.params(
-            dry_run=True, message_max_tokens=4096, decision_max_tokens=4096,
+            dry_run=True, model_configs=(reasoning_on,),
+            message_max_tokens=4096, decision_max_tokens=4096,
         )
         PromiseSwitchRunner(params).run()
         manifest = RunStorage(params.run_dir).read_manifest()
@@ -548,6 +552,7 @@ class WriterLockTests(ExecutionTestCase):
         changed = ExecutionParameters(**{
             **params.__dict__, "message_max_tokens": 2048,
             "decision_max_tokens": 2048,
+            "output_cap_override_authorized": True,
         })
         with self.assertRaisesRegex(ValueError, "incompatible"):
             PromiseSwitchRunner(changed).run(resume=True)
@@ -638,6 +643,48 @@ class WriterLockTests(ExecutionTestCase):
             with self.assertRaisesRegex(RuntimeError, "condition-label leakage"):
                 self.runner(params, transport).run()
         self.assertEqual(transport.calls, [])
+
+    def test_47_model_caps_resolve_by_configuration_and_low_cap_needs_authorization(self):
+        expected = {
+            ("qwen3_32b", "off"): 256,
+            ("qwen3_32b", "on"): 4096,
+            ("llama_3_3_70b", "off"): 256,
+            ("gpt_oss_120b_nebius", "on"): 2048,
+            ("deepseek_v4_pro_nebius", "unavailable"): 2048,
+            ("kimi_k3_nebius", "unavailable"): 2048,
+            ("minimax_m3_nebius", "unavailable"): 2048,
+            ("glm_5_2_nebius", "unavailable"): 2048,
+        }
+        for index, ((alias, mode), cap) in enumerate(expected.items()):
+            with self.subTest(alias=alias, mode=mode):
+                config = create_model_config(
+                    provider="nebius", model_alias=alias, reasoning_mode=mode,
+                )
+                params = self.params(
+                    run_id=f"cap-{index}", model_configs=(config,), dry_run=True,
+                )
+                self.assertEqual(params.message_max_tokens, cap)
+                self.assertEqual(params.decision_max_tokens, cap)
+
+        kimi = create_model_config(
+            provider="nebius", model_alias="kimi_k3_nebius",
+        )
+        with self.assertRaisesRegex(ValueError, "authorized override"):
+            self.params(
+                run_id="unsafe-kimi", model_configs=(kimi,), dry_run=True,
+                message_max_tokens=256, decision_max_tokens=256,
+            )
+        overridden = self.params(
+            run_id="authorized-kimi", model_configs=(kimi,), dry_run=True,
+            message_max_tokens=256, decision_max_tokens=256,
+            output_cap_override_authorized=True,
+        )
+        PromiseSwitchRunner(overridden).run()
+        manifest = RunStorage(overridden.run_dir).read_manifest()
+        self.assertEqual(manifest["token_limits"], {
+            "message": 256, "final_decision": 256,
+        })
+        self.assertTrue(manifest["output_cap_override_authorized"])
 
     @staticmethod
     def _journal_snapshot(params):

@@ -55,8 +55,9 @@ class ExecutionParameters:
     model_configs: tuple[ModelConfig, ...]
     dataset_role: DatasetRole
     temperature: float = 0.0
-    message_max_tokens: int = 256
-    decision_max_tokens: int = 256
+    message_max_tokens: int | None = None
+    decision_max_tokens: int | None = None
+    output_cap_override_authorized: bool = False
     retry_policy: RetryPolicy = field(default_factory=RetryPolicy)
     rate_limit_policy: RateLimitPolicy = field(default_factory=RateLimitPolicy)
     dry_run: bool = False
@@ -79,6 +80,33 @@ class ExecutionParameters:
             raise ValueError("dry_run must be true exactly for synthetic runs")
         if self.dataset_role == "confirmatory" and self.n_per_condition != 100:
             raise ValueError("confirmatory runs require the approved completed-cell target n=100")
+        validated_caps = {
+            config.production_max_output_tokens for config in self.model_configs
+        }
+        if len(validated_caps) != 1:
+            raise ValueError(
+                "one run may contain only model configurations with the same validated "
+                "production output cap"
+            )
+        validated_cap = validated_caps.pop()
+        decision_cap = (
+            validated_cap if self.decision_max_tokens is None else self.decision_max_tokens
+        )
+        message_cap = (
+            decision_cap if self.message_max_tokens is None else self.message_max_tokens
+        )
+        if message_cap < 1 or decision_cap < 1:
+            raise ValueError("output-token caps must be positive")
+        if (
+            (message_cap != validated_cap or decision_cap != validated_cap)
+            and not self.output_cap_override_authorized
+        ):
+            raise ValueError(
+                "output-token cap differs from the validated production cap; "
+                "an explicit authorized override is required"
+            )
+        object.__setattr__(self, "message_max_tokens", message_cap)
+        object.__setattr__(self, "decision_max_tokens", decision_cap)
 
 
 class DeterministicDryRunTransport(CompletionTransport):
@@ -713,6 +741,9 @@ class PromiseSwitchRunner:
                 if self.parameters.message_max_tokens == self.parameters.decision_max_tokens
                 else None
             ),
+            "output_cap_override_authorized": (
+                self.parameters.output_cap_override_authorized
+            ),
             "retry_policy": self.parameters.retry_policy.to_dict(),
             "pacing_rate_limit_policy": self.parameters.rate_limit_policy.to_dict(),
             "config_snapshot": snapshot,
@@ -734,6 +765,9 @@ class PromiseSwitchRunner:
             "temperature": self.parameters.temperature,
             "message_max_tokens": self.parameters.message_max_tokens,
             "decision_max_tokens": self.parameters.decision_max_tokens,
+            "output_cap_override_authorized": (
+                self.parameters.output_cap_override_authorized
+            ),
             "retry_policy": self.parameters.retry_policy.to_dict(),
             "rate_limit_policy": self.parameters.rate_limit_policy.to_dict(),
             "dry_run": self.parameters.dry_run,
@@ -808,6 +842,9 @@ def parameters_from_manifest(run_dir: Path) -> ExecutionParameters:
         temperature=float(normalized["temperature"]),
         message_max_tokens=int(normalized["message_max_tokens"]),
         decision_max_tokens=int(normalized["decision_max_tokens"]),
+        output_cap_override_authorized=bool(
+            normalized.get("output_cap_override_authorized", False)
+        ),
         retry_policy=RetryPolicy(**normalized["retry_policy"]),
         rate_limit_policy=RateLimitPolicy(**normalized["rate_limit_policy"]),
         dry_run=bool(normalized["dry_run"]),

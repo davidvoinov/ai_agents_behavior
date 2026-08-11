@@ -279,6 +279,34 @@ class ParserTests(unittest.TestCase):
 
 
 class ProviderClientSchemaTests(unittest.TestCase):
+    def test_validated_production_output_caps_cover_current_panel(self):
+        expected = {
+            ("qwen3_32b", "off"): 256,
+            ("qwen3_32b", "on"): 4096,
+            ("llama_3_3_70b", "off"): 256,
+            ("gpt_oss_120b_nebius", "on"): 2048,
+            ("deepseek_v4_pro_nebius", "unavailable"): 2048,
+            ("kimi_k3_nebius", "unavailable"): 2048,
+            ("minimax_m3_nebius", "unavailable"): 2048,
+            ("glm_5_2_nebius", "unavailable"): 2048,
+        }
+        for (alias, mode), cap in expected.items():
+            with self.subTest(alias=alias, mode=mode):
+                config = create_model_config(
+                    provider="nebius", model_alias=alias, reasoning_mode=mode,
+                )
+                self.assertEqual(config.production_max_output_tokens, cap)
+        foundation = json.loads(
+            (ROOT / "configs/promise_switch/foundation.json").read_text(encoding="utf-8")
+        )
+        declared = {
+            (row["model_alias"], row["reasoning_mode"]):
+                row["production_max_output_tokens"]
+            for row in foundation["models"]
+        }
+        self.assertEqual(declared, expected)
+        self.assertNotIn("token_limits", foundation["experiment"])
+
     def test_nebius_model_configs_are_created_offline(self):
         on = create_model_config(provider="nebius", model_alias="qwen3_32b", reasoning_mode="on")
         off = create_model_config(provider="nebius", model_alias="qwen3_32b", reasoning_mode="off")
