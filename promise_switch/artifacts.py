@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .design import Condition, scientific_condition_label, treatment_metadata
+from .parser import parse_decision
 from .schemas import ModelConfig
 from .version import EXPERIMENT_VERSION, PROMPT_VERSION, prompt_templates_hash
 
@@ -116,6 +117,7 @@ def validate_run_integrity(
     ]
     if len(attempt_keys) != len(set(attempt_keys)):
         raise ValueError(f"duplicate trial/stage/attempt number: {run_dir}")
+    attempts_by_key = {key: row for key, row in zip(attempt_keys, attempts, strict=True)}
 
     messages_by_id = {row["message_event_id"]: row for row in messages}
     assignments_by_trial = {row["trial_id"]: row for row in assignments}
@@ -179,6 +181,23 @@ def validate_run_integrity(
         assignment = assignments_by_trial.get(plan.trial_id)
         if assignment and row.get("condition") != assignment.get("condition"):
             raise ValueError(f"terminal trial condition differs from assignment: {run_dir}")
+        if row.get("completion_status") == "completed":
+            key = (plan.trial_id, "final_decision", row.get("attempt_number"))
+            attempt = attempts_by_key.get(key)
+            if attempt is None or attempt.get("transport_category") != "success":
+                raise ValueError(f"completed trial has no successful final attempt: {run_dir}")
+            raw = attempt.get("response", {}).get("raw_response")
+            if not isinstance(raw, str):
+                raise ValueError(f"completed trial has malformed final response: {run_dir}")
+            parsed = parse_decision(raw)
+            if (
+                not parsed.valid
+                or row.get("final_action") != parsed.decision
+                or row.get("raw_final_response") != raw
+            ):
+                raise ValueError(
+                    f"completed trial differs from mechanically parsed final response: {run_dir}"
+                )
 
     state_path = run_dir / "run_state.json"
     if not state_path.is_file():

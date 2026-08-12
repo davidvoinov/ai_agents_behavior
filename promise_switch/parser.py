@@ -29,12 +29,14 @@ def parse_decision(raw_response: str) -> DecisionParse:
     if payload is None:
         return DecisionParse(False, None, "", raw_response, error)
     decision = payload.get("decision")
-    justification = payload.get("justification", "")
-    if not isinstance(justification, str):
-        justification = ""
+    justification = payload.get("justification")
     if decision not in {"COOPERATE", "DEFECT"}:
-        return DecisionParse(False, None, justification, raw_response,
+        return DecisionParse(False, None, justification if isinstance(justification, str) else "",
+                             raw_response,
                              "decision must be exactly COOPERATE or DEFECT")
+    if not isinstance(justification, str) or not justification.strip():
+        return DecisionParse(False, None, "", raw_response,
+                             "justification must be a non-empty string")
     return DecisionParse(True, decision, justification, raw_response, None)
 
 
@@ -50,9 +52,22 @@ def parse_message(raw_response: str) -> MessageParse:
 
 def _json_object(raw_response: str) -> tuple[dict[str, Any] | None, str | None]:
     try:
-        value = json.loads(raw_response)
-    except json.JSONDecodeError as exc:
+        value = json.loads(raw_response, object_pairs_hook=_unique_object)
+    except (json.JSONDecodeError, _DuplicateKeyError) as exc:
         return None, str(exc)
     if not isinstance(value, dict):
         return None, "response must be one JSON object"
     return value, None
+
+
+class _DuplicateKeyError(ValueError):
+    pass
+
+
+def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise _DuplicateKeyError(f"duplicate JSON key: {key}")
+        value[key] = item
+    return value

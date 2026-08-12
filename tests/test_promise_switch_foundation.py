@@ -277,6 +277,25 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(parsed.message, "hello")
         self.assertFalse(hasattr(parsed, "promise_made"))
 
+    def test_parsers_reject_ambiguous_or_incomplete_json_contracts(self):
+        self.assertFalse(parse_decision(
+            '{"decision":"COOPERATE","decision":"DEFECT","justification":"brief"}'
+        ).valid)
+        self.assertFalse(parse_decision('{"decision":"COOPERATE"}').valid)
+        self.assertFalse(parse_decision(
+            '{"decision":"COOPERATE","justification":"   "}'
+        ).valid)
+        self.assertFalse(parse_message('{"message":"first","message":"second"}').valid)
+        self.assertFalse(parse_decision(
+            'prefix {"decision":"COOPERATE","justification":"brief"}'
+        ).valid)
+        contradictory_justification = parse_decision(
+            '{"decision":"COOPERATE","justification":"I would rather DEFECT."}'
+        )
+        self.assertTrue(contradictory_justification.valid)
+        self.assertEqual(contradictory_justification.decision, "COOPERATE")
+        self.assertTrue(parse_message('{"message":"   "}').valid)
+
 
 class ProviderClientSchemaTests(unittest.TestCase):
     def test_validated_production_output_caps_cover_current_panel(self):

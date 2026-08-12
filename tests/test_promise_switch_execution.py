@@ -633,6 +633,21 @@ class WriterLockTests(ExecutionTestCase):
         with self.assertRaisesRegex(ValueError, "duplicate"):
             PromiseSwitchRunner(params).run(resume=True)
 
+    def test_43b_corrupted_terminal_action_fails_integrity(self):
+        params = self.params(dry_run=True)
+        PromiseSwitchRunner(params).run()
+        trials_path = params.run_dir / "trials.jsonl"
+        rows = RunStorage(params.run_dir).read_jsonl("trials.jsonl")
+        rows[0]["final_action"] = "DEFECT"
+        trials_path.write_text(
+            "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(ValueError, "mechanically parsed final response"):
+            validate_run_integrity(params.run_dir)
+        with self.assertRaisesRegex(ValueError, "mechanically parsed final response"):
+            PromiseSwitchRunner(params).run(resume=True)
+
     def test_44_confirmatory_role_requires_approved_n_and_real_transport(self):
         with self.assertRaisesRegex(ValueError, "n=100"):
             self.params(dataset_role="confirmatory", n=99)

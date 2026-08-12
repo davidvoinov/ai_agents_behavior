@@ -72,7 +72,8 @@ Final decisions must use:
 ```
 
 The parser accepts only exact `COOPERATE` or `DEFECT` values from `decision`. It
-does not repair actions from justification and does not classify promises.
+requires the documented string `justification`, rejects duplicate JSON keys,
+does not repair actions from justification, and does not classify promises.
 
 ## Provider foundation
 
@@ -161,6 +162,10 @@ Holm correction across those three tests. Voluntary Message--No-Switch versus
 Voluntary Message--Switch is a secondary randomized ITT analysis; the
 explicit-promiser subset is a further
 selected-subgroup secondary analysis.
+Primary contrast estimates use mechanically valid completed actions and report
+terminal/completed attrition denominators plus worst-case binary-outcome risk-
+difference bounds for missing actions. Behavioral failures remain in the
+assigned-arm provenance and are not replaced or inferred from ambiguous text.
 
 `codebook.py` validates semantic coding records and derives compliance from the
 mechanically parsed final action. It never rewrites that action. Actual human

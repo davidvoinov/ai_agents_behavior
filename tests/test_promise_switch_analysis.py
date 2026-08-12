@@ -192,6 +192,19 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(counts["analyzed_n"], 5)
         self.assertEqual(counts["behavioral_attrition"], 1)
 
+    def test_contrasts_report_worst_case_attrition_sensitivity_bounds(self) -> None:
+        rows = complete_fixture()
+        rows.append({**row(Condition.INDUCED_PROMISE_NO_SWITCH, ""),
+                     "completion_status": "failed", "failure_category": "behavioral"})
+        result = binary_contrast(rows, PRIMARY_CONFIRMATORY_CONTRASTS[0])
+        sensitivity = result["attrition_sensitivity"]
+        self.assertEqual(sensitivity["treatment_terminal_n"], 6)
+        self.assertEqual(sensitivity["treatment_missing_action_n"], 1)
+        self.assertEqual(sensitivity["reference_terminal_n"], 5)
+        self.assertEqual(sensitivity["reference_missing_action_n"], 0)
+        self.assertAlmostEqual(sensitivity["risk_difference_bounds"][0], 2 / 6 - 2 / 5)
+        self.assertAlmostEqual(sensitivity["risk_difference_bounds"][1], 3 / 6 - 2 / 5)
+
     def test_duplicate_trial_ids_are_rejected(self) -> None:
         rows = complete_fixture()
         rows[0]["trial_id"] = "duplicate"

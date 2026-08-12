@@ -86,6 +86,7 @@ def _chi_square_two_sided(a: int, b: int, c: int, d: int) -> float:
 
 
 def binary_contrast(rows: Sequence[Mapping[str, Any]], contrast: Contrast) -> dict[str, Any]:
+    terminal = [row for row in rows if row.get("completion_status") in {"completed", "failed"}]
     selected = [row for row in rows if row.get("completion_status") == "completed"
                 and row.get("final_action") in {"COOPERATE", "DEFECT"}]
     arms: dict[Condition, list[Mapping[str, Any]]] = {
@@ -97,6 +98,13 @@ def binary_contrast(rows: Sequence[Mapping[str, Any]], contrast: Contrast) -> di
         raise ValueError(f"contrast {contrast.name} has an empty arm")
     c_t = sum(row["final_action"] == "COOPERATE" for row in arms[contrast.treatment])
     c_r = sum(row["final_action"] == "COOPERATE" for row in arms[contrast.reference])
+    terminal_n_t = sum(row.get("condition") == contrast.treatment.value for row in terminal)
+    terminal_n_r = sum(row.get("condition") == contrast.reference.value for row in terminal)
+    missing_t, missing_r = terminal_n_t - n_t, terminal_n_r - n_r
+    if missing_t < 0 or missing_r < 0:
+        raise ValueError(f"contrast {contrast.name} has inconsistent terminal denominators")
+    lower_t, upper_t = c_t / terminal_n_t, (c_t + missing_t) / terminal_n_t
+    lower_r, upper_r = c_r / terminal_n_r, (c_r + missing_r) / terminal_n_r
     table = (c_t, n_t - c_t, c_r, n_r - c_r)
     expected = [n_t * (c_t + c_r) / (n_t + n_r), n_t * (n_t + n_r - c_t - c_r) / (n_t + n_r),
                 n_r * (c_t + c_r) / (n_t + n_r), n_r * (n_t + n_r - c_t - c_r) / (n_t + n_r)]
@@ -117,6 +125,14 @@ def binary_contrast(rows: Sequence[Mapping[str, Any]], contrast: Contrast) -> di
         "reference_rate": c_r / n_r,
         "risk_difference": c_t / n_t - c_r / n_r,
         "risk_difference_ci_95": list(ci),
+        "attrition_sensitivity": {
+            "method": "worst_case_binary_outcome_bounds",
+            "treatment_terminal_n": terminal_n_t,
+            "treatment_missing_action_n": missing_t,
+            "reference_terminal_n": terminal_n_r,
+            "reference_missing_action_n": missing_r,
+            "risk_difference_bounds": [lower_t - upper_r, upper_t - lower_r],
+        },
         "test": "fisher_exact_two_sided" if use_fisher else "pearson_chi_square_two_sided",
         "p_value": p_value,
     }
