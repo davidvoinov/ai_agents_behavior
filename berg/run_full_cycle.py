@@ -45,6 +45,8 @@ try:
 except ImportError:
     pass
 
+import random
+
 import berg_trust_game as B
 import reskin as R
 import providers as P
@@ -59,30 +61,46 @@ ENGINE_TREATMENT = {
 }
 
 
-def valence_history_report(cfg: B.GameConfig, valence: str, n: int = 12) -> str:
-    """A prior-session report with a fixed valence, in the engine's own format.
+N_HISTORY_VARIANTS = 10
 
-    positive  earlier pairs trusted and were repaid (investor ends ahead).
-    negative  earlier pairs trusted and were exploited (trustee kept everything).
+
+def valence_history_report(cfg: B.GameConfig, valence: str, variant: int = 0,
+                           n: int = 12) -> str:
+    """A prior-session report with a fixed valence, drawn independently per variant.
+
+    The valence is unambiguous in every variant, since a positive report shows
+    trust repaid at a profit on average and a negative report shows it exploited.
+    Within a report the rows vary, and each report carries one or two rows that
+    run against its own valence, so the stimulus is a distribution and not a
+    degenerate one. Variants are drawn from independent seeds, so a cell can
+    spread several reports across its dyads and the idiosyncrasy of any single
+    report stops being confounded with the valence itself.
     """
+    rng = random.Random(hash((valence, variant, cfg.endowment, cfg.multiplier)) & 0xFFFFFFFF)
     E, m = cfg.endowment, cfg.multiplier
-    xs = ([max(1, round(E * f)) for f in (0.4, 0.5, 0.5, 0.6, 0.6, 0.7)] * 3)[:n]
-    recs = []
-    for x in xs:
-        y = min(m * x, round(1.6 * x)) if valence == "positive" else 0
-        recs.append({"sent": x, "returned": y,
+    rows = []
+    # index of the row that runs against the valence, so no report is degenerate
+    against = rng.randrange(n)
+    for i in range(n):
+        x = max(1, round(E * rng.uniform(0.3, 0.8)))
+        if valence == "positive":
+            ratio = rng.uniform(0.2, 0.7) if i == against else rng.uniform(1.2, 2.2)
+        else:
+            ratio = rng.uniform(1.2, 1.8) if i == against else rng.uniform(0.0, 0.5)
+        y = min(m * x, max(0, round(x * ratio)))
+        rows.append({"sent": x, "returned": y,
                      "investor_parse_clean": True, "trustee_parse_clean": True})
-    return B.build_history_report(recs, cfg)
+    return B.build_history_report(rows, cfg)
 
 
-def condition_setup(cfg, condition, comm_rounds):
+def condition_setup(cfg, condition, comm_rounds, variant=0):
     """Return (history_report, comm_rounds, valence_tag) for a condition."""
     if condition == "no_history":
         return None, 0, "none"
     if condition == "social_history_pos":
-        return valence_history_report(cfg, "positive"), 0, "positive"
+        return valence_history_report(cfg, "positive", variant), 0, "positive"
     if condition == "social_history_neg":
-        return valence_history_report(cfg, "negative"), 0, "negative"
+        return valence_history_report(cfg, "negative", variant), 0, "negative"
     if condition == "communication":
         return None, comm_rounds, "none"
     sys.exit(f"unknown condition {condition!r}")
@@ -130,10 +148,10 @@ def main() -> None:
     print(f"Plan per model: {len(surfaces)} surfaces x {len(conditions)} conditions "
           f"= {cells} cells x {n} = {cells*n} dyads.")
     if dry:
-        print("\n--- sample positive history (canonical) ---")
-        print(valence_history_report(R.RESKINS["canonical"], "positive", 4))
-        print("\n--- sample negative history (canonical) ---")
-        print(valence_history_report(R.RESKINS["canonical"], "negative", 4))
+        for val in ("positive", "negative"):
+            for v in (0, 1):
+                print(f"\n--- {val} history, variant {v} ---")
+                print(valence_history_report(R.RESKINS["canonical"], val, v, 6))
         print(f"\nConditions -> engine treatment: {ENGINE_TREATMENT}")
         print("DRY run, no API calls made.")
         return
@@ -183,7 +201,7 @@ def main() -> None:
                 for condition in conditions:
                     if abort:
                         break
-                    hist, cr, valence = condition_setup(cfg, condition, comm_rounds)
+                    _, cr, valence = condition_setup(cfg, condition, comm_rounds)
                     cell = f"{tag}/{surface}/{condition}"
                     ok = fail = skip = 0
                     for i in range(n):
@@ -191,6 +209,8 @@ def main() -> None:
                         if did in done:
                             skip += 1
                             continue
+                        variant = i % N_HISTORY_VARIANTS
+                        hist, _, _ = condition_setup(cfg, condition, comm_rounds, variant)
                         try:
                             rec = B.run_dyad(chat, cfg, ENGINE_TREATMENT[condition], did, mcfg,
                                              history_report=hist, comm_rounds=cr,
@@ -209,7 +229,8 @@ def main() -> None:
                         consec_infra = 0
                         rec.update(surface=surface, model_key=model,
                                    reasoning_class=P.reasoning_class(model),
-                                   condition=condition, valence=valence)
+                                   condition=condition, valence=valence,
+                                   history_variant=(variant if valence != "none" else None))
                         clean = rec["investor_parse_clean"] and rec["trustee_parse_clean"]
                         att.add(cell=cell, dyad_id=did, role="dyad", cause="ok" if clean else "format")
                         fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
