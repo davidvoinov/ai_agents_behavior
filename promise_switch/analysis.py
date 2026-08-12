@@ -168,6 +168,7 @@ def analyze_by_model(
             "terminal_n": 0, "completed_n": 0, "analyzed_n": 0,
             "cooperate": 0, "defect": 0,
             "infrastructure_attrition": 0, "behavioral_attrition": 0,
+            "initial_terminal_n": 0, "top_up_terminal_n": 0,
         }
                   for condition in Condition}
         for row in group:
@@ -175,6 +176,9 @@ def analyze_by_model(
             if condition not in counts:
                 continue
             counts[condition]["terminal_n"] += 1
+            phase_key = ("top_up_terminal_n" if row.get("plan_phase") == "top_up"
+                         else "initial_terminal_n")
+            counts[condition][phase_key] += 1
             failure_category = row.get("failure_category")
             if failure_category in {"infrastructure", "behavioral"}:
                 counts[condition][f"{failure_category}_attrition"] += 1

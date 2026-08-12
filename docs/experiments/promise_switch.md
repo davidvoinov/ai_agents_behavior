@@ -88,11 +88,12 @@ explicit transport. With no transport it cannot make an API call.
 ## Durable execution
 
 Before any transport call, the runner writes an immutable manifest and the
-complete pre-API plan. Append-only, fsync-backed JSONL logs then record every API
-attempt, message event, post-message assignment, terminal trial, and error.
+complete initial pre-API plan. Append-only, fsync-backed JSONL logs then record
+every top-up event, appended plan, pause, API attempt, message event,
+post-message assignment, terminal trial, and error.
 `run_state.json` is replaced atomically after each state transition.
 
-New runs use the `promise_switch_execution_v2` schema and must declare exactly
+New runs use the `promise_switch_execution_v3` schema and must declare exactly
 one dataset role: `technical`, `pilot`, `confirmatory`, or `synthetic`. Resume
 rejects legacy runs, changed prompt hashes, changed experiment versions, and
 incompatible parameter overrides.
@@ -123,6 +124,33 @@ authorization, and the immutable manifest records the effective value and
 authorization. Historical temperature-0 probes/pilots remain unchanged and
 non-confirmatory. A later temperature-range robustness analysis is secondary,
 outside H8-H10 and the six-condition matrix, with exact values still undecided.
+
+## Minimum completed-cell stopping rule
+
+Confirmatory `n=100` means a minimum of 100 mechanically valid completed binary
+decisions in every condition for every model configuration. Confirmatory runs
+enable outcome-blind sequential top-up automatically; no guessed attrition
+percentage is used. A top-up decision can use completion/missingness and
+operational pause state, but cannot read COOPERATE/DEFECT direction, message
+content, cooperation rates, effects, confidence intervals, or p-values.
+
+Every failed initial or top-up trial remains immutable in the same collection.
+Fixed-cell deficits receive new seed-derived trials with new IDs. Voluntary
+deficits receive deterministic blocks of two message trials; after both
+messages are durable, seeded content-blind allocation assigns exactly one to
+No-Switch and one to Switch. If pre-assignment infrastructure attrition prevents
+a block from obtaining its required message-complete candidates, a new
+seed-derived recovery trial is recorded in that same allocation group. Valid
+observations are never discarded. Consequently a voluntary arm may exceed 100
+when the other arm first reaches the minimum; analysis uses every eligible
+observation and reports actual cell sizes.
+
+`top_up_events.jsonl`, `planned_trials.jsonl`, and `pause_events.jsonl` preserve
+the expansion sequence, derivation inputs, initial/top-up identity, block
+membership, creation reason, and pause history. Scientific analysis admits a
+completed confirmatory run only after integrity validation proves that all six
+cells meet the minimum. Audit and inspection tools can still examine incomplete
+or paused artifacts.
 
 ## Offline dry run
 
@@ -174,7 +202,7 @@ meaningful Cohen-kappa estimate, and the final semantic codebook freeze remain
 deferred. The future independent judge will use temperature `0` for coding
 reproducibility, without claiming absolute backend determinism; its model is
 still undecided and no judging is implemented. The future confirmatory target
-is `n=100` completed observations per condition per model configuration; this
+is a minimum `n=100` completed observations per condition per model configuration; this
 does not authorize collection. No real provider call is part of the offline
 test suite.
 
@@ -190,13 +218,47 @@ and alpha 0.05 plus 0.05/3. The latter is a conservative Bonferroni planning
 sensitivity; it is not identical to and does not replace confirmatory Holm.
 
 The same output reports minimum equal-arm n for 80% and 90% approximate power,
-planning-only attrition inflation, and exact base calls for eight- and
-eleven-configuration scenarios. It does not select final n or alter the actual
-attrition/replacement policy.
+planning-only fixed-percentage attrition illustrations, and exact base calls
+for eight- and eleven-configuration scenarios. Production collection instead
+uses outcome-blind sequential top-up and does not select an attrition percentage.
 
 ```bash
 python3 -B scripts/power_promise_switch.py
 ```
+
+## Minimal confirmatory runbook
+
+1. From a clean frozen revision, choose one validated model alias/mode and a
+   unique run ID. Create it with `--dataset-role confirmatory`,
+   `--n-per-condition 100`, the frozen seed, and the intended output directory.
+   Confirmatory construction automatically enables `minimum_completed_binary_v1`.
+
+   ```bash
+   python3 -B scripts/run_promise_switch.py \
+     --run-id confirmatory-qwen-off \
+     --provider nebius --model qwen3_32b --reasoning-mode off \
+     --dataset-role confirmatory --n-per-condition 100 --seed 20260808 \
+     --output-dir runs/promise_switch
+   ```
+2. Review the printed prompt version/hash, temperature 1.0, model ID, reasoning
+   mode, cap, initial 600 trials, and base 800 calls. Retries/top-ups are unknown.
+3. Execute once. The initial plan is durable before transport and expansions are
+   appended as deterministic events.
+4. Inspect with `scripts/inspect_promise_switch_run.py RUN_DIR` and audit with
+   `scripts/audit_promise_switch_artifacts.py RUN_DIR`.
+5. Resolve quota/infrastructure/parser pauses without changing experimental
+   settings, then resume with `scripts/run_promise_switch.py --resume RUN_ID
+   --output-dir OUTPUT_DIR`. Paused invocations do not expand automatically.
+6. After current trials are terminal, the runner appends only fixed deficits or
+   balanced voluntary blocks. Crash/resume remains idempotent during top-up.
+7. Collection is complete only when `completion_target_met` is true and all six
+   `completed_binary` cell counts are at least 100; voluntary n may be larger.
+8. Audit integrity and retain initiated, completed, behavioral, infrastructure,
+   retry, pause, and top-up counts for each cell/configuration.
+9. Run `scripts/analyze_promise_switch_runs.py --dataset-role confirmatory
+   RUN_DIR`; the loader refuses any confirmatory cell below 100.
+10. Report actual analyzed n, all attrition counts, and worst-case sensitivity
+    bounds. Never trim voluntary overshoot.
 
 ## Production-readiness audit
 

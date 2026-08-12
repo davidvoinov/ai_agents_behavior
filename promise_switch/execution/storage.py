@@ -11,6 +11,8 @@ from typing import Any, Iterable
 FILES = (
     "manifest.json",
     "planned_trials.jsonl",
+    "top_up_events.jsonl",
+    "pause_events.jsonl",
     "message_events.jsonl",
     "assignments.jsonl",
     "api_attempts.jsonl",

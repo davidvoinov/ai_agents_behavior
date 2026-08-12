@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from promise_switch.artifacts import read_jsonl, validate_run_directory
+from promise_switch.artifacts import completed_binary_counts, read_jsonl, validate_run_directory
 from promise_switch.design import Condition, scientific_condition_label, treatment_metadata
 from promise_switch.parser import parse_decision
 from promise_switch.prompts import final_decision_messages
@@ -25,6 +25,10 @@ def numeric_summary(values: list[float | int]) -> dict[str, float | int | None]:
     return ({"count": 0, "sum": 0, "min": None, "median": None, "max": None}
             if not values else {"count": len(values), "sum": sum(values), "min": min(values),
                                 "median": statistics.median(values), "max": max(values)})
+
+
+def string_counter(values: Any) -> dict[str, int]:
+    return dict(sorted(Counter(str(value) for value in values).items()))
 
 
 def audit(
@@ -39,6 +43,8 @@ def audit(
     attempts = read_jsonl(run_dir / "api_attempts.jsonl")
     trials = read_jsonl(run_dir / "trials.jsonl")
     errors = read_jsonl(run_dir / "errors.jsonl")
+    top_up_events = read_jsonl(run_dir / "top_up_events.jsonl")
+    pause_events = read_jsonl(run_dir / "pause_events.jsonl")
     completion_tokens = [row["response"]["usage"]["completion_tokens"] for row in attempts
                          if row.get("response", {}).get("usage", {}).get("completion_tokens") is not None]
     prompt_tokens = [row["response"]["usage"]["prompt_tokens"] for row in attempts
@@ -47,6 +53,8 @@ def audit(
                if row.get("response", {}).get("latency_seconds") is not None]
     assignment_counts = Counter(row.get("condition") for row in assignments)
     trial_counts = Counter(row.get("condition") for row in trials)
+    completed_counts = completed_binary_counts(trials)
+    target = int(manifest.get("requested_completed_trials_per_final_condition", 0))
     assignments_by_trial = {row["trial_id"]: row for row in assignments}
     messages_by_id = {row["message_event_id"]: row for row in messages}
     final_attempts = [row for row in attempts if row.get("stage") == "final_decision"
@@ -88,20 +96,35 @@ def audit(
         },
         "temperature": manifest["temperature"],
         "token_limits": manifest["token_limits"],
-        "rows": {"planned": len(plans), "messages": len(messages), "assignments": len(assignments),
+        "completion_policy": manifest.get("completion_policy"),
+        "rows": {"planned": len(plans), "initial_plans": sum(row.get("plan_phase") == "initial" for row in plans),
+                 "top_up_plans": sum(row.get("plan_phase") == "top_up" for row in plans),
+                 "top_up_events": len(top_up_events), "pause_events": len(pause_events),
+                 "messages": len(messages), "assignments": len(assignments),
                  "attempts": len(attempts), "trials": len(trials), "errors": len(errors)},
         "unique_ids": {"planned_trials": len({row["trial_id"] for row in plans}),
                        "message_events": len({row["message_event_id"] for row in messages}),
                        "assignments": len({row["assignment_id"] for row in assignments}),
                        "attempts": len({row["attempt_id"] for row in attempts}),
                        "trials": len({row["trial_id"] for row in trials})},
-        "assignment_condition_counts": dict(sorted(assignment_counts.items())),
-        "trial_condition_counts": dict(sorted(trial_counts.items())),
-        "final_actions": dict(sorted(Counter(row.get("final_action") for row in trials).items())),
+        "assignment_condition_counts": string_counter(assignment_counts.elements()),
+        "trial_condition_counts": string_counter(trial_counts.elements()),
+        "completed_binary_by_configuration_condition": {
+            "|".join(key): value for key, value in sorted(completed_counts.items())
+        },
+        "minimum_completed_target_met": bool(target) and all(
+            completed_counts.get((
+                config["provider"], config["model_id"], config["reasoning_mode"], condition.value,
+            ), 0) >= target
+            for config in manifest.get("model_configurations", []) for condition in Condition
+        ),
+        "final_actions": string_counter(row.get("final_action") for row in trials),
         "attempt_numbers": dict(sorted(Counter(row.get("attempt_number") for row in attempts).items())),
         "attempt_stages": dict(sorted(Counter(row.get("stage") for row in attempts).items())),
         "attempt_statuses": dict(sorted(Counter(row.get("response", {}).get("status") for row in attempts).items())),
-        "finish_reasons": dict(sorted(Counter(row.get("response", {}).get("finish_reason") for row in attempts).items())),
+        "finish_reasons": string_counter(
+            row.get("response", {}).get("finish_reason") for row in attempts
+        ),
         "transport_categories": dict(sorted(Counter(row.get("transport_category") for row in attempts).items())),
         "message_parse": {"valid": sum(row.get("parse_valid") is True for row in messages),
                           "invalid": sum(row.get("parse_valid") is False for row in messages)},
@@ -111,7 +134,16 @@ def audit(
         "voluntary_messages": dict(sorted(Counter(row.get("raw_message", "") for row in messages).items())),
         "mechanics": {
             "all_six_conditions_present": set(assignment_counts) == {condition.value for condition in Condition},
-            "exact_condition_balance": len(set(assignment_counts.values())) == 1,
+            "initial_plan_balance": len({
+                sum(row.get("plan_phase") == "initial"
+                    and row.get("final_condition") == condition.value for row in plans)
+                if condition not in {Condition.VOLUNTARY_PROMISE_NO_SWITCH,
+                                     Condition.VOLUNTARY_PROMISE_SWITCH}
+                else sum(row.get("plan_phase") == "initial" and row.get("planned_regime") == "voluntary"
+                         for row in plans) // 2
+                for condition in Condition
+            }) == 1,
+            "voluntary_overshoot_allowed": True,
             "all_recorded_messages_linked": all(row.get("message_event_id") in messages_by_id
                                                    for row in assignments
                                                    if row.get("condition", "").startswith("voluntary_")),

@@ -13,7 +13,8 @@ from unittest.mock import patch
 
 from promise_switch.client import RequestSpec
 from promise_switch.design import Condition
-from promise_switch.artifacts import validate_run_integrity
+from promise_switch.analysis import VOLUNTARY_ITT_CONTRAST, binary_contrast
+from promise_switch.artifacts import read_jsonl, validate_run_integrity
 from promise_switch.execution.attrition import classify_transport
 from promise_switch.execution.lock import RunLockError, RunWriterLock
 from promise_switch.execution.planner import plan_trials
@@ -32,6 +33,7 @@ from promise_switch.providers import create_model_config
 from promise_switch.randomization import allocate_voluntary_pool
 from promise_switch.schemas import MessageEvent, NormalizedResponse
 from promise_switch.version import prompt_templates_hash
+from scripts.audit_promise_switch_artifacts import audit as audit_run
 
 
 def success_for(request: RequestSpec, suffix: str = "") -> NormalizedResponse:
@@ -58,6 +60,100 @@ class FakeTransport:
             item = self.scripted.pop(0)
             return item(request) if callable(item) else item
         return success_for(request, self.message_suffix)
+
+
+def request_condition(request: RequestSpec) -> Condition | None:
+    if request.metadata.get("stage") != "final_decision":
+        return None
+    text = request.body["messages"][-1]["content"]
+    if "Before assignment, you sent" in text:
+        return (Condition.VOLUNTARY_PROMISE_SWITCH if "final partner is now" in text
+                else Condition.VOLUNTARY_PROMISE_NO_SWITCH)
+    if "Before assignment, you made this promise" in text:
+        return (Condition.INDUCED_PROMISE_SWITCH if "final partner is now" in text
+                else Condition.INDUCED_PROMISE_NO_SWITCH)
+    if "You did not make a promise." in text:
+        return Condition.EXPECTATION_WITHOUT_OWN_PROMISE
+    if "No message was sent before the final decision." in text:
+        return Condition.NO_COMMUNICATION
+    raise AssertionError("unrecognized frozen condition prompt")
+
+
+class OneFailureTransport(FakeTransport):
+    def __init__(self, condition: Condition, *, action: str = "COOPERATE", infrastructure=False):
+        super().__init__()
+        self.condition = condition
+        self.action = action
+        self.infrastructure = infrastructure
+        self.target_trial: str | None = None
+        self.failed = False
+
+    def complete(self, request: RequestSpec) -> NormalizedResponse:
+        self.calls.append(request)
+        if request.metadata["stage"] == "message":
+            return NormalizedResponse(status="success", raw_response='{"message":"optional"}',
+                                      http_status=200, finish_reason="stop")
+        if request_condition(request) == self.condition and not self.failed:
+            if self.target_trial is None:
+                self.target_trial = str(request.metadata["trial_id"])
+            if request.metadata["trial_id"] == self.target_trial:
+                if self.infrastructure:
+                    attempts = sum(call.metadata.get("trial_id") == self.target_trial
+                                   for call in self.calls)
+                    if attempts <= 3:
+                        if attempts == 3:
+                            self.failed = True
+                        return NormalizedResponse(status="timeout", raw_response="")
+                else:
+                    self.failed = True
+                    return NormalizedResponse(status="success", raw_response="not-json",
+                                              http_status=200, finish_reason="stop")
+        return NormalizedResponse(
+            status="success",
+            raw_response=json.dumps({"decision": self.action, "justification": "brief"}),
+            http_status=200, finish_reason="stop",
+        )
+
+
+class OneMessageInfrastructureFailureTransport(FakeTransport):
+    def __init__(self):
+        super().__init__()
+        self.target_trial: str | None = None
+
+    def complete(self, request: RequestSpec) -> NormalizedResponse:
+        self.calls.append(request)
+        if request.metadata["stage"] == "message":
+            if self.target_trial is None:
+                self.target_trial = str(request.metadata["trial_id"])
+            if request.metadata["trial_id"] == self.target_trial:
+                count = sum(call.metadata.get("trial_id") == self.target_trial for call in self.calls)
+                if count <= 3:
+                    return NormalizedResponse(status="timeout", raw_response="")
+            return NormalizedResponse(status="success", raw_response='{"message":"optional"}',
+                                      http_status=200, finish_reason="stop")
+        return success_for(request)
+
+
+class SeveralBehavioralFailuresTransport(FakeTransport):
+    def __init__(self, condition: Condition, count: int):
+        super().__init__()
+        self.condition = condition
+        self.count = count
+        self.failed_trials: set[str] = set()
+
+    def complete(self, request: RequestSpec) -> NormalizedResponse:
+        self.calls.append(request)
+        if request.metadata["stage"] == "message":
+            return NormalizedResponse(status="success", raw_response='{"message":"optional"}',
+                                      http_status=200, finish_reason="stop")
+        trial_id = str(request.metadata["trial_id"])
+        if (request_condition(request) == self.condition
+                and len(self.failed_trials) < self.count
+                and trial_id not in self.failed_trials):
+            self.failed_trials.add(trial_id)
+            return NormalizedResponse(status="success", raw_response="not-json",
+                                      http_status=200, finish_reason="stop")
+        return success_for(request)
 
 
 class OneShotCrash:
@@ -820,6 +916,263 @@ class WriterLockTests(ExecutionTestCase):
             name: (params.run_dir / name).read_bytes()
             for name in FILES if (params.run_dir / name).exists()
         }
+
+
+class CompletedCellTopUpTests(ExecutionTestCase):
+    def top_up_params(self, run_id: str, *, n: int = 2) -> ExecutionParameters:
+        return self.params(run_id=run_id, n=n, dry_run=True, top_up_enabled=True)
+
+    def test_48_no_attrition_requires_no_top_up(self):
+        params = self.top_up_params("no-attrition")
+        summary = self.runner(params, FakeTransport()).run()
+        self.assertEqual(summary["run_status"], "COMPLETED")
+        self.assertTrue(summary["completion_target_met"])
+        self.assertEqual(summary["top_up_trials_added"], 0)
+        self.assertEqual(read_jsonl(params.run_dir / "top_up_events.jsonl"), [])
+
+    def test_49_fixed_behavioral_attrition_adds_new_trial_and_preserves_failure(self):
+        params = self.top_up_params("fixed-behavioral")
+        transport = OneFailureTransport(Condition.NO_COMMUNICATION)
+        summary = self.runner(params, transport).run()
+        trials = read_jsonl(params.run_dir / "trials.jsonl")
+        plans = read_jsonl(params.run_dir / "planned_trials.jsonl")
+        failures = [row for row in trials if row.get("failure_category") == "behavioral"]
+        top_ups = [row for row in plans if row["plan_phase"] == "top_up"]
+        self.assertEqual(summary["run_status"], "COMPLETED")
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(len(top_ups), 1)
+        self.assertNotEqual(failures[0]["trial_id"], top_ups[0]["trial_id"])
+        self.assertEqual(len({row["trial_id"] for row in plans}), len(plans))
+        counts = summary["counts_by_model_provider_reasoning_condition"]
+        cell = next(value for key, value in counts.items() if key.endswith("|no_communication"))
+        self.assertEqual(cell["completed_binary"], 2)
+        self.assertEqual(cell["behavioral_missing_action"], 1)
+        self.assertEqual(cell["top_up_trials_added"], 1)
+        result = binary_contrast(trials, __import__(
+            "promise_switch.analysis", fromlist=["PRIMARY_CONFIRMATORY_CONTRASTS"]
+        ).PRIMARY_CONFIRMATORY_CONTRASTS[0])
+        self.assertEqual(result["attrition_sensitivity"]["reference_missing_action_n"], 1)
+
+    def test_50_infrastructure_attrition_pauses_then_tops_up(self):
+        params = self.top_up_params("fixed-infrastructure")
+        transport = OneFailureTransport(Condition.NO_COMMUNICATION, infrastructure=True)
+        first = self.runner(params, transport).run()
+        self.assertEqual(first["run_status"], "PAUSED_INFRASTRUCTURE_REVIEW")
+        self.assertEqual(first["top_up_trials_added"], 0)
+        final = self.runner(params, transport).run(resume=True)
+        self.assertEqual(final["run_status"], "COMPLETED")
+        self.assertEqual(final["top_up_trials_added"], 1)
+        trials = read_jsonl(params.run_dir / "trials.jsonl")
+        self.assertEqual(sum(row.get("failure_category") == "infrastructure" for row in trials), 1)
+        self.assertEqual(len(read_jsonl(params.run_dir / "pause_events.jsonl")), 1)
+
+    def test_51_voluntary_asymmetric_attrition_uses_balanced_block_and_overshoots(self):
+        params = self.top_up_params("voluntary-overshoot")
+        transport = OneFailureTransport(Condition.VOLUNTARY_PROMISE_SWITCH)
+        summary = self.runner(params, transport).run()
+        plans = read_jsonl(params.run_dir / "planned_trials.jsonl")
+        events = read_jsonl(params.run_dir / "top_up_events.jsonl")
+        top_up_voluntary = [row for row in plans
+                            if row["plan_phase"] == "top_up" and row["planned_regime"] == "voluntary"]
+        self.assertEqual(len(top_up_voluntary), 2)
+        self.assertEqual(len({row["top_up_block_id"] for row in top_up_voluntary}), 1)
+        self.assertEqual(events[0]["voluntary_balanced_blocks"], 1)
+        cells = summary["counts_by_model_provider_reasoning_condition"]
+        no_switch = next(v for k, v in cells.items() if k.endswith("|voluntary_promise_no_switch"))
+        switch = next(v for k, v in cells.items() if k.endswith("|voluntary_promise_switch"))
+        self.assertEqual(no_switch["completed_binary"], 3)
+        self.assertEqual(switch["completed_binary"], 2)
+        self.assertEqual(switch["behavioral_missing_action"], 1)
+        assignments = read_jsonl(params.run_dir / "assignments.jsonl")
+        block_ids = {row["trial_id"] for row in top_up_voluntary}
+        block_conditions = [row["condition"] for row in assignments if row["trial_id"] in block_ids]
+        self.assertCountEqual(block_conditions, [
+            Condition.VOLUNTARY_PROMISE_NO_SWITCH.value,
+            Condition.VOLUNTARY_PROMISE_SWITCH.value,
+        ])
+        allocation_seed = next(
+            row["randomization_seed"] for row in assignments if row["trial_id"] in block_ids
+        )
+        changed_content = [MessageEvent(
+            message_event_id=f"changed:{index}", trial_id=row["trial_id"], timestamp="t",
+            raw_message="completely different" if index else "", message_recorded=True,
+        ) for index, row in enumerate(top_up_voluntary)]
+        changed_assignments = allocate_voluntary_pool(
+            seed=allocation_seed, message_events=changed_content,
+        )
+        self.assertEqual(
+            {row.trial_id: row.condition.value for row in changed_assignments},
+            {row["trial_id"]: row["condition"] for row in assignments
+             if row["trial_id"] in block_ids},
+        )
+        result = binary_contrast(
+            read_jsonl(params.run_dir / "trials.jsonl"), VOLUNTARY_ITT_CONTRAST,
+        )
+        self.assertEqual(result["treatment_n"], 3)
+        self.assertEqual(result["reference_n"], 2)
+        self.assertEqual(result["attrition_sensitivity"]["reference_missing_action_n"], 1)
+        audit = audit_run(params.run_dir)
+        self.assertTrue(audit["minimum_completed_target_met"])
+        self.assertEqual(audit["rows"]["top_up_plans"], 2)
+        self.assertEqual(audit["final_actions"]["None"], 1)
+
+    def test_52_top_up_planning_is_blind_to_cooperate_or_defect(self):
+        snapshots = []
+        for index, action in enumerate(("COOPERATE", "DEFECT")):
+            with tempfile.TemporaryDirectory() as directory:
+                params = ExecutionParameters(**{
+                    **self.top_up_params("outcome-blind").__dict__,
+                    "output_dir": Path(directory),
+                })
+                self.runner(
+                    params, OneFailureTransport(Condition.NO_COMMUNICATION, action=action),
+                ).run()
+                events = read_jsonl(params.run_dir / "top_up_events.jsonl")
+                snapshots.append([{key: value for key, value in event.items() if key != "timestamp"}
+                                  for event in events])
+        self.assertEqual(snapshots[0], snapshots[1])
+
+    def test_53_crash_resume_during_top_up_is_idempotent(self):
+        for index, crash_event in enumerate((
+            "before_top_up_creation", "after_top_up_event", "after_top_up_plan_persistence",
+            "after_message_event", "after_assignment", "after_api_attempt_final",
+        )):
+            with self.subTest(event=crash_event):
+                params = self.top_up_params(f"topup-crash-{index}")
+                voluntary = crash_event in {"after_message_event", "after_assignment"}
+                transport = OneFailureTransport(
+                    Condition.VOLUNTARY_PROMISE_SWITCH if voluntary
+                    else Condition.NO_COMMUNICATION,
+                )
+
+                class TopUpCrash:
+                    def __init__(self):
+                        self.ids: set[str] = set()
+                        self.fired = False
+
+                    def __call__(self, event, payload):
+                        if event == "after_top_up_event":
+                            self.ids.update(row["trial_id"] for row in payload["planned_trials"])
+                        eligible = event == crash_event and (
+                            crash_event in {"before_top_up_creation", "after_top_up_event",
+                                            "after_top_up_plan_persistence"}
+                            or payload.get("trial_id") in self.ids
+                        )
+                        if eligible and not self.fired:
+                            self.fired = True
+                            raise RuntimeError("simulated top-up crash")
+
+                crash = TopUpCrash()
+                with self.assertRaisesRegex(RuntimeError, "simulated top-up crash"):
+                    self.runner(params, transport, hook=crash).run()
+                final = self.runner(params, transport).run(resume=True)
+                self.assertEqual(final["run_status"], "COMPLETED")
+                plans = read_jsonl(params.run_dir / "planned_trials.jsonl")
+                assignments = read_jsonl(params.run_dir / "assignments.jsonl")
+                trials = read_jsonl(params.run_dir / "trials.jsonl")
+                self.assertEqual(len({row["trial_id"] for row in plans}), len(plans))
+                self.assertEqual(len({row["trial_id"] for row in assignments}), len(assignments))
+                self.assertEqual(len({row["trial_id"] for row in trials}), len(trials))
+
+    def test_54_quota_during_top_up_pauses_without_new_expansion(self):
+        params = self.top_up_params("topup-quota")
+        base = OneFailureTransport(Condition.NO_COMMUNICATION)
+        top_up_ids: set[str] = set()
+        quota_sent = False
+
+        class QuotaTransport:
+            calls = base.calls
+
+            def complete(self, request):
+                nonlocal quota_sent
+                if request.metadata["trial_id"] in top_up_ids and not quota_sent:
+                    quota_sent = True
+                    return NormalizedResponse(
+                        status="error", raw_response='{"error":"quota exhausted"}', http_status=429,
+                    )
+                return base.complete(request)
+
+        def hook(event, payload):
+            if event == "after_top_up_event":
+                top_up_ids.update(row["trial_id"] for row in payload["planned_trials"])
+
+        first = self.runner(params, QuotaTransport(), hook=hook).run()
+        self.assertEqual(first["run_status"], "PAUSED_PROVIDER_QUOTA")
+        self.assertEqual(first["top_up_events"], 1)
+        final = self.runner(params, QuotaTransport(), hook=hook).run(resume=True)
+        self.assertEqual(final["run_status"], "COMPLETED")
+        self.assertEqual(final["top_up_events"], 1)
+
+    def test_55_confirmatory_analysis_gate_requires_minimum_100(self):
+        params = self.params(
+            run_id="confirmatory-gate", n=100, dataset_role="confirmatory",
+        )
+        self.runner(params, FakeTransport()).run()
+        validate_run_integrity(
+            params.run_dir, required_dataset_role="confirmatory", require_completed=True,
+        )
+        path = params.run_dir / "trials.jsonl"
+        rows = read_jsonl(path)
+        rows[0].update({
+            "completion_status": "failed", "final_action": None,
+            "failure_category": "behavioral", "failure_reason": "invalid_output_format",
+        })
+        path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+                        encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "minimum completed binary target"):
+            validate_run_integrity(
+                params.run_dir, required_dataset_role="confirmatory", require_completed=True,
+            )
+
+    def test_56_preassignment_infrastructure_failure_gets_message_recovery(self):
+        params = self.top_up_params("message-infrastructure")
+        transport = OneMessageInfrastructureFailureTransport()
+        first = self.runner(params, transport).run()
+        self.assertEqual(first["run_status"], "PAUSED_INFRASTRUCTURE_REVIEW")
+        final = self.runner(params, transport).run(resume=True)
+        self.assertEqual(final["run_status"], "COMPLETED")
+        events = read_jsonl(params.run_dir / "top_up_events.jsonl")
+        recovery = [row for row in events if row["event_type"] == "voluntary_message_recovery"]
+        self.assertEqual(len(recovery), 1)
+        self.assertEqual(recovery[0]["message_recovery_count"], 1)
+        plans = read_jsonl(params.run_dir / "planned_trials.jsonl")
+        recovery_plan = next(row for row in plans
+                             if row["creation_reason"] == "voluntary_message_stage_infrastructure_recovery")
+        failed = next(row for row in read_jsonl(params.run_dir / "trials.jsonl")
+                      if row.get("failure_category") == "infrastructure")
+        self.assertNotEqual(recovery_plan["trial_id"], failed["trial_id"])
+        self.assertEqual(len(read_jsonl(params.run_dir / "assignments.jsonl")), 12)
+        validate_run_integrity(params.run_dir, require_completed=True)
+
+    def test_57_corrupted_top_up_decision_is_rejected(self):
+        params = self.top_up_params("corrupt-topup")
+        self.runner(params, OneFailureTransport(Condition.NO_COMMUNICATION)).run()
+        path = params.run_dir / "top_up_events.jsonl"
+        events = read_jsonl(path)
+        events[0]["completed_binary_counts_before"][Condition.NO_COMMUNICATION.value] = 2
+        path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in events),
+                        encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "completion-only stopping rule"):
+            validate_run_integrity(params.run_dir)
+
+    def test_58_several_behavioral_failures_require_manual_resumes_then_exact_fixed_top_up(self):
+        params = self.top_up_params("several-behavioral", n=4)
+        transport = SeveralBehavioralFailuresTransport(Condition.NO_COMMUNICATION, 3)
+        summary = self.runner(params, transport).run()
+        pauses = 0
+        while summary["run_status"] == "PAUSED_BEHAVIORAL_PARSER_REVIEW":
+            pauses += 1
+            summary = self.runner(params, transport).run(resume=True)
+        self.assertEqual(summary["run_status"], "COMPLETED")
+        self.assertGreaterEqual(pauses, 2)
+        trials = read_jsonl(params.run_dir / "trials.jsonl")
+        plans = read_jsonl(params.run_dir / "planned_trials.jsonl")
+        failures = [row for row in trials if row.get("failure_category") == "behavioral"]
+        fixed_topups = [row for row in plans if row["plan_phase"] == "top_up"
+                        and row["final_condition"] == Condition.NO_COMMUNICATION.value]
+        self.assertEqual(len(failures), 3)
+        self.assertEqual(len(fixed_topups), 3)
+        self.assertEqual(len(read_jsonl(params.run_dir / "pause_events.jsonl")), pauses)
 
 
 if __name__ == "__main__":

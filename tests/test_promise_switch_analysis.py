@@ -205,6 +205,27 @@ class AnalysisTests(unittest.TestCase):
         self.assertAlmostEqual(sensitivity["risk_difference_bounds"][0], 2 / 6 - 2 / 5)
         self.assertAlmostEqual(sensitivity["risk_difference_bounds"][1], 3 / 6 - 2 / 5)
 
+    def test_attrition_bounds_preserve_both_failure_types_and_asymmetry(self) -> None:
+        rows = complete_fixture()
+        rows.extend([
+            {**row(Condition.INDUCED_PROMISE_NO_SWITCH, ""),
+             "completion_status": "failed", "failure_category": "behavioral"},
+            {**row(Condition.INDUCED_PROMISE_NO_SWITCH, ""),
+             "completion_status": "failed", "failure_category": "infrastructure"},
+            {**row(Condition.NO_COMMUNICATION, ""),
+             "completion_status": "failed", "failure_category": "infrastructure"},
+        ])
+        result = binary_contrast(rows, PRIMARY_CONFIRMATORY_CONTRASTS[0])
+        sensitivity = result["attrition_sensitivity"]
+        self.assertEqual(sensitivity["treatment_terminal_n"], 7)
+        self.assertEqual(sensitivity["treatment_missing_action_n"], 2)
+        self.assertEqual(sensitivity["reference_terminal_n"], 6)
+        self.assertEqual(sensitivity["reference_missing_action_n"], 1)
+        no_attrition = binary_contrast(complete_fixture(), PRIMARY_CONFIRMATORY_CONTRASTS[0])
+        self.assertEqual(
+            no_attrition["attrition_sensitivity"]["risk_difference_bounds"], [0.0, 0.0],
+        )
+
     def test_duplicate_trial_ids_are_rejected(self) -> None:
         rows = complete_fixture()
         rows[0]["trial_id"] = "duplicate"
@@ -216,12 +237,17 @@ class AnalysisTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             run_dir = Path(directory)
             manifest = {
-                "execution_schema_version": "promise_switch_execution_v2",
+                "execution_schema_version": "promise_switch_execution_v3",
                 "experiment_version": "promise_switch_v1",
                 "prompt_version": PROMPT_VERSION,
                 "prompt_hash": prompt_templates_hash(),
                 "dataset_role": "pilot",
                 "dry_run": False,
+                "completion_policy": {
+                    "version": "minimum_completed_binary_v1",
+                    "minimum_completed_binary_per_condition": 5,
+                    "top_up_enabled": False,
+                },
             }
             (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
             (run_dir / "trials.jsonl").write_text("", encoding="utf-8")
@@ -248,12 +274,17 @@ class AnalysisTests(unittest.TestCase):
             (run_dir / "trials.jsonl").write_text("", encoding="utf-8")
             for role in ("technical", "pilot", "synthetic"):
                 manifest = {
-                    "execution_schema_version": "promise_switch_execution_v2",
+                    "execution_schema_version": "promise_switch_execution_v3",
                     "experiment_version": "promise_switch_v1",
                     "prompt_version": PROMPT_VERSION,
                     "prompt_hash": prompt_templates_hash(),
                     "dataset_role": role,
                     "dry_run": role == "synthetic",
+                    "completion_policy": {
+                        "version": "minimum_completed_binary_v1",
+                        "minimum_completed_binary_per_condition": 5,
+                        "top_up_enabled": False,
+                    },
                 }
                 (run_dir / "manifest.json").write_text(
                     json.dumps(manifest), encoding="utf-8",

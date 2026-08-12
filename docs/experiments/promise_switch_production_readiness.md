@@ -1,8 +1,9 @@
 # Promise Switch Production-Readiness Safeguards
 
 This document records the zero-call Stage 6E audit. It does not authorize a
-confirmatory run. The future target is 100 completed observations per condition
-per model configuration; recruitment inflation for attrition remains separate.
+confirmatory run. The future target is a minimum 100 completed binary
+observations per condition per model configuration. Attrition uses outcome-blind
+sequential top-up, not a guessed fixed inflation rate.
 
 ## Collection stop and pause criteria
 
@@ -51,14 +52,14 @@ COOPERATE or DEFECT and never changes the frozen prompt automatically.
 
 ## Dataset isolation
 
-Execution schema `promise_switch_execution_v2` requires every new run manifest
+Execution schema `promise_switch_execution_v3` requires every new run manifest
 to identify exactly one `dataset_role`: `technical`, `pilot`, `confirmatory`, or
 `synthetic`.
 
 - `synthetic` is allowed only with `dry_run=true`, and every dry run must be
   synthetic.
-- `confirmatory` is allowed only at the approved `n_per_condition=100` and may
-  not be a dry run.
+- `confirmatory` is allowed only at the approved minimum
+  `n_per_condition=100`, automatically enables top-up, and may not be a dry run.
 - The scientific analysis CLI requires an explicit `--dataset-role pilot` or
   `--dataset-role confirmatory`; every input must match that one role and be a
   complete, integrity-valid current-schema run.
@@ -87,6 +88,28 @@ assignment, and the scheduler/state representation safely holds all 600 IDs.
 
 This validation is an in-memory/test-fixture exercise only. It creates no
 production run directory and performs no provider call.
+
+## Completed-cell top-up and analysis admission
+
+The immutable manifest freezes `minimum_completed_binary_v1`. Once all current
+work is terminal, completion-status-only logic appends exact fixed-cell deficits
+and balanced two-trial voluntary blocks. Original failures remain immutable;
+new trials have new deterministic IDs and explicit top-up provenance.
+COOPERATE/DEFECT values, message content, effect estimates, confidence
+intervals, and p-values are absent from expansion inputs.
+
+Voluntary allocation remains after durable message storage, seeded,
+content-blind, and exactly one No-Switch plus one Switch per block. Differential
+attrition may produce voluntary overshoot, and all valid observations remain
+eligible. A pre-assignment infrastructure failure is retained and receives a
+new deterministic message-recovery candidate rather than retrying or
+overwriting the failed trial. Pause states prevent expansion until safe resume.
+
+Final confirmatory analysis requires at least 100 mechanically valid binary
+actions in all six cells for every configuration. Audit/inspection of paused or
+incomplete artifacts remains available. Reports preserve initiated, completed,
+behavioral missing, terminal infrastructure, retry, pause, and top-up counts
+plus worst-case attrition bounds.
 
 ## Sampling and reasoning policy
 
@@ -166,7 +189,7 @@ The repository remains consistent on six conditions; payoffs `(8,8)` versus
 durable voluntary message before assignment; exact decision JSON; H8, induced
 H9, and H10 with Holm correction; voluntary ITT as secondary; the explicit-
 promiser subset as further selected-subgroup secondary; model-configuration-
-specific primary inference; and the future completed-cell target `n=100`.
+specific primary inference; and the future minimum completed-cell target `n=100`.
 
 ## Deferred work
 

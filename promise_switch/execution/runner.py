@@ -33,7 +33,10 @@ from .attrition import (
     classify_transport,
 )
 from .lock import RunWriterLock
-from .planner import PlannedTrial, model_config_id, plan_trials
+from .planner import (
+    PlannedTrial, model_config_id, plan_top_up_expansion,
+    plan_trials, plan_voluntary_message_recovery,
+)
 from .rate_limit import RateLimiter, RateLimitPolicy
 from .retry import RetryPolicy
 from .scheduler import balanced_pending_order
@@ -41,7 +44,8 @@ from .state import RunStatus, TrialState, is_terminal, transition
 from .storage import RunStorage
 from .transport import OpenAICompatibleTransport
 
-EXECUTION_SCHEMA_VERSION = "promise_switch_execution_v2"
+EXECUTION_SCHEMA_VERSION = "promise_switch_execution_v3"
+COMPLETION_POLICY_VERSION = "minimum_completed_binary_v1"
 BEHAVIORAL_PARSER_FAILURE_REVIEW_COUNT = 2
 DatasetRole = Literal["technical", "pilot", "confirmatory", "synthetic"]
 Hook = Callable[[str, Mapping[str, Any]], None]
@@ -63,6 +67,7 @@ class ExecutionParameters:
     retry_policy: RetryPolicy = field(default_factory=RetryPolicy)
     rate_limit_policy: RateLimitPolicy = field(default_factory=RateLimitPolicy)
     dry_run: bool = False
+    top_up_enabled: bool = False
     cli_invocation: tuple[str, ...] = ()
 
     @property
@@ -82,6 +87,8 @@ class ExecutionParameters:
             raise ValueError("dry_run must be true exactly for synthetic runs")
         if self.dataset_role == "confirmatory" and self.n_per_condition != 100:
             raise ValueError("confirmatory runs require the approved completed-cell target n=100")
+        if self.dataset_role == "confirmatory" and not self.top_up_enabled:
+            object.__setattr__(self, "top_up_enabled", True)
         if self.temperature != 1.0 and not self.temperature_override_authorized:
             raise ValueError(
                 "experimental-agent temperature differs from the frozen production value "
@@ -189,13 +196,14 @@ class PromiseSwitchRunner:
 
         while True:
             allocated = self._allocate_ready_voluntary_pools()
+            recovered = self._append_required_message_recovery_trials()
             conditions = {
                 plan.trial_id: self.assignments.get(plan.trial_id, {}).get("condition")
                 or plan.final_condition
                 for plan in self.plans
             }
             order = balanced_pending_order(self.plans, self.states, conditions)
-            progressed = allocated
+            progressed = allocated or recovered
             for trial_id in order:
                 if is_terminal(self.states[trial_id]):
                     continue
@@ -209,6 +217,12 @@ class PromiseSwitchRunner:
                     self._persist_state()
                     return self.technical_summary()
             if all(is_terminal(state) for state in self.states.values()):
+                if self.parameters.top_up_enabled and not self._completion_target_met():
+                    if self._append_required_top_ups():
+                        continue
+                    self.run_status = RunStatus.FAILED
+                    self._persist_state()
+                    return self.technical_summary()
                 self.run_status = RunStatus.COMPLETED
                 self._persist_state()
                 return self.technical_summary()
@@ -249,6 +263,12 @@ class PromiseSwitchRunner:
             },
             "prompt_version": PROMPT_VERSION,
             "prompt_hash": prompt_templates_hash(),
+            "completion_policy": {
+                "version": COMPLETION_POLICY_VERSION,
+                "minimum_completed_binary_per_condition": self.parameters.n_per_condition,
+                "top_up_enabled": self.parameters.top_up_enabled,
+                "voluntary_top_up_unit": "randomized_balanced_block_of_2",
+            },
             "model_configurations": configs,
         }
 
@@ -264,27 +284,43 @@ class PromiseSwitchRunner:
             1 for row in self.trials.values() if row.get("failure_category") == "behavioral"
         )
         parser_failures = self._behavioral_parser_failure_counts()
+        retries_by_trial: dict[str, int] = {}
+        for attempt in self.api_attempts:
+            if int(attempt.get("attempt_number", 0)) > 1:
+                trial_id = str(attempt.get("trial_id"))
+                retries_by_trial[trial_id] = retries_by_trial.get(trial_id, 0) + 1
         cells: dict[str, dict[str, int]] = {}
         for plan in self.plans:
             assignment = self.assignments.get(plan.trial_id)
             condition = (assignment or {}).get("condition") or plan.final_condition or "voluntary_pending"
             key = "|".join((plan.provider, plan.model, plan.reasoning_mode, condition))
-            cell = cells.setdefault(key, {"planned": 0, "completed": 0, "behavioral_failures": 0,
-                                          "infrastructure_failures": 0, "pending": 0})
-            cell["planned"] += 1
+            cell = cells.setdefault(key, {
+                "initiated": 0, "completed_binary": 0, "behavioral_missing_action": 0,
+                "terminal_infrastructure_attrition": 0, "pending": 0,
+                "top_up_trials_added": 0, "retry_attempts": 0,
+            })
+            cell["initiated"] += 1
+            cell["top_up_trials_added"] += plan.plan_phase == "top_up"
+            cell["retry_attempts"] += retries_by_trial.get(plan.trial_id, 0)
             row = self.trials.get(plan.trial_id)
             if not row:
                 cell["pending"] += 1
             elif row.get("completion_status") == "completed":
-                cell["completed"] += 1
+                cell["completed_binary"] += 1
             elif row.get("failure_category") == "behavioral":
-                cell["behavioral_failures"] += 1
+                cell["behavioral_missing_action"] += 1
             else:
-                cell["infrastructure_failures"] += 1
+                cell["terminal_infrastructure_attrition"] += 1
         return {
             "run_id": self.parameters.run_id,
             "run_status": self.run_status.value,
             "planned_trials": len(self.plans),
+            "initial_planned_trials": sum(plan.plan_phase == "initial" for plan in self.plans),
+            "top_up_trials_added": sum(plan.plan_phase == "top_up" for plan in self.plans),
+            "top_up_events": len(self.storage.read_jsonl("top_up_events.jsonl")),
+            "pause_events": len(self.storage.read_jsonl("pause_events.jsonl")),
+            "minimum_completed_binary_target": self.parameters.n_per_condition,
+            "completion_target_met": self._completion_target_met(),
             "completed_final_actions": completed_actions,
             "pending": sum(not is_terminal(state) for state in self.states.values()),
             "infrastructure_failures": infrastructure,
@@ -305,6 +341,179 @@ class PromiseSwitchRunner:
             "counts_by_model_provider_reasoning_condition": cells,
         }
 
+    def _completion_counts(self, config_id: str) -> dict[str, int]:
+        """Count valid completion status only; never inspect action direction."""
+        plan_ids = {plan.trial_id for plan in self.plans if plan.config_id == config_id}
+        return {
+            condition.value: sum(
+                row.get("completion_status") == "completed"
+                and row.get("condition") == condition.value
+                and trial_id in plan_ids
+                for trial_id, row in self.trials.items()
+            )
+            for condition in Condition
+        }
+
+    def _completion_target_met(self) -> bool:
+        if not self.plans:
+            return False
+        target = self.parameters.n_per_condition
+        return all(
+            all(count >= target for count in self._completion_counts(config_id).values())
+            for config_id in self._configs
+        )
+
+    def _append_required_top_ups(self) -> bool:
+        """Append only completion-status-driven expansions after current work is terminal."""
+        added = False
+        target = self.parameters.n_per_condition
+        fixed_values = {condition.value for condition in Condition if condition not in {
+            Condition.VOLUNTARY_PROMISE_NO_SWITCH,
+            Condition.VOLUNTARY_PROMISE_SWITCH,
+        }}
+        for config_id, config in sorted(self._configs.items()):
+            config_plans = [plan for plan in self.plans if plan.config_id == config_id]
+            if not config_plans or not all(is_terminal(self.states[plan.trial_id]) for plan in config_plans):
+                continue
+            counts = self._completion_counts(config_id)
+            fixed_deficits = {
+                value: max(0, target - counts[value]) for value in sorted(fixed_values)
+            }
+            voluntary_blocks = max(
+                0,
+                target - counts[Condition.VOLUNTARY_PROMISE_NO_SWITCH.value],
+                target - counts[Condition.VOLUNTARY_PROMISE_SWITCH.value],
+            )
+            if not any(fixed_deficits.values()) and not voluntary_blocks:
+                continue
+            prior_events = [row for row in self.storage.read_jsonl("top_up_events.jsonl")
+                            if row.get("config_id") == config_id]
+            sequence = len(prior_events) + 1
+            plans = plan_top_up_expansion(
+                run_id=self.parameters.run_id, seed=self.parameters.seed, config=config,
+                sequence=sequence, fixed_deficits=fixed_deficits,
+                voluntary_blocks=voluntary_blocks,
+                starting_ordinal=max(plan.ordinal for plan in self.plans),
+            )
+            event = sanitize_for_serialization({
+                "top_up_event_id": "topup-event:" + hashlib.sha256(
+                    f"{self.parameters.run_id}|{config_id}|{sequence}".encode()
+                ).hexdigest()[:20],
+                "timestamp": self.timestamp(),
+                "run_id": self.parameters.run_id,
+                "config_id": config_id,
+                "sequence": sequence,
+                "event_type": "completed_cell_top_up",
+                "completion_policy_version": COMPLETION_POLICY_VERSION,
+                "minimum_completed_binary_target": target,
+                "eligibility_reason": "all_current_trials_terminal_and_cell_below_target",
+                "prior_plan_count": len(self.plans),
+                "completed_binary_counts_before": counts,
+                "fixed_condition_deficits": fixed_deficits,
+                "voluntary_balanced_blocks": voluntary_blocks,
+                "derivation": "seed+run_id+config_id+sequence+regime+block+slot",
+                "planned_trials": [plan.to_dict() for plan in plans],
+            })
+            self.hook("before_top_up_creation", event)
+            self.storage.append("top_up_events.jsonl", event)
+            self.hook("after_top_up_event", event)
+            for plan in plans:
+                self.storage.append("planned_trials.jsonl", plan.to_dict())
+                self.hook("after_top_up_plan_persistence", plan.to_dict())
+            self.plans = (*self.plans, *plans)
+            for plan in plans:
+                self.states[plan.trial_id] = TrialState.PLANNED
+            self._persist_state()
+            added = True
+        return added
+
+    def _append_required_message_recovery_trials(self) -> bool:
+        """Restore two message-complete candidates per randomized voluntary block."""
+        added = False
+        for config_id, config in sorted(self._configs.items()):
+            groups = sorted({
+                plan.allocation_group_id for plan in self.plans
+                if plan.config_id == config_id and plan.planned_regime == "voluntary"
+                and plan.trial_id not in self.assignments
+            })
+            for group_id in groups:
+                group = [plan for plan in self.plans
+                         if plan.config_id == config_id and plan.allocation_group_id == group_id]
+                required = sum(plan.plan_phase == "initial" for plan in group) or 2
+                recorded = sum(plan.trial_id in self.message_events for plan in group)
+                if recorded >= required:
+                    continue
+                unresolved = [plan for plan in group if plan.trial_id not in self.message_events
+                              and not is_terminal(self.states[plan.trial_id])]
+                if unresolved:
+                    continue
+                failures = [plan for plan in group if plan.trial_id not in self.message_events
+                            and self.states[plan.trial_id] == TrialState.FAILED_INFRASTRUCTURE_FINAL]
+                if not failures:
+                    continue
+                count = required - recorded
+                prior_events = [row for row in self.storage.read_jsonl("top_up_events.jsonl")
+                                if row.get("config_id") == config_id]
+                sequence = len(prior_events) + 1
+                plans = plan_voluntary_message_recovery(
+                    run_id=self.parameters.run_id, seed=self.parameters.seed, config=config,
+                    sequence=sequence, allocation_group_id=str(group_id), count=count,
+                    starting_ordinal=max(plan.ordinal for plan in self.plans),
+                )
+                event = sanitize_for_serialization({
+                    "top_up_event_id": "topup-event:" + hashlib.sha256(
+                        f"{self.parameters.run_id}|{config_id}|{sequence}".encode()
+                    ).hexdigest()[:20],
+                    "timestamp": self.timestamp(), "run_id": self.parameters.run_id,
+                    "config_id": config_id, "sequence": sequence,
+                    "event_type": "voluntary_message_recovery",
+                    "completion_policy_version": COMPLETION_POLICY_VERSION,
+                    "minimum_completed_binary_target": self.parameters.n_per_condition,
+                    "eligibility_reason": "message_stage_infrastructure_attrition_before_assignment",
+                    "prior_plan_count": len(self.plans),
+                    "allocation_group_id": group_id,
+                    "required_message_complete_candidates": required,
+                    "recorded_message_candidates_before": recorded,
+                    "message_recovery_count": count,
+                    "derivation": "seed+run_id+config_id+sequence+allocation_group+slot",
+                    "planned_trials": [plan.to_dict() for plan in plans],
+                })
+                self.storage.append("top_up_events.jsonl", event)
+                self.hook("after_top_up_event", event)
+                for plan in plans:
+                    self.storage.append("planned_trials.jsonl", plan.to_dict())
+                    self.hook("after_top_up_plan_persistence", plan.to_dict())
+                self.plans = (*self.plans, *plans)
+                for plan in plans:
+                    self.states[plan.trial_id] = TrialState.PLANNED
+                self._persist_state()
+                added = True
+        return added
+
+    def _reconcile_top_up_plan_journal(self) -> None:
+        """Finish an expansion whose durable event survived a process crash."""
+        events = self.storage.read_jsonl("top_up_events.jsonl")
+        expected = [plan for event in events for plan in event.get("planned_trials", [])]
+        rows = self.storage.read_jsonl("planned_trials.jsonl")
+        base_count = 6 * self.parameters.n_per_condition * len(self.parameters.model_configs)
+        actual = rows[base_count:]
+        if actual != expected[:len(actual)]:
+            raise ValueError("top-up plan journal differs from durable expansion events")
+        for row in expected[len(actual):]:
+            self.storage.append("planned_trials.jsonl", row)
+        state = self.storage.read_state()
+        if state:
+            trial_states = dict(state.get("trials", {}))
+            changed = False
+            for row in expected:
+                if row["trial_id"] not in trial_states:
+                    trial_states[row["trial_id"]] = TrialState.PLANNED.value
+                    changed = True
+            if changed:
+                state["trials"] = trial_states
+                state["updated_at"] = self.timestamp()
+                self.storage.write_state(state)
+
     def _create_run(self) -> None:
         self.storage.initialize()
         self.plans = plan_trials(
@@ -322,6 +531,7 @@ class PromiseSwitchRunner:
         manifest = self.storage.read_manifest()
         if manifest.get("execution_schema_version") != EXECUTION_SCHEMA_VERSION:
             raise ValueError("Refusing to resume a legacy or incompatible Promise Switch run")
+        self._reconcile_top_up_plan_journal()
         validate_run_integrity(self.parameters.run_dir)
         if manifest.get("experiment_version") != EXPERIMENT_VERSION:
             raise ValueError("Experiment version differs from immutable manifest")
@@ -458,30 +668,37 @@ class PromiseSwitchRunner:
     def _allocate_ready_voluntary_pools(self) -> bool:
         changed = False
         for config_id in sorted(self._configs):
-            pool = [plan for plan in self.plans if plan.config_id == config_id
-                    and plan.planned_regime == "voluntary"]
-            if not pool or not all(plan.trial_id in self.message_events for plan in pool):
-                continue
-            events = [MessageEvent(
-                message_event_id=self.message_events[plan.trial_id]["message_event_id"],
-                trial_id=plan.trial_id,
-                timestamp=self.message_events[plan.trial_id]["timestamp"],
-                raw_message=self.message_events[plan.trial_id]["raw_message"],
-                message_recorded=True,
-            ) for plan in pool]
-            allocation_seed = _allocation_seed(self.parameters.seed, config_id)
-            for assignment in allocate_voluntary_pool(seed=allocation_seed, message_events=events):
-                if assignment.trial_id in self.assignments:
+            groups = sorted({
+                plan.allocation_group_id for plan in self.plans
+                if plan.config_id == config_id and plan.planned_regime == "voluntary"
+            })
+            for group_id in groups:
+                all_group = [plan for plan in self.plans if plan.config_id == config_id
+                             and plan.allocation_group_id == group_id]
+                required = sum(plan.plan_phase == "initial" for plan in all_group) or 2
+                pool = [plan for plan in all_group if plan.trial_id in self.message_events]
+                if len(pool) != required:
                     continue
-                row = assignment.to_dict()
-                self.storage.append("assignments.jsonl", row)
-                self.assignments[assignment.trial_id] = row
-                self.hook("after_assignment", row)
-                current = self.states[assignment.trial_id]
-                if current == TrialState.MESSAGE_RECORDED:
-                    self._set_state(assignment.trial_id, TrialState.ASSIGNMENT_PENDING)
-                self._set_state(assignment.trial_id, TrialState.ASSIGNED)
-                changed = True
+                events = [MessageEvent(
+                    message_event_id=self.message_events[plan.trial_id]["message_event_id"],
+                    trial_id=plan.trial_id,
+                    timestamp=self.message_events[plan.trial_id]["timestamp"],
+                    raw_message=self.message_events[plan.trial_id]["raw_message"],
+                    message_recorded=True,
+                ) for plan in pool]
+                allocation_seed = _allocation_seed(self.parameters.seed, config_id, str(group_id))
+                for assignment in allocate_voluntary_pool(seed=allocation_seed, message_events=events):
+                    if assignment.trial_id in self.assignments:
+                        continue
+                    row = assignment.to_dict()
+                    self.storage.append("assignments.jsonl", row)
+                    self.assignments[assignment.trial_id] = row
+                    self.hook("after_assignment", row)
+                    current = self.states[assignment.trial_id]
+                    if current == TrialState.MESSAGE_RECORDED:
+                        self._set_state(assignment.trial_id, TrialState.ASSIGNMENT_PENDING)
+                    self._set_state(assignment.trial_id, TrialState.ASSIGNED)
+                    changed = True
         return changed
 
     def _run_decision_stage(self, plan: PlannedTrial) -> None:
@@ -611,6 +828,9 @@ class PromiseSwitchRunner:
             "provider": plan.provider,
             "model": plan.model,
             "reasoning_mode": plan.reasoning_mode,
+            "plan_phase": plan.plan_phase,
+            "top_up_sequence": plan.top_up_sequence,
+            "top_up_block_id": plan.top_up_block_id,
             "request": request.to_log_dict(),
             "response": response.to_dict(),
             "transport_category": outcome.category,
@@ -650,6 +870,9 @@ class PromiseSwitchRunner:
             "model": plan.model,
             "provider": plan.provider,
             "reasoning_mode": plan.reasoning_mode,
+            "plan_phase": plan.plan_phase,
+            "top_up_sequence": plan.top_up_sequence,
+            "top_up_block_id": plan.top_up_block_id,
             "message_regime": metadata.message_regime.value if metadata else "voluntary",
             "assigned_expectation": metadata.assigned_expectation if metadata else False,
             "original_partner_id": original_partner_id,
@@ -704,6 +927,7 @@ class PromiseSwitchRunner:
             "provider_request_id": response.provider_request_id,
             "error_metadata": response.error_metadata,
         })
+        self._record_pause_event()
         self._persist_state()
 
     def _pause_infrastructure_review(
@@ -728,6 +952,7 @@ class PromiseSwitchRunner:
             "provider_request_id": response.provider_request_id,
             "required_action": "manual infrastructure review before resume",
         })
+        self._record_pause_event()
         self._persist_state()
 
     def _behavioral_parser_failure_counts(self) -> dict[str, dict[str, Any]]:
@@ -787,7 +1012,24 @@ class PromiseSwitchRunner:
                 "manual model-configuration response-contract review before resume"
             ),
         })
+        self._record_pause_event()
         self._persist_state()
+
+    def _record_pause_event(self) -> None:
+        detail = self.pause_detail or {}
+        identity = "|".join(str(detail.get(key, "")) for key in (
+            "trial_id", "stage", "attempt_number", "failure_reason",
+            "behavioral_parser_failure_count", "provider_request_id",
+        ))
+        event = sanitize_for_serialization({
+            "pause_event_id": "pause:" + hashlib.sha256(identity.encode()).hexdigest()[:20],
+            "run_id": self.parameters.run_id,
+            "run_status": self.run_status.value,
+            "detail": detail,
+        })
+        existing = {row.get("pause_event_id") for row in self.storage.read_jsonl("pause_events.jsonl")}
+        if event["pause_event_id"] not in existing:
+            self.storage.append("pause_events.jsonl", event)
 
     def _set_state(self, trial_id: str, target: TrialState) -> None:
         current = self.states[trial_id]
@@ -826,6 +1068,20 @@ class PromiseSwitchRunner:
             "created_at": self.timestamp(),
             "randomization_seed": self.parameters.seed,
             "requested_completed_trials_per_final_condition": self.parameters.n_per_condition,
+            "completion_policy": {
+                "version": COMPLETION_POLICY_VERSION,
+                "minimum_completed_binary_per_condition": self.parameters.n_per_condition,
+                "top_up_enabled": self.parameters.top_up_enabled,
+                "stopping_inputs": [
+                    "completed", "behavioral_missing", "infrastructure_attrition",
+                    "pending", "retryable", "paused",
+                ],
+                "prohibited_stopping_inputs": [
+                    "action_value", "cooperation_rate", "effect", "p_value",
+                    "confidence_interval", "message_content",
+                ],
+                "voluntary_top_up_unit": "randomized_balanced_block_of_2",
+            },
             "model_configurations": [config.to_dict() for config in self.parameters.model_configs],
             "providers": sorted({config.provider for config in self.parameters.model_configs}),
             "reasoning_modes": sorted({config.reasoning_mode for config in self.parameters.model_configs}),
@@ -852,6 +1108,7 @@ class PromiseSwitchRunner:
             "cli_invocation": list(self.parameters.cli_invocation),
             "normalized_execution_parameters": normalized,
             "dry_run": self.parameters.dry_run,
+            "top_up_enabled": self.parameters.top_up_enabled,
         })
 
     def _normalized_parameters(self) -> dict[str, Any]:
@@ -873,6 +1130,7 @@ class PromiseSwitchRunner:
             "retry_policy": self.parameters.retry_policy.to_dict(),
             "rate_limit_policy": self.parameters.rate_limit_policy.to_dict(),
             "dry_run": self.parameters.dry_run,
+            "top_up_enabled": self.parameters.top_up_enabled,
         })
 
     def _assert_runtime_identity(
@@ -953,6 +1211,7 @@ def parameters_from_manifest(run_dir: Path) -> ExecutionParameters:
         retry_policy=RetryPolicy(**normalized["retry_policy"]),
         rate_limit_policy=RateLimitPolicy(**normalized["rate_limit_policy"]),
         dry_run=bool(normalized["dry_run"]),
+        top_up_enabled=bool(normalized.get("top_up_enabled", False)),
     )
 
 
@@ -964,8 +1223,10 @@ def _response_from_record(record: dict[str, Any]) -> NormalizedResponse:
     return NormalizedResponse(**record["response"])
 
 
-def _allocation_seed(seed: int, config_id: str) -> int:
-    return int(hashlib.sha256(f"{seed}|{config_id}|voluntary".encode()).hexdigest()[:16], 16)
+def _allocation_seed(seed: int, config_id: str, group_id: str) -> int:
+    return int(hashlib.sha256(
+        f"{seed}|{config_id}|voluntary|{group_id}".encode()
+    ).hexdigest()[:16], 16)
 
 
 def _canonical_hash(value: Any) -> str:
