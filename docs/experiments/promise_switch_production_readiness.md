@@ -125,20 +125,39 @@ remain non-confirmatory development evidence; they are not rerun, rewritten, or
 relabeled. Temperature `1.0` is intended to sample behavioral variation across
 repeated trials rather than use near-deterministic decoding.
 
-| Alias / mode | Exact model ID | Provider | Current executable sampling | Reasoning control | Technically validated | Provider caveat |
-|---|---|---|---|---|---|---|
-| `qwen3_32b` off | `Qwen/Qwen3-32B` | Nebius | production temperature 1.0; no top-p/top-k | `enable_thinking=false` | Yes: probe, smoke, pilot at historical 0.0 | Matched on/off control is Qwen-specific. |
-| `qwen3_32b` on | `Qwen/Qwen3-32B` | Nebius | production temperature 1.0; no top-p/top-k | `enable_thinking=true` | Yes: probe, clean smoke, pilot at historical 0.0 | Hidden reasoning envelope is withheld; incomplete envelopes are truncation failures. |
-| `llama_3_3_70b` | `meta-llama/Llama-3.3-70B-Instruct` | Nebius | production temperature 1.0; no top-p/top-k | fixed off | Yes: probe and pilot at historical 0.0 | No Qwen thinking field. |
-| `gpt_oss_120b_nebius` | `openai/gpt-oss-120b` | Nebius | production temperature 1.0; no top-p/top-k | fixed on; `reasoning_effort=low` | Yes: one probe at historical 0.0 | Only one completion provides token evidence. |
-| `deepseek_v4_pro_nebius` | `deepseek-ai/DeepSeek-V4-Pro` | Nebius | production temperature 1.0; no top-p/top-k | control unavailable | Yes: one probe at historical 0.0 | Probe reported no reasoning tokens; controllability is not established. |
-| `kimi_k3_nebius` | `moonshotai/Kimi-K3` | Nebius | production temperature 1.0; no top-p/top-k | control unavailable | Yes: one probe at historical 0.0 | Provider usage included reasoning tokens. |
-| `minimax_m3_nebius` | `MiniMaxAI/MiniMax-M3` | Nebius | production temperature 1.0; no top-p/top-k | control unavailable | Yes: one probe at historical 0.0 | Provider usage included reasoning tokens. |
-| `glm_5_2_nebius` | `zai-org/GLM-5.2` | Nebius | production temperature 1.0; no top-p/top-k | control unavailable | Yes: one probe at historical 0.0 | Provider usage included reasoning tokens. |
+| Alias | Exact model ID | Provider | Reasoning interpretation | Explicit parameter | Requested temp / cap | Validation status | Outstanding validation | Scientific role |
+|---|---|---|---|---|---|---|---|---|
+| `qwen3_32b` ON | `Qwen/Qwen3-32B` | Nebius Studio | thinking on | `chat_template_kwargs.enable_thinking=true` | 1.0 / 4,096 | Historically validated | None for toggle mechanics | Clean Qwen ON/OFF pair |
+| `qwen3_32b` OFF | `Qwen/Qwen3-32B` | Nebius Studio | thinking off | `chat_template_kwargs.enable_thinking=false` | 1.0 / 4,096 | Historically validated | None for toggle mechanics | Clean Qwen ON/OFF pair |
+| `glm_5_2_nebius_thinking_on` | `zai-org/GLM-5.2` | Nebius UK `uk-south1` | thinking on | `chat_template_kwargs.enable_thinking=true` | 1.0 / 2,048 | `PENDING_NEBIUS_LIVE_TOGGLE_VALIDATION` | One successful ON probe | Clean GLM ON/OFF pair |
+| `glm_5_2_nebius_thinking_off` | `zai-org/GLM-5.2` | Nebius UK `uk-south1` | thinking off | `chat_template_kwargs.enable_thinking=false` | 1.0 / 2,048 | `PENDING_NEBIUS_LIVE_TOGGLE_VALIDATION` | One successful OFF probe | Clean GLM ON/OFF pair |
+| `minimax_m3_nebius_thinking_on` | `MiniMaxAI/MiniMax-M3` | Nebius Studio | thinking on | `chat_template_kwargs.thinking_mode="enabled"` | 1.0 / 2,048 | `PENDING_NEBIUS_LIVE_TOGGLE_VALIDATION` | One successful ON probe | Clean MiniMax ON/OFF pair |
+| `minimax_m3_nebius_thinking_off` | `MiniMaxAI/MiniMax-M3` | Nebius Studio | thinking off | `chat_template_kwargs.thinking_mode="disabled"` | 1.0 / 2,048 | `PENDING_NEBIUS_LIVE_TOGGLE_VALIDATION` | One successful OFF probe | Clean MiniMax ON/OFF pair |
+| `deepseek_v4_pro_nebius_thinking_on` | `deepseek-ai/DeepSeek-V4-Pro` | Nebius Studio | thinking on | `thinking.type="enabled"` | 1.0 requested / 2,048 provisional | `PENDING_NEBIUS_LIVE_TOGGLE_VALIDATION` | Verify Nebius preserves toggle and normal finish | Clean V4 Pro ON/OFF pair |
+| `deepseek_v4_pro_nebius_thinking_off` | `deepseek-ai/DeepSeek-V4-Pro` | Nebius Studio | thinking off | `thinking.type="disabled"` | 1.0 requested / 2,048 provisional | `PENDING_NEBIUS_LIVE_TOGGLE_VALIDATION` | Verify absent reasoning and normal finish | Clean V4 Pro ON/OFF pair |
+| `deepseek_v4_flash_nebius_thinking_on` | `deepseek-ai/DeepSeek-V4-Flash` | Nebius Studio | thinking on | `thinking.type="enabled"` | 1.0 requested / 2,048 provisional | `PENDING_NEBIUS_LIVE_TOGGLE_VALIDATION` | Verify Nebius preserves toggle and normal finish | Clean V4 Flash ON/OFF pair |
+| `deepseek_v4_flash_nebius_thinking_off` | `deepseek-ai/DeepSeek-V4-Flash` | Nebius Studio | thinking off | `thinking.type="disabled"` | 1.0 requested / 2,048 provisional | `PENDING_NEBIUS_LIVE_TOGGLE_VALIDATION` | Verify absent reasoning and normal finish | Clean V4 Flash ON/OFF pair |
+| `kimi_k3_nebius` | `moonshotai/Kimi-K3` | Nebius Studio | current fixed/default configuration | none | 1.0 / 2,048 | Historically validated | None currently | Single model-family configuration |
+| `llama_3_3_70b` | `meta-llama/Llama-3.3-70B-Instruct` | Nebius Studio | fixed off | none | 1.0 / 256 | Historically validated | None currently | Single model-family configuration |
+| `gpt_oss_120b_nebius` | `openai/gpt-oss-120b` | Nebius Studio | fixed on, low effort | `reasoning_effort=low` | 1.0 / 2,048 | Historically validated | None currently | Same-model/two-provider control |
+| `gpt_oss_120b_groq` | `openai/gpt-oss-120b` | Groq | fixed on, low effort | `reasoning_effort=low` | 1.0 / 2,048 | `GROQ_PERMISSION_STILL_BLOCKED`: exact metadata HTTP 403 | Resolve console permissions, then one generation probe | Same-model/two-provider control |
 
-No provider-specific temperature transformation has been observed on these
-Nebius endpoints. That is not evidence that decoding implementations are
-identical across model families.
+Provider identity is immutable and no automatic fallback exists. Same-model
+provider comparisons are robustness controls, not claims of identical serving,
+quantization, chat templates, or bitwise outputs.
+
+`LLAMA_GROQ_SKIPPED_PROVIDER_DEPRECATION`: Groq Llama is not an active matrix
+row because the Llama 3.3 70B endpoint is decommissioned for the available
+Free/Developer access. Historical consideration remains documented; no
+replacement model or provider-control substitute is introduced.
+
+For DeepSeek thinking-mode requests, the experiment continues to request and
+manifest temperature `1.0`, but upstream behavior may ignore it or be model-controlled by
+sampling parameters. This caveat does not alter the global temperature policy.
+Nebius-visible effective behavior must be reported transparently after live
+toggle validation. V4 Pro versus V4 Flash is model-variant heterogeneity, not a
+clean reasoning contrast; the clean contrasts are ON versus OFF within Pro and
+within Flash.
 
 A temperature-range robustness analysis is intended as future secondary work,
 not part of primary H8-H10 inference or the current six-condition matrix. Its
@@ -154,14 +173,16 @@ confounding treatment outcomes.
 
 | Configuration | Production cap | Observed completion use | Rationale |
 |---|---|---|---|
-| Qwen off | 256 | pilot max 37; no length finishes | 256 was ample across the pilot. |
+| Qwen off | 4,096 | pilot max 37; no length finishes | Raised from 256 to match Qwen ON and remove ceiling asymmetry. |
 | Qwen on | 4,096 | pilot max 1,402; prior truncation at 128 and 256, plus one invalid-run truncation at 2,560 | 4,096 is the validated non-binding setting. |
 | Llama | 256 | pilot max 49; no length finishes | 256 was ample across the pilot. |
 | GPT-OSS-120B | 2,048 | 51 in one technical probe; stop | Evidence is insufficient to lower the successful probe cap. |
-| DeepSeek V4 Pro | 2,048 | 33 in one technical probe; stop | Evidence is insufficient to lower the successful probe cap. |
+| DeepSeek V4 Pro ON/OFF | 2,048 shared, provisional | historical default-mode probe used 33 and stopped | Pair parity is frozen; tomorrow's ON probe determines whether a higher shared cap is necessary. |
+| DeepSeek V4 Flash ON/OFF | 2,048 shared, provisional | no generation evidence | Pair parity is frozen; tomorrow's ON probe determines whether a higher shared cap is necessary. |
 | Kimi K3 | 2,048 | 361 in one technical probe; stop | 256 is known to be too low. |
-| MiniMax M3 | 2,048 | 495 in one technical probe; stop | 256 is known to be too low. |
-| GLM 5.2 | 2,048 | 540 in one technical probe; stop | 256 is known to be too low. |
+| MiniMax M3 ON/OFF | 2,048 shared | historical default-mode probe used 495 and stopped; new explicit calls returned HTTP 402 before generation | Pair parity is frozen; live ON/OFF sufficiency remains unverified. |
+| GLM 5.2 ON/OFF | 2,048 shared | historical default-mode probe used 540 and stopped; new explicit calls returned HTTP 402 before generation | Pair parity is frozen; live ON/OFF sufficiency remains unverified. |
+| GPT-OSS-120B via Groq | 2,048 | no completion; one probe returned HTTP 403 | Matches the Nebius GPT-OSS ceiling if access becomes available. |
 
 The model configuration is authoritative when CLI cap arguments are omitted.
 A differing `--max-tokens` or `--message-max-tokens` value requires the explicit
@@ -200,9 +221,22 @@ specific primary inference; and the future minimum completed-cell target `n=100`
   coding reproducibility, but the judge model remains undecided; temperature
   zero is not claimed to guarantee absolute backend determinism.
 - Proprietary GPT and Claude remain intended, expensive, and deferred.
-- Same-model/two-provider robustness remains required before final
-  confirmatory collection. Cerebras GPT-OSS-120B remains the preferred
-  researched candidate, not an approved or integrated choice.
+- Groq is the approved GPT-OSS second-provider identity. Groq Llama is skipped
+  for provider deprecation and is not an active matrix row. No provider fallback
+  or substitute model is allowed.
+- The current exact Groq GPT-OSS metadata recheck returned HTTP 403 with no safe
+  provider error code/type or scope-specific message category. No generation
+  call followed. Project permission may be saved while organization-level
+  permission still supersedes it; this requires user-side console inspection,
+  not random-model probing.
+- Nebius live validation is deferred until billing restoration. The exact
+  required probes are GLM ON/OFF, MiniMax ON/OFF, DeepSeek V4 Pro ON/OFF, and
+  DeepSeek V4 Flash ON/OFF: one successful probe per arm, no pilot. Each pair
+  must show reasoning present for ON, absent for OFF, valid final JSON, normal
+  finish, no truncation, and one shared cap. Only a length-truncated ON arm may
+  receive one targeted higher-cap retry, after which that cap applies to both
+  arms.
 - The exact secondary temperature-robustness grid remains unresolved. Output
-  caps are specified for the current eight configurations; future GPT and
-  Claude caps require their own probes.
+  caps are specified for all 14 active current-matrix configurations; DeepSeek
+  pair caps remain provisional until live validation, while future proprietary
+  GPT/Claude caps remain unresolved.

@@ -300,26 +300,32 @@ class ParserTests(unittest.TestCase):
 class ProviderClientSchemaTests(unittest.TestCase):
     def test_validated_production_output_caps_cover_current_panel(self):
         expected = {
-            ("qwen3_32b", "off"): 256,
-            ("qwen3_32b", "on"): 4096,
-            ("llama_3_3_70b", "off"): 256,
-            ("gpt_oss_120b_nebius", "on"): 2048,
-            ("deepseek_v4_pro_nebius", "unavailable"): 2048,
-            ("kimi_k3_nebius", "unavailable"): 2048,
-            ("minimax_m3_nebius", "unavailable"): 2048,
-            ("glm_5_2_nebius", "unavailable"): 2048,
+            ("nebius", "qwen3_32b", "off"): 4096,
+            ("nebius", "qwen3_32b", "on"): 4096,
+            ("nebius", "llama_3_3_70b", "off"): 256,
+            ("nebius", "gpt_oss_120b_nebius", "on"): 2048,
+            ("nebius", "deepseek_v4_pro_nebius_thinking_on", "on"): 2048,
+            ("nebius", "deepseek_v4_pro_nebius_thinking_off", "off"): 2048,
+            ("nebius", "deepseek_v4_flash_nebius_thinking_on", "on"): 2048,
+            ("nebius", "deepseek_v4_flash_nebius_thinking_off", "off"): 2048,
+            ("nebius", "kimi_k3_nebius", "unavailable"): 2048,
+            ("nebius", "minimax_m3_nebius_thinking_on", "on"): 2048,
+            ("nebius", "minimax_m3_nebius_thinking_off", "off"): 2048,
+            ("nebius_uk", "glm_5_2_nebius_thinking_on", "on"): 2048,
+            ("nebius_uk", "glm_5_2_nebius_thinking_off", "off"): 2048,
+            ("groq", "gpt_oss_120b_groq", "on"): 2048,
         }
-        for (alias, mode), cap in expected.items():
-            with self.subTest(alias=alias, mode=mode):
+        for (provider, alias, mode), cap in expected.items():
+            with self.subTest(provider=provider, alias=alias, mode=mode):
                 config = create_model_config(
-                    provider="nebius", model_alias=alias, reasoning_mode=mode,
+                    provider=provider, model_alias=alias, reasoning_mode=mode,
                 )
                 self.assertEqual(config.production_max_output_tokens, cap)
         foundation = json.loads(
             (ROOT / "configs/promise_switch/foundation.json").read_text(encoding="utf-8")
         )
         declared = {
-            (row["model_alias"], row["reasoning_mode"]):
+            (row["provider"], row["model_alias"], row["reasoning_mode"]):
                 row["production_max_output_tokens"]
             for row in foundation["models"]
         }
@@ -410,12 +416,9 @@ class ProviderClientSchemaTests(unittest.TestCase):
             else:
                 os.environ["NEBIUS_API_KEY"] = previous
 
-    def test_stage6b_configs_use_conservative_standard_chat_requests(self):
+    def test_unchanged_stage6b_configs_use_conservative_standard_chat_requests(self):
         expected = {
-            "deepseek_v4_pro_nebius": "deepseek-ai/DeepSeek-V4-Pro",
             "kimi_k3_nebius": "moonshotai/Kimi-K3",
-            "minimax_m3_nebius": "MiniMaxAI/MiniMax-M3",
-            "glm_5_2_nebius": "zai-org/GLM-5.2",
         }
         secret = "stage6b-secret-value-that-must-not-serialize"
         previous = os.environ.get("NEBIUS_API_KEY")
@@ -453,6 +456,123 @@ class ProviderClientSchemaTests(unittest.TestCase):
                 os.environ.pop("NEBIUS_API_KEY", None)
             else:
                 os.environ["NEBIUS_API_KEY"] = previous
+
+    def test_glm_explicit_arms_use_regional_endpoint_and_boolean_toggle(self):
+        expected = {
+            "glm_5_2_nebius_thinking_on": ("on", True),
+            "glm_5_2_nebius_thinking_off": ("off", False),
+        }
+        for alias, (mode, enabled) in expected.items():
+            with self.subTest(alias=alias):
+                config = create_model_config(
+                    provider="nebius_uk", model_alias=alias, reasoning_mode=mode,
+                )
+                self.assertEqual(config.provider, "nebius_uk")
+                self.assertEqual(
+                    config.base_url,
+                    "https://api.tokenfactory.uk-south1.nebius.com/v1/",
+                )
+                self.assertEqual(config.model_id, "zai-org/GLM-5.2")
+                self.assertEqual(config.production_max_output_tokens, 2048)
+                self.assertEqual(config.provider_request_kwargs, {
+                    "chat_template_kwargs": {"enable_thinking": enabled}
+                })
+                request = ProviderAgnosticClient(config).build_request(
+                    messages=[{"role": "user", "content": "offline"}],
+                    temperature=1.0, max_tokens=2048,
+                )
+                self.assertEqual(
+                    request.body["chat_template_kwargs"]["enable_thinking"], enabled,
+                )
+
+    def test_minimax_explicit_arms_use_thinking_mode_not_enable_thinking(self):
+        expected = {
+            "minimax_m3_nebius_thinking_on": ("on", "enabled"),
+            "minimax_m3_nebius_thinking_off": ("off", "disabled"),
+        }
+        for alias, (mode, thinking_mode) in expected.items():
+            with self.subTest(alias=alias):
+                config = create_model_config(
+                    provider="nebius", model_alias=alias, reasoning_mode=mode,
+                )
+                self.assertEqual(config.model_id, "MiniMaxAI/MiniMax-M3")
+                self.assertEqual(config.production_max_output_tokens, 2048)
+                self.assertEqual(config.provider_request_kwargs, {
+                    "chat_template_kwargs": {"thinking_mode": thinking_mode}
+                })
+                request = ProviderAgnosticClient(config).build_request(
+                    messages=[{"role": "user", "content": "offline"}],
+                    temperature=1.0, max_tokens=2048,
+                )
+                serialized = json.dumps(request.body)
+                self.assertEqual(
+                    request.body["chat_template_kwargs"]["thinking_mode"], thinking_mode,
+                )
+                self.assertNotIn("enable_thinking", serialized)
+                self.assertNotIn('"thinking"', serialized)
+
+    def test_deepseek_pro_and_flash_have_explicit_paired_thinking_requests(self):
+        families = {
+            "deepseek_v4_pro_nebius": "deepseek-ai/DeepSeek-V4-Pro",
+            "deepseek_v4_flash_nebius": "deepseek-ai/DeepSeek-V4-Flash",
+        }
+        for alias_stem, model_id in families.items():
+            configs = {}
+            for mode, toggle in (("on", "enabled"), ("off", "disabled")):
+                alias = f"{alias_stem}_thinking_{mode}"
+                config = create_model_config(
+                    provider="nebius", model_alias=alias, reasoning_mode=mode,
+                )
+                request = ProviderAgnosticClient(config).build_request(
+                    messages=[{"role": "user", "content": "offline"}],
+                    temperature=1.0, max_tokens=2048,
+                )
+                self.assertEqual(config.model_id, model_id)
+                self.assertEqual(config.production_max_output_tokens, 2048)
+                self.assertEqual(config.provider_request_kwargs, {
+                    "thinking": {"type": toggle}
+                })
+                self.assertEqual(request.body["thinking"], {"type": toggle})
+                self.assertEqual(request.body["temperature"], 1.0)
+                configs[mode] = config
+            self.assertEqual(
+                configs["on"].production_max_output_tokens,
+                configs["off"].production_max_output_tokens,
+            )
+
+    def test_groq_gpt_oss_is_distinct_and_groq_llama_is_not_active(self):
+        neb_oss = create_model_config(
+            provider="nebius", model_alias="gpt_oss_120b_nebius",
+        )
+        groq_oss = create_model_config(
+            provider="groq", model_alias="gpt_oss_120b_groq",
+        )
+        self.assertEqual(neb_oss.provider, "nebius")
+        self.assertEqual(groq_oss.provider, "groq")
+        self.assertNotEqual(neb_oss.base_url, groq_oss.base_url)
+        self.assertEqual(neb_oss.model_id, groq_oss.model_id)
+        self.assertEqual(groq_oss.model_id, "openai/gpt-oss-120b")
+        self.assertEqual(groq_oss.provider_request_kwargs, {"reasoning_effort": "low"})
+        self.assertEqual(groq_oss.production_max_output_tokens, 2048)
+        self.assertEqual(groq_oss.api_key_env, "GROQ_API_KEY")
+        with self.assertRaisesRegex(ValueError, "Unknown model alias"):
+            create_model_config(provider="groq", model_alias="llama_3_3_70b")
+        with self.assertRaisesRegex(ValueError, "Unknown model alias"):
+            create_model_config(provider="groq", model_alias="deepseek_v4_pro_nebius")
+
+    def test_deepseek_temperature_caveat_is_documented_without_policy_change(self):
+        foundation = json.loads(
+            (ROOT / "configs/promise_switch/foundation.json").read_text(encoding="utf-8")
+        )
+        readiness = (
+            ROOT / "docs/experiments/promise_switch_production_readiness.md"
+        ).read_text(encoding="utf-8")
+        self.assertEqual(foundation["experiment"]["temperature"], 1.0)
+        self.assertIn("upstream behavior may ignore", readiness)
+        self.assertIn("model-controlled", readiness)
+        self.assertIn("global temperature policy", readiness)
+        self.assertIn("PENDING_NEBIUS_LIVE_TOGGLE_VALIDATION", readiness)
+        self.assertIn("LLAMA_GROQ_SKIPPED_PROVIDER_DEPRECATION", readiness)
 
     def test_serializable_records_have_no_api_secret_field_or_value(self):
         secret = "secret-value-that-must-not-serialize"

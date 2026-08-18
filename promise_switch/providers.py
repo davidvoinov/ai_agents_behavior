@@ -38,6 +38,26 @@ PROVIDERS: dict[str, ProviderDefinition] = {
             "source": "confirm in provider console before pilot",
         },
     ),
+    "nebius_uk": ProviderDefinition(
+        name="nebius_uk",
+        base_url="https://api.tokenfactory.uk-south1.nebius.com/v1/",
+        api_key_env="NEBIUS_API_KEY",
+        rate_limit_metadata={
+            "requests_per_minute": None,
+            "tokens_per_minute": None,
+            "source": "confirm in provider console before confirmatory collection",
+        },
+    ),
+    "groq": ProviderDefinition(
+        name="groq",
+        base_url="https://api.groq.com/openai/v1/",
+        api_key_env="GROQ_API_KEY",
+        rate_limit_metadata={
+            "requests_per_minute": None,
+            "tokens_per_minute": None,
+            "source": "confirm account-specific limits before confirmatory collection",
+        },
+    ),
 }
 
 MODEL_DEFINITIONS: dict[tuple[str, str], ModelDefinition] = {
@@ -51,7 +71,7 @@ MODEL_DEFINITIONS: dict[tuple[str, str], ModelDefinition] = {
             "on": {"chat_template_kwargs": {"enable_thinking": True}},
             "off": {"chat_template_kwargs": {"enable_thinking": False}},
         },
-        production_max_output_tokens_by_mode={"on": 4096, "off": 256},
+        production_max_output_tokens_by_mode={"on": 4096, "off": 4096},
     ),
     ("nebius", "llama_3_3_70b"): ModelDefinition(
         provider="nebius",
@@ -70,13 +90,41 @@ MODEL_DEFINITIONS: dict[tuple[str, str], ModelDefinition] = {
         request_kwargs_by_mode={"on": {"reasoning_effort": "low"}},
         production_max_output_tokens_by_mode={"on": 2048},
     ),
-    ("nebius", "deepseek_v4_pro_nebius"): ModelDefinition(
+    ("nebius", "deepseek_v4_pro_nebius_thinking_on"): ModelDefinition(
         provider="nebius",
-        model_alias="deepseek_v4_pro_nebius",
+        model_alias="deepseek_v4_pro_nebius_thinking_on",
         model_id="deepseek-ai/DeepSeek-V4-Pro",
-        reasoning_capability="unavailable",
-        default_reasoning_mode="unavailable",
-        production_max_output_tokens_by_mode={"unavailable": 2048},
+        reasoning_capability="fixed_on",
+        default_reasoning_mode="on",
+        request_kwargs_by_mode={"on": {"thinking": {"type": "enabled"}}},
+        production_max_output_tokens_by_mode={"on": 2048},
+    ),
+    ("nebius", "deepseek_v4_pro_nebius_thinking_off"): ModelDefinition(
+        provider="nebius",
+        model_alias="deepseek_v4_pro_nebius_thinking_off",
+        model_id="deepseek-ai/DeepSeek-V4-Pro",
+        reasoning_capability="fixed_off",
+        default_reasoning_mode="off",
+        request_kwargs_by_mode={"off": {"thinking": {"type": "disabled"}}},
+        production_max_output_tokens_by_mode={"off": 2048},
+    ),
+    ("nebius", "deepseek_v4_flash_nebius_thinking_on"): ModelDefinition(
+        provider="nebius",
+        model_alias="deepseek_v4_flash_nebius_thinking_on",
+        model_id="deepseek-ai/DeepSeek-V4-Flash",
+        reasoning_capability="fixed_on",
+        default_reasoning_mode="on",
+        request_kwargs_by_mode={"on": {"thinking": {"type": "enabled"}}},
+        production_max_output_tokens_by_mode={"on": 2048},
+    ),
+    ("nebius", "deepseek_v4_flash_nebius_thinking_off"): ModelDefinition(
+        provider="nebius",
+        model_alias="deepseek_v4_flash_nebius_thinking_off",
+        model_id="deepseek-ai/DeepSeek-V4-Flash",
+        reasoning_capability="fixed_off",
+        default_reasoning_mode="off",
+        request_kwargs_by_mode={"off": {"thinking": {"type": "disabled"}}},
+        production_max_output_tokens_by_mode={"off": 2048},
     ),
     ("nebius", "kimi_k3_nebius"): ModelDefinition(
         provider="nebius",
@@ -86,21 +134,58 @@ MODEL_DEFINITIONS: dict[tuple[str, str], ModelDefinition] = {
         default_reasoning_mode="unavailable",
         production_max_output_tokens_by_mode={"unavailable": 2048},
     ),
-    ("nebius", "minimax_m3_nebius"): ModelDefinition(
+    ("nebius", "minimax_m3_nebius_thinking_on"): ModelDefinition(
         provider="nebius",
-        model_alias="minimax_m3_nebius",
+        model_alias="minimax_m3_nebius_thinking_on",
         model_id="MiniMaxAI/MiniMax-M3",
-        reasoning_capability="unavailable",
-        default_reasoning_mode="unavailable",
-        production_max_output_tokens_by_mode={"unavailable": 2048},
+        reasoning_capability="fixed_on",
+        default_reasoning_mode="on",
+        request_kwargs_by_mode={
+            "on": {"chat_template_kwargs": {"thinking_mode": "enabled"}},
+        },
+        production_max_output_tokens_by_mode={"on": 2048},
     ),
-    ("nebius", "glm_5_2_nebius"): ModelDefinition(
+    ("nebius", "minimax_m3_nebius_thinking_off"): ModelDefinition(
         provider="nebius",
-        model_alias="glm_5_2_nebius",
+        model_alias="minimax_m3_nebius_thinking_off",
+        model_id="MiniMaxAI/MiniMax-M3",
+        reasoning_capability="fixed_off",
+        default_reasoning_mode="off",
+        request_kwargs_by_mode={
+            "off": {"chat_template_kwargs": {"thinking_mode": "disabled"}},
+        },
+        production_max_output_tokens_by_mode={"off": 2048},
+    ),
+    ("nebius_uk", "glm_5_2_nebius_thinking_on"): ModelDefinition(
+        provider="nebius_uk",
+        model_alias="glm_5_2_nebius_thinking_on",
         model_id="zai-org/GLM-5.2",
-        reasoning_capability="unavailable",
-        default_reasoning_mode="unavailable",
-        production_max_output_tokens_by_mode={"unavailable": 2048},
+        reasoning_capability="fixed_on",
+        default_reasoning_mode="on",
+        request_kwargs_by_mode={
+            "on": {"chat_template_kwargs": {"enable_thinking": True}},
+        },
+        production_max_output_tokens_by_mode={"on": 2048},
+    ),
+    ("nebius_uk", "glm_5_2_nebius_thinking_off"): ModelDefinition(
+        provider="nebius_uk",
+        model_alias="glm_5_2_nebius_thinking_off",
+        model_id="zai-org/GLM-5.2",
+        reasoning_capability="fixed_off",
+        default_reasoning_mode="off",
+        request_kwargs_by_mode={
+            "off": {"chat_template_kwargs": {"enable_thinking": False}},
+        },
+        production_max_output_tokens_by_mode={"off": 2048},
+    ),
+    ("groq", "gpt_oss_120b_groq"): ModelDefinition(
+        provider="groq",
+        model_alias="gpt_oss_120b_groq",
+        model_id="openai/gpt-oss-120b",
+        reasoning_capability="fixed_on",
+        default_reasoning_mode="on",
+        request_kwargs_by_mode={"on": {"reasoning_effort": "low"}},
+        production_max_output_tokens_by_mode={"on": 2048},
     ),
 }
 

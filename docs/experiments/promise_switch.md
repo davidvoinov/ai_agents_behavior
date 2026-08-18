@@ -79,8 +79,23 @@ does not repair actions from justification, and does not classify promises.
 
 `promise_switch/providers.py` independently defines provider endpoints, model
 aliases, API-key environment-variable names, reasoning capabilities, request
-kwargs, and rate-limit placeholders. The initial offline configuration supports
-Nebius Token Factory through `NEBIUS_API_KEY`; no key value is serializable.
+kwargs, and rate-limit placeholders. The current registry distinguishes Nebius
+Studio, Nebius UK `uk-south1`, and Groq as separate immutable provider
+identities. Nebius identities use `NEBIUS_API_KEY`; Groq uses `GROQ_API_KEY`.
+No key value is serializable, and there is no automatic provider fallback.
+
+The current intended pre-GPT/Claude matrix is recorded authoritatively in
+`promise_switch_production_readiness.md`. All 14 active rows are executable
+offline. DeepSeek V4 Pro and Flash each have explicit ON/OFF configurations;
+Groq Llama is excluded from the active matrix because its endpoint is
+decommissioned for the available Free/Developer access.
+The explicit GLM arms use boolean `enable_thinking` on the Nebius UK endpoint;
+the explicit MiniMax arms use `thinking_mode="enabled"` or `"disabled"` on
+Nebius Studio. Qwen ON and OFF share a 4,096-token output ceiling; each GLM and
+MiniMax pair shares a 2,048-token ceiling. DeepSeek Pro and Flash each use a
+provisional shared 2,048-token pair ceiling and serialize
+`thinking.type="enabled"/"disabled"`; Nebius compatibility remains pending live
+validation after billing restoration.
 
 `ProviderAgnosticClient` builds safe request specifications and requires an
 explicit transport. With no transport it cannot make an API call.

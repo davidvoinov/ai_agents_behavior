@@ -28,7 +28,10 @@ from promise_switch.execution.runner import (
 from promise_switch.execution.scheduler import balanced_pending_order
 from promise_switch.execution.state import TrialState, transition
 from promise_switch.execution.storage import FILES, RunStorage
-from promise_switch.execution.transport import normalize_reasoning_content
+from promise_switch.execution.transport import (
+    normalize_openai_response,
+    normalize_reasoning_content,
+)
 from promise_switch.providers import create_model_config
 from promise_switch.randomization import allocate_voluntary_pool
 from promise_switch.schemas import MessageEvent, NormalizedResponse
@@ -575,6 +578,40 @@ class RateLimitAndProviderTests(ExecutionTestCase):
         self.assertTrue(incomplete_metadata["reasoning_trace_withheld"])
         self.assertTrue(incomplete_metadata["reasoning_trace_incomplete"])
 
+    def test_32b_provider_reasoning_signal_is_recorded_without_hidden_text(self):
+        hidden = "private hidden reasoning that must not be retained"
+        with_signal = normalize_openai_response(
+            raw=json.dumps({
+                "id": "response-id",
+                "choices": [{
+                    "message": {
+                        "content": '{"decision":"COOPERATE","justification":"brief"}',
+                        "reasoning": hidden,
+                    },
+                    "finish_reason": "stop",
+                }],
+                "usage": {"completion_tokens": 12},
+            }),
+            http_status=200, headers={}, latency_seconds=0.1,
+        )
+        self.assertTrue(with_signal.error_metadata["reasoning_signal_present"])
+        self.assertEqual(with_signal.error_metadata["reasoning_signal_fields"], ["reasoning"])
+        self.assertNotIn(hidden, json.dumps(with_signal.to_dict()))
+        without_signal = normalize_openai_response(
+            raw=json.dumps({
+                "choices": [{
+                    "message": {
+                        "content": '{"decision":"DEFECT","justification":"brief"}',
+                        "reasoning_content": "  ",
+                    },
+                    "finish_reason": "stop",
+                }],
+            }),
+            http_status=200, headers={}, latency_seconds=0.1,
+        )
+        self.assertFalse(without_signal.error_metadata["reasoning_signal_present"])
+        self.assertEqual(without_signal.error_metadata["reasoning_signal_fields"], [])
+
 
 class WriterLockTests(ExecutionTestCase):
     def test_33_first_writer_acquires_lock_with_safe_metadata(self):
@@ -845,12 +882,12 @@ class WriterLockTests(ExecutionTestCase):
             self.assertEqual(sum(row["planned_regime"] == "voluntary" for row in plans), 200)
             self.assertEqual(manifest["temperature"], 1.0)
             self.assertFalse(manifest["temperature_override_authorized"])
-            self.assertEqual(manifest["max_output_tokens"], 256)
+            self.assertEqual(manifest["max_output_tokens"], 4096)
             self.assertEqual(manifest["prompt_version"], "promise_switch_v1")
             self.assertEqual(manifest["prompt_hash"], prompt_templates_hash())
             self.assertEqual(full_estimate["dataset_role"], "confirmatory")
             self.assertEqual(full_estimate["temperature"], 1.0)
-            self.assertEqual(full_estimate["token_limits"]["final_decision"], 256)
+            self.assertEqual(full_estimate["token_limits"]["final_decision"], 4096)
             self.assertEqual(full_estimate["prompt_version"], "promise_switch_v1")
             self.assertEqual(full_estimate["prompt_hash"], prompt_templates_hash())
             self.assertEqual(transport.calls, [])
@@ -870,19 +907,25 @@ class WriterLockTests(ExecutionTestCase):
 
     def test_47_model_caps_resolve_by_configuration_and_low_cap_needs_authorization(self):
         expected = {
-            ("qwen3_32b", "off"): 256,
-            ("qwen3_32b", "on"): 4096,
-            ("llama_3_3_70b", "off"): 256,
-            ("gpt_oss_120b_nebius", "on"): 2048,
-            ("deepseek_v4_pro_nebius", "unavailable"): 2048,
-            ("kimi_k3_nebius", "unavailable"): 2048,
-            ("minimax_m3_nebius", "unavailable"): 2048,
-            ("glm_5_2_nebius", "unavailable"): 2048,
+            ("nebius", "qwen3_32b", "off"): 4096,
+            ("nebius", "qwen3_32b", "on"): 4096,
+            ("nebius", "llama_3_3_70b", "off"): 256,
+            ("nebius", "gpt_oss_120b_nebius", "on"): 2048,
+            ("nebius", "deepseek_v4_pro_nebius_thinking_on", "on"): 2048,
+            ("nebius", "deepseek_v4_pro_nebius_thinking_off", "off"): 2048,
+            ("nebius", "deepseek_v4_flash_nebius_thinking_on", "on"): 2048,
+            ("nebius", "deepseek_v4_flash_nebius_thinking_off", "off"): 2048,
+            ("nebius", "kimi_k3_nebius", "unavailable"): 2048,
+            ("nebius", "minimax_m3_nebius_thinking_on", "on"): 2048,
+            ("nebius", "minimax_m3_nebius_thinking_off", "off"): 2048,
+            ("nebius_uk", "glm_5_2_nebius_thinking_on", "on"): 2048,
+            ("nebius_uk", "glm_5_2_nebius_thinking_off", "off"): 2048,
+            ("groq", "gpt_oss_120b_groq", "on"): 2048,
         }
-        for index, ((alias, mode), cap) in enumerate(expected.items()):
-            with self.subTest(alias=alias, mode=mode):
+        for index, ((provider, alias, mode), cap) in enumerate(expected.items()):
+            with self.subTest(provider=provider, alias=alias, mode=mode):
                 config = create_model_config(
-                    provider="nebius", model_alias=alias, reasoning_mode=mode,
+                    provider=provider, model_alias=alias, reasoning_mode=mode,
                 )
                 params = self.params(
                     run_id=f"cap-{index}", model_configs=(config,), dry_run=True,
@@ -909,6 +952,45 @@ class WriterLockTests(ExecutionTestCase):
             "message": 256, "final_decision": 256,
         })
         self.assertTrue(manifest["output_cap_override_authorized"])
+
+    def test_47b_new_matrix_arms_manifest_effective_identity_and_sampling(self):
+        cases = (
+            ("nebius", "minimax_m3_nebius_thinking_on", "on"),
+            ("nebius", "minimax_m3_nebius_thinking_off", "off"),
+            ("nebius_uk", "glm_5_2_nebius_thinking_on", "on"),
+            ("nebius_uk", "glm_5_2_nebius_thinking_off", "off"),
+            ("nebius", "deepseek_v4_pro_nebius_thinking_on", "on"),
+            ("nebius", "deepseek_v4_pro_nebius_thinking_off", "off"),
+            ("nebius", "deepseek_v4_flash_nebius_thinking_on", "on"),
+            ("nebius", "deepseek_v4_flash_nebius_thinking_off", "off"),
+            ("groq", "gpt_oss_120b_groq", "on"),
+        )
+        for index, (provider, alias, mode) in enumerate(cases):
+            with self.subTest(provider=provider, alias=alias):
+                config = create_model_config(
+                    provider=provider, model_alias=alias, reasoning_mode=mode,
+                )
+                params = self.params(
+                    run_id=f"manifest-new-config-{index}",
+                    model_configs=(config,), dry_run=True,
+                )
+                PromiseSwitchRunner(params).run()
+                manifest = RunStorage(params.run_dir).read_manifest()
+                row = manifest["model_configurations"][0]
+                self.assertEqual(row["provider"], provider)
+                self.assertEqual(row["model_id"], config.model_id)
+                self.assertEqual(row["reasoning_mode"], mode)
+                self.assertEqual(
+                    row["production_max_output_tokens"],
+                    config.production_max_output_tokens,
+                )
+                self.assertEqual(manifest["temperature"], 1.0)
+                self.assertEqual(
+                    manifest["max_output_tokens"],
+                    config.production_max_output_tokens,
+                )
+                self.assertEqual(manifest["prompt_version"], "promise_switch_v1")
+                self.assertEqual(manifest["prompt_hash"], prompt_templates_hash())
 
     @staticmethod
     def _journal_snapshot(params):

@@ -96,6 +96,10 @@ def normalize_openai_response(
         content = message["content"]
         if not isinstance(content, str):
             raise TypeError("message content is not a string")
+        reasoning_fields = [
+            field_name for field_name in ("reasoning", "reasoning_content")
+            if _has_reasoning_signal(message.get(field_name))
+        ]
     except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
         return NormalizedResponse(
             status="malformed_api_response", raw_response=raw, http_status=http_status,
@@ -109,7 +113,22 @@ def normalize_openai_response(
         finish_reason=str(choice.get("finish_reason")) if choice.get("finish_reason") else None,
         latency_seconds=latency_seconds,
         usage=payload.get("usage") if isinstance(payload.get("usage"), dict) else {},
+        error_metadata={
+            "reasoning_signal_present": bool(reasoning_fields),
+            "reasoning_signal_fields": reasoning_fields,
+        },
     )
+
+
+def _has_reasoning_signal(value: Any) -> bool:
+    """Detect provider reasoning fields without retaining their hidden contents."""
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, dict, tuple)):
+        return bool(value)
+    return True
 
 
 def _retry_after(value: str | None) -> float | None:

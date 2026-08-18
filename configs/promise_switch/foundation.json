@@ -14,6 +14,24 @@
         "tokens_per_minute": null,
         "source": "confirm in provider console before pilot"
       }
+    },
+    "nebius_uk": {
+      "base_url": "https://api.tokenfactory.uk-south1.nebius.com/v1/",
+      "api_key_env": "NEBIUS_API_KEY",
+      "rate_limit_metadata": {
+        "requests_per_minute": null,
+        "tokens_per_minute": null,
+        "source": "confirm in provider console before confirmatory collection"
+      }
+    },
+    "groq": {
+      "base_url": "https://api.groq.com/openai/v1/",
+      "api_key_env": "GROQ_API_KEY",
+      "rate_limit_metadata": {
+        "requests_per_minute": null,
+        "tokens_per_minute": null,
+        "source": "confirm account-specific limits before confirmatory collection"
+      }
     }
   },
   "models": [
@@ -38,7 +56,7 @@
       "model_id": "Qwen/Qwen3-32B",
       "reasoning_capability": "toggle",
       "reasoning_mode": "off",
-      "production_max_output_tokens": 256,
+      "production_max_output_tokens": 4096,
       "api_key_env": "NEBIUS_API_KEY",
       "base_url": "https://api.studio.nebius.com/v1/",
       "provider_request_kwargs": {
@@ -73,14 +91,63 @@
     },
     {
       "provider": "nebius",
-      "model_alias": "deepseek_v4_pro_nebius",
+      "model_alias": "deepseek_v4_pro_nebius_thinking_on",
       "model_id": "deepseek-ai/DeepSeek-V4-Pro",
-      "reasoning_capability": "unavailable",
-      "reasoning_mode": "unavailable",
+      "reasoning_capability": "fixed_on",
+      "reasoning_mode": "on",
       "production_max_output_tokens": 2048,
       "api_key_env": "NEBIUS_API_KEY",
       "base_url": "https://api.studio.nebius.com/v1/",
-      "provider_request_kwargs": {}
+      "provider_request_kwargs": {
+        "thinking": {
+          "type": "enabled"
+        }
+      }
+    },
+    {
+      "provider": "nebius",
+      "model_alias": "deepseek_v4_pro_nebius_thinking_off",
+      "model_id": "deepseek-ai/DeepSeek-V4-Pro",
+      "reasoning_capability": "fixed_off",
+      "reasoning_mode": "off",
+      "production_max_output_tokens": 2048,
+      "api_key_env": "NEBIUS_API_KEY",
+      "base_url": "https://api.studio.nebius.com/v1/",
+      "provider_request_kwargs": {
+        "thinking": {
+          "type": "disabled"
+        }
+      }
+    },
+    {
+      "provider": "nebius",
+      "model_alias": "deepseek_v4_flash_nebius_thinking_on",
+      "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+      "reasoning_capability": "fixed_on",
+      "reasoning_mode": "on",
+      "production_max_output_tokens": 2048,
+      "api_key_env": "NEBIUS_API_KEY",
+      "base_url": "https://api.studio.nebius.com/v1/",
+      "provider_request_kwargs": {
+        "thinking": {
+          "type": "enabled"
+        }
+      }
+    },
+    {
+      "provider": "nebius",
+      "model_alias": "deepseek_v4_flash_nebius_thinking_off",
+      "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+      "reasoning_capability": "fixed_off",
+      "reasoning_mode": "off",
+      "production_max_output_tokens": 2048,
+      "api_key_env": "NEBIUS_API_KEY",
+      "base_url": "https://api.studio.nebius.com/v1/",
+      "provider_request_kwargs": {
+        "thinking": {
+          "type": "disabled"
+        }
+      }
     },
     {
       "provider": "nebius",
@@ -95,25 +162,76 @@
     },
     {
       "provider": "nebius",
-      "model_alias": "minimax_m3_nebius",
+      "model_alias": "minimax_m3_nebius_thinking_on",
       "model_id": "MiniMaxAI/MiniMax-M3",
-      "reasoning_capability": "unavailable",
-      "reasoning_mode": "unavailable",
+      "reasoning_capability": "fixed_on",
+      "reasoning_mode": "on",
       "production_max_output_tokens": 2048,
       "api_key_env": "NEBIUS_API_KEY",
       "base_url": "https://api.studio.nebius.com/v1/",
-      "provider_request_kwargs": {}
+      "provider_request_kwargs": {
+        "chat_template_kwargs": {
+          "thinking_mode": "enabled"
+        }
+      }
     },
     {
       "provider": "nebius",
-      "model_alias": "glm_5_2_nebius",
-      "model_id": "zai-org/GLM-5.2",
-      "reasoning_capability": "unavailable",
-      "reasoning_mode": "unavailable",
+      "model_alias": "minimax_m3_nebius_thinking_off",
+      "model_id": "MiniMaxAI/MiniMax-M3",
+      "reasoning_capability": "fixed_off",
+      "reasoning_mode": "off",
       "production_max_output_tokens": 2048,
       "api_key_env": "NEBIUS_API_KEY",
       "base_url": "https://api.studio.nebius.com/v1/",
-      "provider_request_kwargs": {}
+      "provider_request_kwargs": {
+        "chat_template_kwargs": {
+          "thinking_mode": "disabled"
+        }
+      }
+    },
+    {
+      "provider": "nebius_uk",
+      "model_alias": "glm_5_2_nebius_thinking_on",
+      "model_id": "zai-org/GLM-5.2",
+      "reasoning_capability": "fixed_on",
+      "reasoning_mode": "on",
+      "production_max_output_tokens": 2048,
+      "api_key_env": "NEBIUS_API_KEY",
+      "base_url": "https://api.tokenfactory.uk-south1.nebius.com/v1/",
+      "provider_request_kwargs": {
+        "chat_template_kwargs": {
+          "enable_thinking": true
+        }
+      }
+    },
+    {
+      "provider": "nebius_uk",
+      "model_alias": "glm_5_2_nebius_thinking_off",
+      "model_id": "zai-org/GLM-5.2",
+      "reasoning_capability": "fixed_off",
+      "reasoning_mode": "off",
+      "production_max_output_tokens": 2048,
+      "api_key_env": "NEBIUS_API_KEY",
+      "base_url": "https://api.tokenfactory.uk-south1.nebius.com/v1/",
+      "provider_request_kwargs": {
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        }
+      }
+    },
+    {
+      "provider": "groq",
+      "model_alias": "gpt_oss_120b_groq",
+      "model_id": "openai/gpt-oss-120b",
+      "reasoning_capability": "fixed_on",
+      "reasoning_mode": "on",
+      "production_max_output_tokens": 2048,
+      "api_key_env": "GROQ_API_KEY",
+      "base_url": "https://api.groq.com/openai/v1/",
+      "provider_request_kwargs": {
+        "reasoning_effort": "low"
+      }
     }
   ]
 }
