@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from promise_switch.analysis import analyze_by_model
+from promise_switch.analysis import analyze_by_model, descriptive_cross_model_summary
 from promise_switch.artifacts import read_jsonl, validate_run_integrity
 
 
@@ -38,7 +38,16 @@ def main() -> int:
         except ValueError as error:
             raise SystemExit(str(error)) from error
         rows.extend(read_jsonl(run_dir / "trials.jsonl"))
-    output = {"|".join(key): value for key, value in analyze_by_model(rows).items()}
+    model_results = analyze_by_model(rows)
+    output = {
+        "analysis_classification": (
+            "PRIMARY MODEL-SPECIFIC RESULTS followed by DESCRIPTIVE CROSS-MODEL SUMMARY"
+        ),
+        "PRIMARY MODEL-SPECIFIC RESULTS": {
+            "|".join(key): value for key, value in model_results.items()
+        },
+        "DESCRIPTIVE CROSS-MODEL SUMMARY": descriptive_cross_model_summary(model_results),
+    }
     print(json.dumps(output, indent=2, sort_keys=True))
     return 0
 

@@ -210,6 +210,15 @@ terminal/completed attrition denominators plus worst-case binary-outcome risk-
 difference bounds for missing actions. Behavioral failures remain in the
 assigned-arm provenance and are not replaced or inferred from ambiguous text.
 
+The output labels these independent analyses `PRIMARY MODEL-SPECIFIC RESULTS`.
+After them, `DESCRIPTIVE CROSS-MODEL SUMMARY` presents one row per
+provider/model/reasoning configuration, including actual cell sizes, condition
+rates, model-specific H8-H10 estimates and intervals, raw p-values, and the
+within-configuration Holm values. Direction counts and ranges/medians of the
+model-specific risk differences are descriptive only. The summary contains no
+pooled observation-level estimate, new significance test, or claim about all
+language models.
+
 `codebook.py` validates semantic coding records and derives compliance from the
 mechanically parsed final action. It never rewrites that action. Actual human
 coding, selection of an independent LLM judge after discussion with David, a
@@ -243,6 +252,10 @@ python3 -B scripts/power_promise_switch.py
 
 ## Minimal confirmatory runbook
 
+The operational one-model-at-a-time procedure, including zero-call durable
+initialization and manifest inspection before collection, is documented in
+`docs/experiments/promise_switch_sequential_runbook.md`.
+
 1. From a clean frozen revision, choose one validated model alias/mode and a
    unique run ID. Create it with `--dataset-role confirmatory`,
    `--n-per-condition 100`, the frozen seed, and the intended output directory.
@@ -253,14 +266,16 @@ python3 -B scripts/power_promise_switch.py
      --run-id confirmatory-qwen-off \
      --provider nebius --model qwen3_32b --reasoning-mode off \
      --dataset-role confirmatory --n-per-condition 100 --seed 20260808 \
-     --output-dir runs/promise_switch
+     --output-dir runs/promise_switch --initialize-only
    ```
-2. Review the printed prompt version/hash, temperature 1.0, model ID, reasoning
-   mode, cap, initial 600 trials, and base 800 calls. Retries/top-ups are unknown.
-3. Execute once. The initial plan is durable before transport and expansions are
+2. Inspect the persisted manifest before transport. Review prompt version/hash,
+   temperature 1.0, model ID, reasoning mode, cap, initial 600 trials, and base
+   800 calls. Retries/top-ups are unknown.
+3. Begin collection with `scripts/run_promise_switch.py --resume RUN_ID
+   --output-dir OUTPUT_DIR`. The plan is already durable and expansions are
    appended as deterministic events.
-4. Inspect with `scripts/inspect_promise_switch_run.py RUN_DIR` and audit with
-   `scripts/audit_promise_switch_artifacts.py RUN_DIR`.
+4. Inspect without execution using `scripts/inspect_promise_switch_run.py
+   RUN_DIR`; audit with `scripts/audit_promise_switch_artifacts.py RUN_DIR`.
 5. Resolve quota/infrastructure/parser pauses without changing experimental
    settings, then resume with `scripts/run_promise_switch.py --resume RUN_ID
    --output-dir OUTPUT_DIR`. Paused invocations do not expand automatically.

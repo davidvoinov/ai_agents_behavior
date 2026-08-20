@@ -213,6 +213,18 @@ class ExecutionTestCase(unittest.TestCase):
 
 
 class HappyPathTests(ExecutionTestCase):
+    def test_initialize_persists_manifest_and_plan_without_transport(self):
+        params = self.params(run_id="initialize-only")
+        transport = FakeTransport()
+        summary = self.runner(params, transport).initialize()
+        self.assertEqual(summary["run_status"], "CREATED")
+        self.assertEqual(summary["initial_planned_trials"], 6)
+        self.assertEqual(transport.calls, [])
+        manifest = RunStorage(params.run_dir).read_manifest()
+        self.assertEqual(manifest["dataset_role"], "technical")
+        self.assertEqual(len(read_jsonl(params.run_dir / "planned_trials.jsonl")), 6)
+        validate_run_integrity(params.run_dir)
+
     def test_01_complete_execution_without_api(self):
         params = self.params(dry_run=True, n=2)
         summary = PromiseSwitchRunner(params).run()

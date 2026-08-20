@@ -214,6 +214,12 @@ specific primary inference; and the future minimum completed-cell target `n=100`
 
 ## Deferred work
 
+Independent configurations may be collected sequentially. Each uses a unique
+run ID, directory, manifest, state, journals, and writer lock, and remains a
+standalone model-specific primary analysis unit. Multiple completed run
+directories are combined only for the later descriptive cross-model display.
+The exact terminal workflow is in `promise_switch_sequential_runbook.md`.
+
 - Codebook software mechanics are validated. Human coding, selection of an
   independent LLM judge after discussion with David, actual Cohen's kappa, and
   the final semantic codebook freeze remain pending. No new Qwen data are needed

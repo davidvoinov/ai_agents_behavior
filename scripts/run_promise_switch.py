@@ -52,6 +52,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--tokens-per-minute", type=int)
     result.add_argument("--minimum-interval-seconds", type=float)
     result.add_argument("--dry-run", action="store_true", default=None)
+    result.add_argument(
+        "--initialize-only", action="store_true",
+        help="persist the immutable manifest and plan, then exit before transport",
+    )
     return result
 
 
@@ -111,7 +115,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     runner = PromiseSwitchRunner(parameters)
     print(json.dumps(runner.preflight_estimate(), indent=2, sort_keys=True))
-    print(json.dumps(runner.run(), indent=2, sort_keys=True))
+    print(json.dumps(
+        runner.initialize() if args.initialize_only else runner.run(),
+        indent=2, sort_keys=True,
+    ))
     return 0
 
 
@@ -149,6 +156,8 @@ def _reject_resume_overrides(args: argparse.Namespace, parameters: ExecutionPara
         raise SystemExit("Incompatible resume override --authorize-output-cap-override")
     if args.dry_run is not None and bool(args.dry_run) != parameters.dry_run:
         raise SystemExit("Incompatible resume override --dry-run")
+    if args.initialize_only:
+        raise SystemExit("--initialize-only is valid only when creating a new run")
 
 
 if __name__ == "__main__":

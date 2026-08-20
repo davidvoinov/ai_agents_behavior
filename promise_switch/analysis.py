@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import comb, erf, sqrt
+from statistics import median
 from typing import Any, Iterable, Mapping, Sequence
 
 from .design import Condition, scientific_condition_label
@@ -189,6 +190,11 @@ def analyze_by_model(
             if action in {"cooperate", "defect"}:
                 counts[condition]["analyzed_n"] += 1
                 counts[condition][action] += 1
+        for condition_counts in counts.values():
+            analyzed_n = condition_counts["analyzed_n"]
+            condition_counts["cooperation_rate"] = (
+                condition_counts["cooperate"] / analyzed_n if analyzed_n else None
+            )
         confirmatory = holm_adjust([
             binary_contrast(group, contrast) for contrast in PRIMARY_CONFIRMATORY_CONTRASTS
         ])
@@ -224,3 +230,72 @@ def analyze_by_model(
             },
         }
     return output
+
+
+def descriptive_cross_model_summary(
+    model_results: Mapping[ModelKey, Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Arrange model-specific estimates for inspection without pooling observations."""
+    configurations: list[dict[str, Any]] = []
+    effects: dict[str, list[float]] = {
+        contrast.name: [] for contrast in PRIMARY_CONFIRMATORY_CONTRASTS
+    }
+    directions: dict[str, dict[str, int]] = {
+        contrast.name: {"positive": 0, "negative": 0, "zero": 0}
+        for contrast in PRIMARY_CONFIRMATORY_CONTRASTS
+    }
+    for key in sorted(model_results):
+        provider, model, reasoning_mode = key
+        result = model_results[key]
+        contrasts = {
+            str(item["name"]): {
+                field: item[field] for field in (
+                    "risk_difference", "risk_difference_ci_95", "p_value", "p_value_holm"
+                )
+            }
+            for item in result["confirmatory_contrasts"]
+        }
+        conditions = {
+            condition.value: {
+                "label": result["condition_labels"][condition.value],
+                "actual_n": result["condition_counts"][condition.value]["analyzed_n"],
+                "cooperate": result["condition_counts"][condition.value]["cooperate"],
+                "defect": result["condition_counts"][condition.value]["defect"],
+                "cooperation_rate": result["condition_counts"][condition.value][
+                    "cooperation_rate"
+                ],
+            }
+            for condition in Condition
+        }
+        configurations.append({
+            "provider": provider,
+            "model": model,
+            "reasoning_mode": reasoning_mode,
+            "conditions": conditions,
+            "confirmatory_contrasts": contrasts,
+        })
+        for name, contrast in contrasts.items():
+            value = float(contrast["risk_difference"])
+            effects[name].append(value)
+            direction = "positive" if value > 0 else "negative" if value < 0 else "zero"
+            directions[name][direction] += 1
+    descriptors = {
+        name: {
+            "direction_counts": directions[name],
+            "risk_difference_range": (
+                [min(values), max(values)] if values else None
+            ),
+            "risk_difference_median": median(values) if values else None,
+        }
+        for name, values in effects.items()
+    }
+    return {
+        "classification": "DESCRIPTIVE CROSS-MODEL SUMMARY",
+        "primary_inference": "PRIMARY MODEL-SPECIFIC RESULTS",
+        "pooled_observation_level_effect": None,
+        "pooled_significance_test": None,
+        "model_weighting": "one displayed row per provider/model/reasoning configuration",
+        "configuration_count": len(configurations),
+        "configurations": configurations,
+        "directional_descriptors": descriptors,
+    }

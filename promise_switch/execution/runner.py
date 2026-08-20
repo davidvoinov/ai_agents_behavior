@@ -184,6 +184,14 @@ class PromiseSwitchRunner:
         ):
             return self._run_locked(resume=resume)
 
+    def initialize(self) -> dict[str, Any]:
+        """Persist an immutable run and plan without making a transport request."""
+        with RunWriterLock(
+            self.parameters.run_dir, run_id=self.parameters.run_id,
+        ):
+            self._create_run()
+            return self.technical_summary()
+
     def _run_locked(self, *, resume: bool) -> dict[str, Any]:
         if resume:
             self._load_for_resume()

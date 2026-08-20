@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 
 from promise_switch.analysis import (
-    Contrast, PRIMARY_CONFIRMATORY_CONTRASTS, analyze_by_model, binary_contrast, holm_adjust,
+    Contrast, PRIMARY_CONFIRMATORY_CONTRASTS, analyze_by_model, binary_contrast,
+    descriptive_cross_model_summary, holm_adjust,
 )
 from promise_switch.artifacts import validate_run_directory
 from promise_switch.codebook import (
@@ -67,6 +68,47 @@ class AnalysisTests(unittest.TestCase):
             [item["name"] for item in output[("test", "model", "off")]["confirmatory_contrasts"]],
             [contrast.name for contrast in PRIMARY_CONFIRMATORY_CONTRASTS],
         )
+
+    def test_condition_counts_include_cooperation_rates(self) -> None:
+        output = analyze_by_model(complete_fixture())[("test", "model", "off")]
+        counts = output["condition_counts"][Condition.NO_COMMUNICATION.value]
+        self.assertEqual(counts["analyzed_n"], 5)
+        self.assertAlmostEqual(counts["cooperation_rate"], 0.4)
+
+    def test_descriptive_cross_model_summary_preserves_heterogeneous_directions(self) -> None:
+        positive = complete_fixture("on")
+        negative = complete_fixture("off")
+        for item in positive:
+            if item["condition"] == Condition.INDUCED_PROMISE_NO_SWITCH.value:
+                item["final_action"] = "COOPERATE"
+            elif item["condition"] == Condition.NO_COMMUNICATION.value:
+                item["final_action"] = "DEFECT"
+        for item in negative:
+            if item["condition"] == Condition.INDUCED_PROMISE_NO_SWITCH.value:
+                item["final_action"] = "DEFECT"
+            elif item["condition"] == Condition.NO_COMMUNICATION.value:
+                item["final_action"] = "COOPERATE"
+        primary = analyze_by_model(positive + negative)
+        snapshot = json.loads(json.dumps({"|".join(key): value for key, value in primary.items()}))
+        summary = descriptive_cross_model_summary(primary)
+        self.assertEqual(
+            summary["directional_descriptors"]["H8"]["direction_counts"],
+            {"positive": 1, "negative": 1, "zero": 0},
+        )
+        self.assertEqual(summary["pooled_observation_level_effect"], None)
+        self.assertEqual(summary["pooled_significance_test"], None)
+        self.assertEqual(
+            {"|".join(key): value for key, value in primary.items()}, snapshot,
+        )
+
+    def test_descriptive_summary_has_one_equally_visible_row_per_configuration(self) -> None:
+        primary = analyze_by_model(complete_fixture("off") + complete_fixture("on"))
+        summary = descriptive_cross_model_summary(primary)
+        self.assertEqual(summary["configuration_count"], 2)
+        self.assertEqual(len(summary["configurations"]), 2)
+        for configuration in summary["configurations"]:
+            self.assertEqual(set(configuration["confirmatory_contrasts"]), {"H8", "H9", "H10"})
+            self.assertEqual(set(configuration["conditions"]), {item.value for item in Condition})
 
     def test_confirmatory_h9_cannot_regress_to_voluntary_primary(self) -> None:
         h9 = PRIMARY_CONFIRMATORY_CONTRASTS[1]
