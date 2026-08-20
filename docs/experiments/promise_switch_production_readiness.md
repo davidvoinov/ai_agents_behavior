@@ -146,6 +146,13 @@ Provider identity is immutable and no automatic fallback exists. Same-model
 provider comparisons are robustness controls, not claims of identical serving,
 quantization, chat templates, or bitwise outputs.
 
+Before a configuration's first confirmatory run, its exact-final technical
+preflight uses `scripts/preflight_promise_switch.py`. The command makes exactly
+one request, never retries, and records safe configuration/finish/parser/
+reasoning evidence under the non-scientific `technical_preflight` role. PASS is
+required before `--initialize-only`; unverifiable or mismatched reasoning state
+is a preflight failure rather than inferred compatibility.
+
 `LLAMA_GROQ_SKIPPED_PROVIDER_DEPRECATION`: Groq Llama is not an active matrix
 row because the Llama 3.3 70B endpoint is decommissioned for the available
 Free/Developer access. Historical consideration remains documented; no

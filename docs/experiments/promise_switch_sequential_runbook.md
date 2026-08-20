@@ -31,12 +31,27 @@ confirmatory run is initialized.
    different configuration.
 
 3. Perform one future exact-setting technical preflight. It is not a pilot and
-   must verify credential/access, exact model and endpoint, reasoning
-   toggle/effort, temperature 1.0, production output cap, frozen prompt,
-   request serialization, normal finish, no truncation, valid JSON, safe
-   reasoning-presence metadata where applicable, and the manifested
-   configuration. Do not repeat a passed preflight unless the configuration or
-   a relevant provider behavior changes.
+   makes exactly one request with no retry:
+
+   ```bash
+   python3 -B scripts/preflight_promise_switch.py \
+     --preflight-id <PREFLIGHT_ID> \
+     --provider <PROVIDER> \
+     --model <MODEL_ALIAS> \
+     --reasoning-mode <REASONING_MODE> \
+     --output-dir preflights/promise_switch
+   ```
+
+   The command uses the production registry, temperature 1.0, the production
+   cap, provider-specific reasoning kwargs, and the frozen final-decision
+   prompt. It writes only
+   `preflights/promise_switch/<PREFLIGHT_ID>/preflight.json`; this ignored
+   technical artifact is not a run and cannot enter scientific analysis.
+   Require `result=PASS`, `request_count=1`, normal `finish_reason=stop`, no
+   truncation, a valid mechanical action, and the expected reasoning
+   verification. `REASONING_STATE_UNVERIFIABLE` and
+   `REASONING_STATE_MISMATCH` are failures. Do not repeat a passed preflight
+   unless the configuration or a relevant provider behavior changes.
 
 4. After a PASS, initialize the confirmatory run without transport:
 

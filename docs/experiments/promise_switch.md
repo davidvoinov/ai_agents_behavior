@@ -22,6 +22,7 @@ promise_switch/
 ├── analysis.py
 ├── codebook.py
 ├── power.py
+├── preflight.py
 └── execution/
     ├── planner.py
     ├── state.py
@@ -99,6 +100,13 @@ validation after billing restoration.
 
 `ProviderAgnosticClient` builds safe request specifications and requires an
 explicit transport. With no transport it cannot make an API call.
+
+`scripts/preflight_promise_switch.py` performs the separate exact-final
+technical gate. It resolves one production registry configuration, constructs
+one frozen final-decision-compatible request, makes exactly one transport call
+without retry, and writes one ignored `technical_preflight` artifact. It does
+not create trials, conditions, top-ups, or a scientific run and cannot enter
+the scientific loader.
 
 ## Durable execution
 
