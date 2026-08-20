@@ -72,10 +72,14 @@ class ExactFinalPreflightTests(unittest.TestCase):
         self.assertEqual(len(transport.requests), 1)
         self.assertEqual(artifact["request_count"], 1)
         self.assertEqual(artifact["result"], "PASS")
+        self.assertEqual(artifact["http_status"], 200)
+        self.assertIsNone(artifact["provider_failure_category"])
+        self.assertEqual(artifact["reasoning_verification"], "VERIFIED_OFF")
 
     def test_failure_and_unexpected_exception_make_no_second_request(self):
         for response in (
             NormalizedResponse(status="timeout", raw_response=""),
+            NormalizedResponse(status="connection_error", raw_response=""),
             RuntimeError("do not serialize this message"),
         ):
             with self.subTest(response=type(response).__name__):
@@ -83,15 +87,75 @@ class ExactFinalPreflightTests(unittest.TestCase):
                 self.assertEqual(len(transport.requests), 1)
                 self.assertEqual(artifact["request_count"], 1)
                 self.assertEqual(artifact["result"], "FAIL")
+                self.assertIsNone(artifact["http_status"])
+                self.assertEqual(
+                    artifact["provider_failure_category"], "transport_or_connection_error",
+                )
+                self.assertEqual(artifact["reasoning_verification"], "NOT_EVALUATED")
 
-    def test_http_failures_never_retry(self):
-        for status in (401, 402, 403, 429, 500):
+    def test_http_failures_preserve_status_classification_and_never_retry(self):
+        categories = {
+            401: "authentication_error",
+            402: "billing_or_quota_payment_required",
+            403: "permission_forbidden",
+            404: "model_or_endpoint_not_found",
+            429: "rate_limit",
+            500: "provider_server_error",
+        }
+        for status, category in categories.items():
             with self.subTest(status=status):
                 artifact, transport, _ = self.run_preflight(NormalizedResponse(
                     status="error", raw_response="provider failure", http_status=status,
                 ))
                 self.assertEqual(len(transport.requests), 1)
                 self.assertEqual(artifact["result"], "FAIL")
+                self.assertEqual(artifact["http_status"], status)
+                self.assertEqual(artifact["provider_failure_category"], category)
+                self.assertEqual(artifact["reasoning_verification"], "NOT_EVALUATED")
+                self.assertIsNone(artifact["reasoning_present"])
+
+    def test_malformed_provider_envelope_preserves_status_without_retry(self):
+        artifact, transport, _ = self.run_preflight(NormalizedResponse(
+            status="malformed_api_response", raw_response="malformed", http_status=200,
+        ))
+        self.assertEqual(len(transport.requests), 1)
+        self.assertEqual(artifact["http_status"], 200)
+        self.assertEqual(artifact["provider_failure_category"], "malformed_api_response")
+        self.assertEqual(artifact["reasoning_verification"], "NOT_EVALUATED")
+
+    def test_safe_error_metadata_is_whitelisted_and_redacted(self):
+        artifact, transport, _ = self.run_preflight(NormalizedResponse(
+            status="error",
+            raw_response="must not be persisted",
+            http_status=402,
+            provider_request_id="safe-request-id",
+            error_metadata={
+                "provider_error": {
+                    "type": "billing_error",
+                    "code": "payment_required",
+                    "status": 402,
+                    "message": "Authorization: Bearer provider-secret",
+                    "headers": {
+                        "Authorization": "Bearer provider-secret",
+                        "x-api-key": "provider-secret",
+                        "Cookie": "session=provider-secret",
+                    },
+                },
+                "api_key": "provider-secret",
+            },
+        ))
+        self.assertEqual(len(transport.requests), 1)
+        self.assertEqual(artifact["safe_error_metadata"], {
+            "provider_error_type": "billing_error",
+            "provider_error_code": "payment_required",
+            "provider_error_status": 402,
+            "provider_request_id": "safe-request-id",
+        })
+        serialized = json.dumps(artifact)
+        self.assertNotIn("provider-secret", serialized)
+        self.assertNotIn("Authorization", serialized)
+        self.assertNotIn("x-api-key", serialized)
+        self.assertNotIn("must not be persisted", serialized)
 
     def test_malformed_json_and_invalid_action_fail(self):
         for raw in ("not json", '{"decision":"WAIT","justification":"Technical check."}'):

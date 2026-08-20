@@ -53,6 +53,15 @@ confirmatory run is initialized.
    `REASONING_STATE_MISMATCH` are failures. Do not repeat a passed preflight
    unless the configuration or a relevant provider behavior changes.
 
+   After a failed preflight, inspect `result`, `failure_category`,
+   `http_status`, `provider_failure_category`, `finish_reason`, and
+   `reasoning_verification` in the artifact. Do not immediately rerun a failed
+   provider preflight. First distinguish authentication, billing/payment,
+   permission, rate limit, model/endpoint availability, provider server, and
+   transport/connection failures. A provider failure before usable generation
+   records reasoning verification as `NOT_EVALUATED`; it is not a reasoning
+   failure. This diagnosis-first rule prevents unnecessary paid calls.
+
 4. After a PASS, initialize the confirmatory run without transport:
 
    ```bash

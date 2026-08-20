@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -92,6 +93,9 @@ class ExactFinalPreflight:
             artifact.update({
                 "result": "FAIL",
                 "failure_category": "unexpected_transport_exception",
+                "http_status": None,
+                "provider_failure_category": "transport_or_connection_error",
+                "safe_error_metadata": {},
                 "exception_type": type(exc).__name__,
                 "finish_reason": None,
                 "truncated": False,
@@ -101,6 +105,7 @@ class ExactFinalPreflight:
                 "reasoning_present": None,
                 "safe_usage": {},
                 "provider_response_id": None,
+                "provider_request_id": None,
             })
         safe_artifact = sanitize_for_serialization(artifact)
         _write_exclusive_json(artifact_path, safe_artifact)
@@ -113,9 +118,11 @@ class ExactFinalPreflight:
         transport_outcome = classify_transport(response)
         parsed = parse_decision(response.raw_response) if response.status == "success" else None
         truncated = response.finish_reason in {"length", "max_tokens"}
-        reasoning_present = _reasoning_present(response)
-        reasoning_verification = _reasoning_verification(
-            self.parameters.model_config.reasoning_mode, reasoning_present,
+        response_succeeded = response.status == "success"
+        reasoning_present = _reasoning_present(response) if response_succeeded else None
+        reasoning_verification = (
+            _reasoning_verification(self.parameters.model_config.reasoning_mode, reasoning_present)
+            if response_succeeded else "NOT_EVALUATED"
         )
         normal_finish = response.status == "success" and response.finish_reason == "stop"
         parser_success = bool(parsed and parsed.valid)
@@ -132,6 +139,9 @@ class ExactFinalPreflight:
         artifact.update({
             "result": "PASS" if passed else "FAIL",
             "failure_category": failure_category,
+            "http_status": response.http_status,
+            "provider_failure_category": _provider_failure_category(response),
+            "safe_error_metadata": _safe_error_metadata(response),
             "finish_reason": response.finish_reason,
             "truncated": truncated,
             "parser_success": parser_success,
@@ -140,6 +150,7 @@ class ExactFinalPreflight:
             "reasoning_present": reasoning_present,
             "safe_usage": _safe_usage(response.usage),
             "provider_response_id": response.provider_response_id,
+            "provider_request_id": response.provider_request_id,
         })
         return artifact
 
@@ -218,6 +229,70 @@ def _reasoning_tokens(value: Any) -> int | None:
 
 def _safe_usage(usage: Any) -> dict[str, Any]:
     return sanitize_for_serialization(usage if isinstance(usage, dict) else {})
+
+
+def _provider_failure_category(response: NormalizedResponse) -> str | None:
+    """Return a deterministic safe diagnosis without parsing provider error text."""
+    if response.status == "success":
+        return None
+    by_status = {
+        401: "authentication_error",
+        402: "billing_or_quota_payment_required",
+        403: "permission_forbidden",
+        404: "model_or_endpoint_not_found",
+        429: "rate_limit",
+    }
+    if response.http_status in by_status:
+        return by_status[response.http_status]
+    if response.http_status is not None and 500 <= response.http_status <= 599:
+        return "provider_server_error"
+    if response.status == "malformed_api_response":
+        return "malformed_api_response"
+    if response.http_status is None:
+        return "transport_or_connection_error"
+    return "provider_http_error"
+
+
+_SENSITIVE_VALUE_PATTERN = re.compile(
+    r"(?i)(authorization\s*:|bearer\s+\S+|api[_ -]?key\s*[:=]\s*\S+|"
+    r"cookie\s*:|sk-[a-z0-9_-]{8,})"
+)
+
+
+def _safe_error_metadata(response: NormalizedResponse) -> dict[str, Any]:
+    """Whitelist bounded diagnostic scalars; never persist arbitrary error payloads."""
+    metadata = response.error_metadata if isinstance(response.error_metadata, dict) else {}
+    provider_error = metadata.get("provider_error")
+    source = provider_error if isinstance(provider_error, dict) else metadata
+    safe: dict[str, Any] = {}
+    for source_key, output_key in (
+        ("type", "provider_error_type"),
+        ("code", "provider_error_code"),
+        ("status", "provider_error_status"),
+    ):
+        value = _safe_diagnostic_scalar(source.get(source_key))
+        if value is not None:
+            safe[output_key] = value
+    if response.provider_request_id:
+        request_id = _safe_diagnostic_scalar(response.provider_request_id)
+        if request_id is not None:
+            safe["provider_request_id"] = request_id
+    return safe
+
+
+def _safe_diagnostic_scalar(value: Any) -> str | int | float | bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value
+    if not isinstance(value, str):
+        return None
+    bounded = value.strip()[:160]
+    if not bounded:
+        return None
+    if _SENSITIVE_VALUE_PATTERN.search(bounded):
+        return "[REDACTED]"
+    return bounded
 
 
 def _write_exclusive_json(path: Path, value: dict[str, Any]) -> None:

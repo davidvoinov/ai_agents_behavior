@@ -151,7 +151,13 @@ preflight uses `scripts/preflight_promise_switch.py`. The command makes exactly
 one request, never retries, and records safe configuration/finish/parser/
 reasoning evidence under the non-scientific `technical_preflight` role. PASS is
 required before `--initialize-only`; unverifiable or mismatched reasoning state
-is a preflight failure rather than inferred compatibility.
+is a preflight failure rather than inferred compatibility. The additive v1
+artifact fields `http_status`, `provider_failure_category`, and whitelisted
+`safe_error_metadata` preserve safe failure provenance from that single call.
+Do not immediately rerun a failed provider preflight: diagnose authentication,
+billing/payment, permission, rate limit, model/endpoint availability, provider
+server, or transport failure first. When no usable generation exists,
+reasoning verification is `NOT_EVALUATED` rather than the primary failure.
 
 `LLAMA_GROQ_SKIPPED_PROVIDER_DEPRECATION`: Groq Llama is not an active matrix
 row because the Llama 3.3 70B endpoint is decommissioned for the available
