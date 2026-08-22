@@ -26,6 +26,10 @@ def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--run-id")
     result.add_argument("--resume", metavar="RUN_ID")
+    result.add_argument(
+        "--approve-parser-review-class",
+        help="explicitly approve the exact parser failure class in the active pause",
+    )
     result.add_argument("--provider")
     result.add_argument("--model", help="Promise Switch model alias, e.g. qwen3_32b")
     result.add_argument("--reasoning-mode", choices=("on", "off", "unavailable"))
@@ -70,9 +74,14 @@ def main(argv: list[str] | None = None) -> int:
         _reject_resume_overrides(args, parameters)
         runner = PromiseSwitchRunner(parameters)
         print(json.dumps(runner.preflight_estimate(), indent=2, sort_keys=True))
-        print(json.dumps(runner.run(resume=True), indent=2, sort_keys=True))
+        print(json.dumps(runner.run(
+            resume=True,
+            approve_parser_review_class=args.approve_parser_review_class,
+        ), indent=2, sort_keys=True))
         return 0
 
+    if args.approve_parser_review_class is not None:
+        raise SystemExit("--approve-parser-review-class requires --resume")
     missing = [name for name in ("run_id", "provider", "model", "n_per_condition", "seed")
                if getattr(args, name) is None]
     if missing:

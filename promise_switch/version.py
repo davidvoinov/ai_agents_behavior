@@ -7,6 +7,7 @@ import json
 
 EXPERIMENT_VERSION = "promise_switch_v1"
 PROMPT_VERSION = "promise_switch_v1"
+RESPONSE_QC_VERSION = "promise_switch_response_qc_v2"
 
 
 def prompt_templates_hash() -> str:

@@ -25,7 +25,9 @@ from ..schemas import (
     NormalizedResponse,
     sanitize_for_serialization,
 )
-from ..version import EXPERIMENT_VERSION, PROMPT_VERSION, prompt_templates_hash
+from ..version import (
+    EXPERIMENT_VERSION, PROMPT_VERSION, RESPONSE_QC_VERSION, prompt_templates_hash,
+)
 from .attrition import (
     AttritionOutcome,
     classify_decision_output,
@@ -39,6 +41,7 @@ from .planner import (
 )
 from .rate_limit import RateLimiter, RateLimitPolicy
 from .retry import RetryPolicy
+from .response_contract import parser_failure_class
 from .scheduler import balanced_pending_order
 from .state import RunStatus, TrialState, is_terminal, transition
 from .storage import RunStorage
@@ -171,6 +174,7 @@ class PromiseSwitchRunner:
         self.message_events: dict[str, dict[str, Any]] = {}
         self.trials: dict[str, dict[str, Any]] = {}
         self.api_attempts: list[dict[str, Any]] = []
+        self.parser_review_events: list[dict[str, Any]] = []
         self.run_status = RunStatus.CREATED
         self.pause_detail: dict[str, Any] | None = None
         self.manifest: dict[str, Any] = {}
@@ -178,11 +182,19 @@ class PromiseSwitchRunner:
         self._configs = {model_config_id(config): config for config in parameters.model_configs}
         self._default_dry_transport = DeterministicDryRunTransport()
 
-    def run(self, *, resume: bool = False) -> dict[str, Any]:
+    def run(
+        self,
+        *,
+        resume: bool = False,
+        approve_parser_review_class: str | None = None,
+    ) -> dict[str, Any]:
         with RunWriterLock(
             self.parameters.run_dir, run_id=self.parameters.run_id,
         ):
-            return self._run_locked(resume=resume)
+            return self._run_locked(
+                resume=resume,
+                approve_parser_review_class=approve_parser_review_class,
+            )
 
     def initialize(self) -> dict[str, Any]:
         """Persist an immutable run and plan without making a transport request."""
@@ -192,10 +204,17 @@ class PromiseSwitchRunner:
             self._create_run()
             return self.technical_summary()
 
-    def _run_locked(self, *, resume: bool) -> dict[str, Any]:
+    def _run_locked(
+        self,
+        *,
+        resume: bool,
+        approve_parser_review_class: str | None,
+    ) -> dict[str, Any]:
         if resume:
-            self._load_for_resume()
+            self._load_for_resume(approve_parser_review_class)
         else:
+            if approve_parser_review_class is not None:
+                raise ValueError("Parser-review approval is valid only when resuming a paused run")
             self._create_run()
         self.run_status = RunStatus.RUNNING
         self.pause_detail = None
@@ -271,6 +290,7 @@ class PromiseSwitchRunner:
             },
             "prompt_version": PROMPT_VERSION,
             "prompt_hash": prompt_templates_hash(),
+            "response_qc_version": RESPONSE_QC_VERSION,
             "completion_policy": {
                 "version": COMPLETION_POLICY_VERSION,
                 "minimum_completed_binary_per_condition": self.parameters.n_per_condition,
@@ -334,10 +354,10 @@ class PromiseSwitchRunner:
             "infrastructure_failures": infrastructure,
             "behavioral_failures": behavioral,
             "behavioral_parser_failures_by_model_configuration": parser_failures,
-            "behavioral_parser_failure_review_required": any(
-                row["total"] >= BEHAVIORAL_PARSER_FAILURE_REVIEW_COUNT
-                for row in parser_failures.values()
+            "behavioral_parser_failure_review_required": (
+                self.run_status == RunStatus.PAUSED_BEHAVIORAL_PARSER_REVIEW
             ),
+            "reviewed_parser_failure_classes": self._reviewed_parser_failure_classes(),
             "paused_quota": self.run_status == RunStatus.PAUSED_PROVIDER_QUOTA,
             "paused_infrastructure_review": (
                 self.run_status == RunStatus.PAUSED_INFRASTRUCTURE_REVIEW
@@ -535,10 +555,12 @@ class PromiseSwitchRunner:
         self.states = {plan.trial_id: TrialState.PLANNED for plan in self.plans}
         self._persist_state()
 
-    def _load_for_resume(self) -> None:
+    def _load_for_resume(self, approve_parser_review_class: str | None) -> None:
         manifest = self.storage.read_manifest()
         if manifest.get("execution_schema_version") != EXECUTION_SCHEMA_VERSION:
             raise ValueError("Refusing to resume a legacy or incompatible Promise Switch run")
+        if manifest.get("response_qc_version") != RESPONSE_QC_VERSION:
+            raise ValueError("Refusing to resume a run created under a different response-QC version")
         self._reconcile_top_up_plan_journal()
         validate_run_integrity(self.parameters.run_dir)
         if manifest.get("experiment_version") != EXPERIMENT_VERSION:
@@ -554,12 +576,15 @@ class PromiseSwitchRunner:
         self.plans = tuple(PlannedTrial(**row) for row in self.storage.read_jsonl("planned_trials.jsonl"))
         if not self.plans:
             raise ValueError("Run has no durable planned trials")
+        self.parser_review_events = self.storage.read_jsonl("parser_review_events.jsonl")
+        self._apply_parser_review_approval(approve_parser_review_class)
 
     def _reconcile(self) -> None:
         self.message_events = _last_by(self.storage.read_jsonl("message_events.jsonl"), "trial_id")
         self.assignments = _last_by(self.storage.read_jsonl("assignments.jsonl"), "trial_id")
         self.trials = _last_by(self.storage.read_jsonl("trials.jsonl"), "trial_id")
         self.api_attempts = self.storage.read_jsonl("api_attempts.jsonl")
+        self.parser_review_events = self.storage.read_jsonl("parser_review_events.jsonl")
         states: dict[str, TrialState] = {}
         for plan in self.plans:
             row = self.trials.get(plan.trial_id)
@@ -670,7 +695,7 @@ class PromiseSwitchRunner:
         self._set_state(plan.trial_id, TrialState.ASSIGNMENT_PENDING)
         if behavioral.category == "behavioral":
             self._maybe_pause_behavioral_parser_review(
-                plan, "message", behavioral, attempt_number,
+                plan, "message", behavioral, attempt_number, response.raw_response,
             )
 
     def _allocate_ready_voluntary_pools(self) -> bool:
@@ -745,7 +770,7 @@ class PromiseSwitchRunner:
             )
             self._set_state(plan.trial_id, TrialState.BEHAVIORAL_FAILURE)
             self._maybe_pause_behavioral_parser_review(
-                plan, "final_decision", behavioral, attempt_number,
+                plan, "final_decision", behavioral, attempt_number, response.raw_response,
             )
             return
         self._append_trial_result(
@@ -998,10 +1023,14 @@ class PromiseSwitchRunner:
         stage: str,
         outcome: AttritionOutcome,
         attempt_number: int,
+        raw_response: str,
     ) -> None:
-        """Pause on the second durable parser failure; compatibility remains manual."""
+        """Pause on an unreviewed failure class after the repeated-failure threshold."""
         count = self._behavioral_parser_failure_counts()[plan.config_id]["total"]
         if count < BEHAVIORAL_PARSER_FAILURE_REVIEW_COUNT:
+            return
+        failure_class = parser_failure_class(stage, raw_response)
+        if failure_class in set(self._reviewed_parser_failure_classes_for(plan.config_id)):
             return
         self.run_status = RunStatus.PAUSED_BEHAVIORAL_PARSER_REVIEW
         self.pause_detail = sanitize_for_serialization({
@@ -1013,6 +1042,7 @@ class PromiseSwitchRunner:
             "trial_id": plan.trial_id,
             "timestamp": self.timestamp(),
             "failure_reason": outcome.cause,
+            "parser_failure_class": failure_class,
             "attempt_number": attempt_number,
             "behavioral_parser_failure_count": count,
             "review_trigger_count": BEHAVIORAL_PARSER_FAILURE_REVIEW_COUNT,
@@ -1022,6 +1052,74 @@ class PromiseSwitchRunner:
         })
         self._record_pause_event()
         self._persist_state()
+
+    def _reviewed_parser_failure_classes(self) -> dict[str, list[str]]:
+        by_config: dict[str, list[str]] = {key: [] for key in self._configs}
+        for event in self.parser_review_events:
+            event_config = str(event.get("model_config_id"))
+            failure_class = event.get("parser_failure_class")
+            if event_config in by_config and isinstance(failure_class, str):
+                by_config[event_config].append(failure_class)
+        by_config = {key: sorted(set(values)) for key, values in by_config.items()}
+        return by_config
+
+    def _reviewed_parser_failure_classes_for(self, config_id: str) -> list[str]:
+        return self._reviewed_parser_failure_classes().get(config_id, [])
+
+    def _apply_parser_review_approval(self, approved_class: str | None) -> None:
+        state = self.storage.read_state()
+        status = state.get("run_status")
+        if status != RunStatus.PAUSED_BEHAVIORAL_PARSER_REVIEW.value:
+            if approved_class is not None:
+                raise ValueError("No behavioral parser-review pause is awaiting approval")
+            return
+        detail = state.get("pause_detail") or {}
+        paused_class = detail.get("parser_failure_class")
+        if not isinstance(paused_class, str):
+            raise ValueError("Paused run has no durable parser failure class")
+        config_id = str(detail.get("model_config_id"))
+        already_reviewed = paused_class in set(
+            self._reviewed_parser_failure_classes_for(config_id)
+        )
+        if approved_class is not None and approved_class != paused_class:
+            raise ValueError(
+                f"Approved parser-review class {approved_class!r} does not match "
+                f"the active pause class {paused_class!r}"
+            )
+        if already_reviewed:
+            return
+        if approved_class is None:
+            raise ValueError(
+                "Resume requires --approve-parser-review-class matching the active pause"
+            )
+        matching_pauses = [
+            event for event in self.storage.read_jsonl("pause_events.jsonl")
+            if event.get("run_status") == RunStatus.PAUSED_BEHAVIORAL_PARSER_REVIEW.value
+            and event.get("detail", {}).get("trial_id") == detail.get("trial_id")
+            and event.get("detail", {}).get("parser_failure_class") == paused_class
+        ]
+        if len(matching_pauses) != 1:
+            raise ValueError("Active parser-review pause has no unique durable pause event")
+        identity = "|".join((self.parameters.run_id, config_id, paused_class))
+        event = sanitize_for_serialization({
+            "parser_review_event_id": (
+                "parser-review:" + hashlib.sha256(identity.encode()).hexdigest()[:20]
+            ),
+            "run_id": self.parameters.run_id,
+            "timestamp": self.timestamp(),
+            "model_config_id": config_id,
+            "provider": detail.get("provider"),
+            "model": detail.get("model"),
+            "reasoning_mode": detail.get("reasoning_mode"),
+            "parser_failure_class": paused_class,
+            "reviewed_trial_id": detail.get("trial_id"),
+            "reviewed_pause_event_id": matching_pauses[0].get("pause_event_id"),
+            "reviewed_stage": detail.get("stage"),
+            "failure_reason": detail.get("failure_reason"),
+            "review_basis": "explicit_resume_approval",
+        })
+        self.storage.append("parser_review_events.jsonl", event)
+        self.parser_review_events.append(event)
 
     def _record_pause_event(self) -> None:
         detail = self.pause_detail or {}
@@ -1063,6 +1161,7 @@ class PromiseSwitchRunner:
             "experiment_version": EXPERIMENT_VERSION,
             "prompt_version": PROMPT_VERSION,
             "prompt_hash": prompt_templates_hash(),
+            "response_qc_version": RESPONSE_QC_VERSION,
             "parameters": normalized,
         }
         git_commit, dirty = _git_metadata()
@@ -1073,6 +1172,7 @@ class PromiseSwitchRunner:
             "experiment_version": EXPERIMENT_VERSION,
             "prompt_version": PROMPT_VERSION,
             "prompt_hash": prompt_templates_hash(),
+            "response_qc_version": RESPONSE_QC_VERSION,
             "created_at": self.timestamp(),
             "randomization_seed": self.parameters.seed,
             "requested_completed_trials_per_final_condition": self.parameters.n_per_condition,
@@ -1153,6 +1253,8 @@ class PromiseSwitchRunner:
             raise RuntimeError("Catastrophic run-integrity failure: prompt version mismatch")
         if self.manifest.get("prompt_hash") != prompt_templates_hash():
             raise RuntimeError("Catastrophic run-integrity failure: frozen prompt hash changed")
+        if self.manifest.get("response_qc_version") != RESPONSE_QC_VERSION:
+            raise RuntimeError("Catastrophic run-integrity failure: response-QC version mismatch")
         if self.manifest.get("dataset_role") != self.parameters.dataset_role:
             raise RuntimeError("Catastrophic run-integrity failure: dataset role mismatch")
         config = self._configs.get(plan.config_id)
@@ -1201,6 +1303,8 @@ def parameters_from_manifest(run_dir: Path) -> ExecutionParameters:
     manifest = RunStorage(run_dir).read_manifest()
     if manifest.get("execution_schema_version") != EXECUTION_SCHEMA_VERSION:
         raise ValueError("Refusing to resume a legacy or incompatible Promise Switch run")
+    if manifest.get("response_qc_version") != RESPONSE_QC_VERSION:
+        raise ValueError("Refusing to resume a run created under a different response-QC version")
     normalized = manifest.get("normalized_execution_parameters", {})
     configs = tuple(ModelConfig(**row) for row in normalized.get("model_configurations", []))
     return ExecutionParameters(

@@ -11,7 +11,9 @@ from .design import Condition, scientific_condition_label, treatment_metadata
 from .parser import parse_decision
 from .randomization import allocate_voluntary_pool
 from .schemas import MessageEvent, ModelConfig
-from .version import EXPERIMENT_VERSION, PROMPT_VERSION, prompt_templates_hash
+from .version import (
+    EXPERIMENT_VERSION, PROMPT_VERSION, RESPONSE_QC_VERSION, prompt_templates_hash,
+)
 
 EXPECTED_EXECUTION_SCHEMA = "promise_switch_execution_v3"
 EXPECTED_EXPERIMENT_VERSION = "promise_switch_v1"
@@ -53,6 +55,9 @@ def validate_run_directory(
         raise ValueError(f"prompt version mismatch: {run_dir}")
     if manifest.get("prompt_hash") != prompt_templates_hash():
         raise ValueError(f"prompt hash mismatch: {run_dir}")
+    response_qc_version = manifest.get("response_qc_version")
+    if response_qc_version not in {None, RESPONSE_QC_VERSION}:
+        raise ValueError(f"unknown response-QC version: {run_dir}")
     role = manifest.get("dataset_role")
     if role not in DATASET_ROLES:
         raise ValueError(f"missing or invalid dataset role: {run_dir}")
@@ -123,6 +128,10 @@ def validate_run_integrity(
     _require_unique(top_up_events, "top_up_event_id", "top-up event", run_dir)
     pause_events = read_jsonl(run_dir / "pause_events.jsonl")
     _require_unique(pause_events, "pause_event_id", "pause event", run_dir)
+    parser_reviews = read_jsonl(run_dir / "parser_review_events.jsonl")
+    _require_unique(
+        parser_reviews, "parser_review_event_id", "parser review event", run_dir,
+    )
     expected_top_ups = [row for event in top_up_events for row in event.get("planned_trials", [])]
     if plan_rows[len(initial_expected):] != expected_top_ups:
         raise ValueError(f"top-up plans differ from durable expansion events: {run_dir}")
@@ -148,6 +157,33 @@ def validate_run_integrity(
     attempts_by_key = {key: row for key, row in zip(attempt_keys, attempts, strict=True)}
 
     config_by_id = {model_config_id(config): config for config in configs}
+    reviewed_keys: set[tuple[str, str]] = set()
+    for review in parser_reviews:
+        config_id = str(review.get("model_config_id"))
+        failure_class = review.get("parser_failure_class")
+        key = (config_id, str(failure_class))
+        if (
+            manifest.get("response_qc_version") != RESPONSE_QC_VERSION
+            or config_id not in config_by_id
+            or not isinstance(failure_class, str)
+            or review.get("run_id") != run_id
+            or review.get("review_basis") != "explicit_resume_approval"
+            or key in reviewed_keys
+        ):
+            raise ValueError(f"invalid parser review event: {run_dir}")
+        matching_pauses = [
+            event for event in pause_events
+            if event.get("run_status") == "PAUSED_BEHAVIORAL_PARSER_REVIEW"
+            and event.get("detail", {}).get("model_config_id") == config_id
+            and event.get("detail", {}).get("parser_failure_class") == failure_class
+            and event.get("detail", {}).get("trial_id") == review.get("reviewed_trial_id")
+            and event.get("detail", {}).get("stage") == review.get("reviewed_stage")
+            and event.get("detail", {}).get("failure_reason") == review.get("failure_reason")
+            and event.get("pause_event_id") == review.get("reviewed_pause_event_id")
+        ]
+        if len(matching_pauses) != 1:
+            raise ValueError(f"parser review has no unique matching pause: {run_dir}")
+        reviewed_keys.add(key)
     prior_plans = list(initial_expected)
     sequence_by_config: dict[str, int] = {}
     trials_by_id = {row.get("trial_id"): row for row in trials}

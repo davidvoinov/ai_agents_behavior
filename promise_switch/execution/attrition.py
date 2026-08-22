@@ -7,6 +7,7 @@ from typing import Literal
 
 from ..parser import DecisionParse, MessageParse
 from ..schemas import NormalizedResponse
+from .response_contract import submitted_decision_is_contradictory
 
 InfrastructureCause = Literal[
     "rate_limit_transient", "quota_exhausted", "timeout", "connection_error",
@@ -61,7 +62,7 @@ def classify_decision_output(parsed: DecisionParse) -> AttritionOutcome:
     lowered = parsed.raw_response.lower()
     if any(marker in lowered for marker in ("i cannot", "i can't", "i refuse", "cannot decide")):
         return AttritionOutcome("behavioral", "refusal_to_decide", False)
-    if "cooperate" in lowered and "defect" in lowered:
+    if submitted_decision_is_contradictory(parsed.raw_response):
         return AttritionOutcome("behavioral", "contradictory_action", False)
     if parsed.error and "decision must be exactly" in parsed.error:
         return AttritionOutcome("behavioral", "unclassifiable_action", False)

@@ -32,10 +32,11 @@ from promise_switch.execution.transport import (
     normalize_openai_response,
     normalize_reasoning_content,
 )
+from promise_switch.parser import parse_decision
 from promise_switch.providers import create_model_config
 from promise_switch.randomization import allocate_voluntary_pool
 from promise_switch.schemas import MessageEvent, NormalizedResponse
-from promise_switch.version import prompt_templates_hash
+from promise_switch.version import RESPONSE_QC_VERSION, prompt_templates_hash
 from scripts.audit_promise_switch_artifacts import audit as audit_run
 
 
@@ -63,6 +64,26 @@ class FakeTransport:
             item = self.scripted.pop(0)
             return item(request) if callable(item) else item
         return success_for(request, self.message_suffix)
+
+
+class FixedDecisionTransport(FakeTransport):
+    def __init__(self, decision: str, justification: str = "test"):
+        super().__init__()
+        self.decision = decision
+        self.justification = justification
+
+    def complete(self, request: RequestSpec) -> NormalizedResponse:
+        self.calls.append(request)
+        if request.metadata["stage"] == "message":
+            raw = '{"message":"optional"}'
+        else:
+            raw = json.dumps({
+                "decision": self.decision,
+                "justification": self.justification,
+            })
+        return NormalizedResponse(
+            status="success", raw_response=raw, http_status=200, finish_reason="stop",
+        )
 
 
 def request_condition(request: RequestSpec) -> Condition | None:
@@ -297,6 +318,99 @@ class HappyPathTests(ExecutionTestCase):
         with self.assertRaises(ValueError):
             transition(TrialState.MESSAGE_PENDING, TrialState.ASSIGNED)
 
+    def test_08b_final_actions_are_recorded_exactly_and_linked_to_their_trials(self):
+        scenarios = (
+            ("COOPERATE", "test"),
+            ("DEFECT", "test"),
+            ("COOPERATE", "Defecting would give me more points."),
+            ("DEFECT", "Cooperating would benefit both participants."),
+        )
+        for index, (decision, justification) in enumerate(scenarios):
+            with self.subTest(decision=decision, justification=justification):
+                params = self.params(run_id=f"action-recording-{index}")
+                transport = FixedDecisionTransport(decision, justification)
+                summary = self.runner(params, transport).run()
+                self.assertEqual(summary["run_status"], "COMPLETED")
+                trials = self.rows(params, "trials.jsonl")
+                attempts = {
+                    row["trial_id"]: row for row in self.rows(params, "api_attempts.jsonl")
+                    if row["stage"] == "final_decision"
+                }
+                assignments = {
+                    row["trial_id"]: row for row in self.rows(params, "assignments.jsonl")
+                }
+                self.assertEqual(len(trials), 6)
+                self.assertEqual(set(attempts), {row["trial_id"] for row in trials})
+                for trial in trials:
+                    attempt = attempts[trial["trial_id"]]
+                    assignment = assignments[trial["trial_id"]]
+                    parsed = parse_decision(attempt["response"]["raw_response"])
+                    self.assertTrue(parsed.valid)
+                    self.assertEqual(parsed.decision, decision)
+                    self.assertEqual(trial["final_action"], decision)
+                    self.assertEqual(trial["completion_status"], "completed")
+                    self.assertEqual(trial["raw_final_response"], parsed.raw_response)
+                    self.assertEqual(attempt["trial_id"], trial["trial_id"])
+                    self.assertEqual(
+                        attempt["request"]["metadata"]["trial_id"], trial["trial_id"],
+                    )
+                    self.assertEqual(trial["condition"], assignment["condition"])
+                    self.assertEqual(attempt["condition"], assignment["condition"])
+                    self.assertEqual(
+                        (trial["original_partner_id"], trial["final_partner_id"]),
+                        (assignment["original_partner_id"], assignment["final_partner_id"]),
+                    )
+                    self.assertEqual(
+                        (attempt["original_partner_id"], attempt["final_partner_id"]),
+                        (assignment["original_partner_id"], assignment["final_partner_id"]),
+                    )
+                validate_run_integrity(params.run_dir, require_completed=True)
+
+    def test_08c_parser_invalid_outputs_never_become_completed_actions(self):
+        invalid_responses = (
+            '```json\n{"decision":"COOPERATE","justification":"test"}\n```',
+            "not json",
+            "Decision: COOPERATE and DEFECT",
+            '{"decision":"COOPERATE"}',
+            '{"action":"DEFECT","justification":"test"}',
+        )
+
+        class FirstFinalInvalidTransport(FakeTransport):
+            def __init__(inner, raw):
+                super().__init__()
+                inner.raw = raw
+                inner.failed = False
+
+            def complete(inner, request):
+                inner.calls.append(request)
+                if request.metadata["stage"] == "message":
+                    return NormalizedResponse(
+                        status="success", raw_response='{"message":"optional"}',
+                        http_status=200, finish_reason="stop",
+                    )
+                if not inner.failed:
+                    inner.failed = True
+                    return NormalizedResponse(
+                        status="success", raw_response=inner.raw,
+                        http_status=200, finish_reason="stop",
+                    )
+                return success_for(request)
+
+        for index, raw in enumerate(invalid_responses):
+            with self.subTest(raw=raw):
+                params = self.params(run_id=f"invalid-action-{index}")
+                summary = self.runner(params, FirstFinalInvalidTransport(raw)).run()
+                self.assertEqual(summary["run_status"], "COMPLETED")
+                failed = [
+                    row for row in self.rows(params, "trials.jsonl")
+                    if row["raw_final_response"] == raw
+                ]
+                self.assertEqual(len(failed), 1)
+                self.assertFalse(parse_decision(raw).valid)
+                self.assertEqual(failed[0]["completion_status"], "failed")
+                self.assertIsNone(failed[0]["final_action"])
+                validate_run_integrity(params.run_dir, require_completed=True)
+
 
 class CrashResumeTests(ExecutionTestCase):
     def _crash_and_resume(self, event, predicate=lambda _row: True):
@@ -398,6 +512,7 @@ class AttritionRetryTests(ExecutionTestCase):
         self.assertTrue(summary["paused_behavioral_parser_review"])
         self.assertTrue(summary["behavioral_parser_failure_review_required"])
         self.assertEqual(summary["pause_detail"]["behavioral_parser_failure_count"], 2)
+        failure_class = summary["pause_detail"]["parser_failure_class"]
         self.assertIn("manual", summary["pause_detail"]["required_action"])
         config_counts = next(iter(
             summary["behavioral_parser_failures_by_model_configuration"].values()
@@ -415,10 +530,81 @@ class AttritionRetryTests(ExecutionTestCase):
             if row["trial_id"] in {failure["trial_id"] for failure in failures}
         ]
         self.assertEqual(len(failed_attempts), 2)
-        resumed = self.runner(params, transport).run(resume=True)
+        with self.assertRaisesRegex(ValueError, "approve-parser-review-class"):
+            self.runner(params, transport).run(resume=True)
+        resumed = self.runner(params, transport).run(
+            resume=True, approve_parser_review_class=failure_class,
+        )
         self.assertEqual(resumed["run_status"], "COMPLETED")
         self.assertEqual(resumed["behavioral_failures"], 2)
-        self.assertTrue(resumed["behavioral_parser_failure_review_required"])
+        self.assertFalse(resumed["behavioral_parser_failure_review_required"])
+        reviews = self.rows(params, "parser_review_events.jsonl")
+        self.assertEqual([row["parser_failure_class"] for row in reviews], [failure_class])
+
+    def test_15c_reviewed_class_survives_restart_but_different_class_still_pauses(self):
+        fenced = (
+            '```json\n{"decision":"DEFECT","justification":"brief"}\n```'
+        )
+        trailing = (
+            '{"decision":"DEFECT","justification":"brief"} trailing prose'
+        )
+
+        class ContractFailures(FakeTransport):
+            def __init__(inner):
+                super().__init__()
+                inner.failures = iter((fenced, fenced, fenced, trailing))
+
+            def complete(inner, request):
+                inner.calls.append(request)
+                if request.metadata["stage"] == "final_decision":
+                    try:
+                        raw = next(inner.failures)
+                    except StopIteration:
+                        return success_for(request)
+                    return NormalizedResponse(
+                        status="success", raw_response=raw, http_status=200,
+                        finish_reason="stop",
+                    )
+                return success_for(request)
+
+        params = self.params(n=2)
+        transport = ContractFailures()
+        first = self.runner(params, transport).run()
+        class_a = first["pause_detail"]["parser_failure_class"]
+        self.assertIn("markdown_fenced_valid_json", class_a)
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            self.runner(params, transport).run(
+                resume=True, approve_parser_review_class="final_decision:x:y",
+            )
+        second = self.runner(params, transport).run(
+            resume=True, approve_parser_review_class=class_a,
+        )
+        self.assertEqual(second["run_status"], "PAUSED_BEHAVIORAL_PARSER_REVIEW")
+        class_b = second["pause_detail"]["parser_failure_class"]
+        self.assertIn("trailing_prose_after_valid_json", class_b)
+        self.assertNotEqual(class_a, class_b)
+        self.assertEqual(len(self.rows(params, "parser_review_events.jsonl")), 1)
+        final = self.runner(params, transport).run(
+            resume=True, approve_parser_review_class=class_b,
+        )
+        self.assertEqual(final["run_status"], "COMPLETED")
+        failures = [
+            row for row in self.rows(params, "trials.jsonl")
+            if row.get("failure_category") == "behavioral"
+        ]
+        self.assertEqual(len(failures), 4)
+        self.assertEqual(
+            [row["raw_final_response"] for row in failures],
+            [fenced, fenced, fenced, trailing],
+        )
+        failed_ids = {row["trial_id"] for row in failures}
+        attempts = [
+            row for row in self.rows(params, "api_attempts.jsonl")
+            if row["trial_id"] in failed_ids
+        ]
+        self.assertEqual(len(attempts), 4)
+        self.assertTrue(all(row["attempt_number"] == 1 for row in attempts))
+        validate_run_integrity(params.run_dir, require_completed=True)
 
     def test_16_transient_failure_retries_and_attempt_numbers(self):
         rate = NormalizedResponse(status="error", raw_response="slow", http_status=429)
@@ -541,6 +727,7 @@ class ResumeSafetyTests(ExecutionTestCase):
         manifest = RunStorage(params.run_dir).read_manifest()
         self.assertEqual(manifest["prompt_hash"], prompt_templates_hash())
         self.assertEqual(manifest["dataset_role"], "synthetic")
+        self.assertEqual(manifest["response_qc_version"], RESPONSE_QC_VERSION)
 
 
 class RateLimitAndProviderTests(ExecutionTestCase):
@@ -1249,16 +1436,16 @@ class CompletedCellTopUpTests(ExecutionTestCase):
         with self.assertRaisesRegex(ValueError, "completion-only stopping rule"):
             validate_run_integrity(params.run_dir)
 
-    def test_58_several_behavioral_failures_require_manual_resumes_then_exact_fixed_top_up(self):
+    def test_58_reviewed_behavioral_class_does_not_repeat_pause_or_change_top_up(self):
         params = self.top_up_params("several-behavioral", n=4)
         transport = SeveralBehavioralFailuresTransport(Condition.NO_COMMUNICATION, 3)
         summary = self.runner(params, transport).run()
-        pauses = 0
-        while summary["run_status"] == "PAUSED_BEHAVIORAL_PARSER_REVIEW":
-            pauses += 1
-            summary = self.runner(params, transport).run(resume=True)
+        self.assertEqual(summary["run_status"], "PAUSED_BEHAVIORAL_PARSER_REVIEW")
+        failure_class = summary["pause_detail"]["parser_failure_class"]
+        summary = self.runner(params, transport).run(
+            resume=True, approve_parser_review_class=failure_class,
+        )
         self.assertEqual(summary["run_status"], "COMPLETED")
-        self.assertGreaterEqual(pauses, 2)
         trials = read_jsonl(params.run_dir / "trials.jsonl")
         plans = read_jsonl(params.run_dir / "planned_trials.jsonl")
         failures = [row for row in trials if row.get("failure_category") == "behavioral"]
@@ -1266,7 +1453,8 @@ class CompletedCellTopUpTests(ExecutionTestCase):
                         and row["final_condition"] == Condition.NO_COMMUNICATION.value]
         self.assertEqual(len(failures), 3)
         self.assertEqual(len(fixed_topups), 3)
-        self.assertEqual(len(read_jsonl(params.run_dir / "pause_events.jsonl")), pauses)
+        self.assertEqual(len(read_jsonl(params.run_dir / "pause_events.jsonl")), 1)
+        self.assertEqual(len(read_jsonl(params.run_dir / "parser_review_events.jsonl")), 1)
 
 
 if __name__ == "__main__":

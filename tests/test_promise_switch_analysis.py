@@ -15,6 +15,7 @@ from promise_switch.codebook import (
 )
 from promise_switch.design import Condition
 from promise_switch.execution.attrition import classify_decision_output, classify_transport
+from promise_switch.execution.response_contract import parser_failure_class
 from promise_switch.parser import parse_decision
 from promise_switch.schemas import NormalizedResponse
 from promise_switch.version import PROMPT_VERSION, prompt_templates_hash
@@ -210,14 +211,80 @@ class AnalysisTests(unittest.TestCase):
         truncation = classify_transport(NormalizedResponse(
             status="success", raw_response="", http_status=200, finish_reason="length"))
         contradictory = classify_decision_output(parse_decision("COOPERATE and DEFECT"))
+        framed = classify_decision_output(parse_decision("Decision: COOPERATE and DEFECT"))
+        chosen = classify_decision_output(parse_decision("I choose COOPERATE and DEFECT"))
         refusal = classify_decision_output(parse_decision("I refuse to decide"))
         invalid_json = classify_decision_output(parse_decision("not json"))
         self.assertEqual((timeout.cause, timeout.retryable), ("timeout", True))
         self.assertEqual((quota.cause, quota.quota_pause), ("quota_exhausted", True))
         self.assertEqual(truncation.cause, "token_truncation")
         self.assertEqual(contradictory.cause, "contradictory_action")
+        self.assertEqual(framed.cause, "contradictory_action")
+        self.assertEqual(chosen.cause, "contradictory_action")
         self.assertEqual(refusal.cause, "refusal_to_decide")
         self.assertEqual(invalid_json.cause, "invalid_output_format")
+
+    def test_decision_attrition_uses_only_submitted_action_for_contradiction(self) -> None:
+        contradictory_json = classify_decision_output(parse_decision(
+            '{"decision":"COOPERATE and DEFECT","justification":"brief"}'
+        ))
+        justification_mentions_other = classify_decision_output(parse_decision(
+            '```json\n{"decision":"DEFECT","justification":'
+            '"There is no commitment to cooperate."}\n```'
+        ))
+        single_quoted = classify_decision_output(parse_decision(
+            '{"decision":"DEFECT","justification":\'I did not cooperate.\'}'
+        ))
+        valid = classify_decision_output(parse_decision(
+            '{"decision":"DEFECT","justification":"I chose this instead of cooperating."}'
+        ))
+        valid_cooperate = classify_decision_output(parse_decision(
+            '{"decision":"COOPERATE","justification":"Defecting would give me more points."}'
+        ))
+        self.assertEqual(contradictory_json.cause, "contradictory_action")
+        self.assertEqual(justification_mentions_other.cause, "invalid_output_format")
+        self.assertEqual(single_quoted.cause, "invalid_output_format")
+        self.assertEqual((valid.category, valid.cause), ("success", None))
+        self.assertEqual((valid_cooperate.category, valid_cooperate.cause), ("success", None))
+
+    def test_parser_failure_classes_are_mechanical_and_stage_specific(self) -> None:
+        final = '{"decision":"DEFECT","justification":"brief"}'
+        cases = {
+            f"```json\n{final}\n```": "markdown_fenced_valid_json",
+            f"{final} trailing": "trailing_prose_after_valid_json",
+            f"{final}\n{final}": "multiple_json_objects",
+            "{'decision':'DEFECT','justification':'brief'}": "single_quoted_json",
+            '{"action":"DEFECT"}': "wrong_schema",
+            '{"decision":"DEFECT"}': "missing_required_field",
+            '{"decision":3,"justification":"brief"}': "invalid_field_type",
+            "COOPERATE and DEFECT": "actual_contradictory_decision",
+        }
+        classes = {
+            parser_failure_class("final_decision", raw)
+            for raw in cases
+        }
+        self.assertEqual(len(classes), len(cases))
+        for raw, mechanism in cases.items():
+            with self.subTest(mechanism=mechanism):
+                self.assertEqual(
+                    parser_failure_class("final_decision", raw),
+                    f"final_decision:{mechanism}",
+                )
+        self.assertTrue(parser_failure_class(
+            "message", '```json\n{"message":""}\n```',
+        ).startswith("message:"))
+
+    def test_parser_review_identity_excludes_semantic_failure_reason(self) -> None:
+        refusal_raw = "I refuse to decide"
+        unrelated_raw = "not json"
+        refusal = parser_failure_class("final_decision", refusal_raw)
+        unrelated = parser_failure_class("final_decision", unrelated_raw)
+        self.assertNotEqual(
+            classify_decision_output(parse_decision(refusal_raw)).cause,
+            classify_decision_output(parse_decision(unrelated_raw)).cause,
+        )
+        self.assertEqual(refusal, unrelated)
+        self.assertEqual(refusal, "final_decision:malformed_json")
 
     def test_derived_outcomes_reject_nonmechanical_action(self) -> None:
         code = MessageCode(True, True, "promise", "COOPERATE", False, "", False, False)

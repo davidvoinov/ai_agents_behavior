@@ -13,6 +13,7 @@ FILES = (
     "planned_trials.jsonl",
     "top_up_events.jsonl",
     "pause_events.jsonl",
+    "parser_review_events.jsonl",
     "message_events.jsonl",
     "assignments.jsonl",
     "api_attempts.jsonl",

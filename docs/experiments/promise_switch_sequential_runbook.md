@@ -114,6 +114,20 @@ confirmatory run is initialized.
    Respect `PAUSED_PROVIDER_QUOTA`, `PAUSED_INFRASTRUCTURE_REVIEW`, and
    `PAUSED_BEHAVIORAL_PARSER_REVIEW`. Review the recorded cause before resume;
    never change provider, prompt, temperature, cap, or replacement policy.
+   For a behavioral parser pause, copy the exact `parser_failure_class` from
+   `run_state.json` into the explicit approval:
+
+   ```bash
+   python3 -B scripts/run_promise_switch.py \
+     --resume <RUN_ID> \
+     --output-dir runs/promise_switch \
+     --approve-parser-review-class '<PARSER_FAILURE_CLASS>'
+   ```
+
+   The class identity is stage plus mechanical response-contract mechanism, not
+   semantic failure reason. The approval applies only to that class and model
+   configuration. Identical later failures stay missing and are not retried,
+   but do not pause; a new class produces a new review pause.
 
 8. Never launch a second writer for the same run directory. The per-run OS lock
    rejects concurrent writers. Distinct run IDs have separate manifests,

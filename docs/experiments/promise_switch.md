@@ -117,19 +117,38 @@ post-message assignment, terminal trial, and error.
 `run_state.json` is replaced atomically after each state transition.
 
 New runs use the `promise_switch_execution_v3` schema and must declare exactly
-one dataset role: `technical`, `pilot`, `confirmatory`, or `synthetic`. Resume
-rejects legacy runs, changed prompt hashes, changed experiment versions, and
+one dataset role: `technical`, `pilot`, `confirmatory`, or `synthetic`. Runs
+created after the Qwen collections also record
+`response_qc_version=promise_switch_response_qc_v2`; this is an implementation
+marker, not a prompt or experiment version. Resume rejects legacy runs, changed
+prompt hashes, changed experiment versions, response-QC mismatches, and
 incompatible parameter overrides.
 Durable successful responses are reused after a crash instead of being called
 again. Behavioral failures remain original missing-action ITT observations and
 are never retried; retry is limited to infrastructure failures.
 
 The second durable parser failure for one provider/model/reasoning
-configuration pauses the run as `PAUSED_BEHAVIORAL_PARSER_REVIEW`. Per-config
-message/final parser-failure counts and the review flag are surfaced to the
-operator. This is an operational repeated-event trigger for manual review, not
-a significance threshold or automatic incompatibility decision; observations
-remain behavioral ITT attrition and are never deleted or replaced.
+configuration pauses the run as `PAUSED_BEHAVIORAL_PARSER_REVIEW`. The pause
+records a stage-specific mechanical class, such as fenced valid JSON, trailing
+text, or a schema/type error. Its durable identity is only the stage plus that
+mechanism; a semantic failure reason remains diagnostic metadata. After review,
+resume must explicitly approve the exact active class with
+`--approve-parser-review-class`. The approval is stored
+in `parser_review_events.jsonl`; later failures in that class remain immutable
+behavioral missing observations but no longer pause. A different class still
+requires review. Classification does not inspect the meaning of a message or
+justification, and it never repairs a response or relaxes the parser.
+
+`contradictory_action` is reserved for a submitted decision that itself contains
+both actions, such as `COOPERATE and DEFECT`. Mentioning the alternative action
+only in a justification does not trigger that subtype. This changes only the
+label on an already parser-invalid observation; valid/missing status and retry
+behavior are unchanged.
+
+The completed Qwen ON and Qwen OFF confirmatory runs predate
+`promise_switch_response_qc_v2` and remain under the original repeated-pause and
+whole-response classifier implementation. Their manifests and journals are not
+migrated. Model-facing `promise_switch_v1` text and its hash are unchanged.
 
 Exhausting the bounded infrastructure path pauses the batch for manual review
 before another trial. Current-schema resume and analysis also validate the
