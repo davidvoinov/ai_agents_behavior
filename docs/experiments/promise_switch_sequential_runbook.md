@@ -128,6 +128,9 @@ confirmatory run is initialized.
    semantic failure reason. The approval applies only to that class and model
    configuration. Identical later failures stay missing and are not retried,
    but do not pause; a new class produces a new review pause.
+   Under QC v3, malformed JSON is divided into narrow syntactic mechanisms.
+   `other_malformed_json` is a conservative residual: its explicit approval is
+   occurrence-scoped, so any later residual failure pauses for review again.
 
 8. Never launch a second writer for the same run directory. The per-run OS lock
    rejects concurrent writers. Distinct run IDs have separate manifests,

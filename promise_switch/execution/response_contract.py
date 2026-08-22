@@ -98,11 +98,11 @@ def _mechanical_failure(stage: Stage, raw_response: str) -> str:
 
     try:
         payload = json.loads(raw_response)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
         return (
             "actual_contradictory_decision"
             if stage == "final_decision" and submitted_decision_is_contradictory(raw_response)
-            else "malformed_json"
+            else _malformed_json_failure(raw_response, exc)
         )
     if not isinstance(payload, dict):
         return "non_object_json"
@@ -132,3 +132,45 @@ def _mechanical_failure(stage: Stage, raw_response: str) -> str:
         if not payload["justification"].strip():
             return "invalid_justification"
     return "other_unrecognized_parser_failure"
+
+
+def _malformed_json_failure(raw_response: str, error: json.JSONDecodeError) -> str:
+    """Classify malformed JSON by syntax only, without repairing the response."""
+    stripped = raw_response.strip()
+    if not stripped:
+        return "empty_response"
+    if stripped[0] not in "[{":
+        return "plain_non_json_text"
+    if error.msg.startswith("Unterminated string"):
+        return "unterminated_string"
+    if error.msg == "Invalid \\escape":
+        return "invalid_escape"
+    if re.search(r",\s*[}\]]\s*$", stripped):
+        return "trailing_comma"
+    if error.pos >= len(raw_response.rstrip()) and _has_unclosed_delimiter(stripped):
+        return "missing_closing_delimiter"
+    return "other_malformed_json"
+
+
+def _has_unclosed_delimiter(value: str) -> bool:
+    stack: list[str] = []
+    in_string = False
+    escaped = False
+    pairs = {"}": "{", "]": "["}
+    for character in value:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            continue
+        if character == '"':
+            in_string = True
+        elif character in "[{":
+            stack.append(character)
+        elif character in "}]":
+            if not stack or stack.pop() != pairs[character]:
+                return False
+    return not in_string and bool(stack)

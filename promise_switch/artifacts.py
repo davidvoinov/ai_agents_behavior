@@ -12,7 +12,8 @@ from .parser import parse_decision
 from .randomization import allocate_voluntary_pool
 from .schemas import MessageEvent, ModelConfig
 from .version import (
-    EXPERIMENT_VERSION, PROMPT_VERSION, RESPONSE_QC_VERSION, prompt_templates_hash,
+    EXPERIMENT_VERSION, KNOWN_RESPONSE_QC_VERSIONS, PROMPT_VERSION,
+    RESPONSE_QC_VERSION, prompt_templates_hash,
 )
 
 EXPECTED_EXECUTION_SCHEMA = "promise_switch_execution_v3"
@@ -56,7 +57,7 @@ def validate_run_directory(
     if manifest.get("prompt_hash") != prompt_templates_hash():
         raise ValueError(f"prompt hash mismatch: {run_dir}")
     response_qc_version = manifest.get("response_qc_version")
-    if response_qc_version not in {None, RESPONSE_QC_VERSION}:
+    if response_qc_version not in {None, *KNOWN_RESPONSE_QC_VERSIONS}:
         raise ValueError(f"unknown response-QC version: {run_dir}")
     role = manifest.get("dataset_role")
     if role not in DATASET_ROLES:
@@ -161,14 +162,28 @@ def validate_run_integrity(
     for review in parser_reviews:
         config_id = str(review.get("model_config_id"))
         failure_class = review.get("parser_failure_class")
+        review_scope = review.get("review_scope", "class")
         key = (config_id, str(failure_class))
         if (
-            manifest.get("response_qc_version") != RESPONSE_QC_VERSION
+            manifest.get("response_qc_version") not in KNOWN_RESPONSE_QC_VERSIONS
             or config_id not in config_by_id
             or not isinstance(failure_class, str)
             or review.get("run_id") != run_id
             or review.get("review_basis") != "explicit_resume_approval"
-            or key in reviewed_keys
+            or review_scope not in {"class", "occurrence"}
+            or (review_scope == "class" and key in reviewed_keys)
+            or (
+                review_scope == "occurrence"
+                and (
+                    manifest.get("response_qc_version") != RESPONSE_QC_VERSION
+                    or not failure_class.endswith(":other_malformed_json")
+                )
+            )
+            or (
+                review_scope == "class"
+                and manifest.get("response_qc_version") == RESPONSE_QC_VERSION
+                and failure_class.endswith(":other_malformed_json")
+            )
         ):
             raise ValueError(f"invalid parser review event: {run_dir}")
         matching_pauses = [
@@ -183,7 +198,8 @@ def validate_run_integrity(
         ]
         if len(matching_pauses) != 1:
             raise ValueError(f"parser review has no unique matching pause: {run_dir}")
-        reviewed_keys.add(key)
+        if review_scope == "class":
+            reviewed_keys.add(key)
     prior_plans = list(initial_expected)
     sequence_by_config: dict[str, int] = {}
     trials_by_id = {row.get("trial_id"): row for row in trials}

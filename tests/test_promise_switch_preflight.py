@@ -10,7 +10,7 @@ from promise_switch.client import RequestSpec
 from promise_switch.preflight import ExactFinalPreflight, PreflightParameters
 from promise_switch.providers import create_model_config
 from promise_switch.schemas import NormalizedResponse
-from promise_switch.version import PROMPT_VERSION, prompt_templates_hash
+from promise_switch.version import PROMPT_VERSION, RESPONSE_QC_VERSION, prompt_templates_hash
 
 
 def success(*, reasoning: bool | None = None, raw: str | None = None) -> NormalizedResponse:
@@ -207,6 +207,7 @@ class ExactFinalPreflightTests(unittest.TestCase):
         messages = transport.requests[0].body["messages"]
         self.assertEqual(artifact["prompt_version"], PROMPT_VERSION)
         self.assertEqual(artifact["prompt_hash"], prompt_templates_hash())
+        self.assertEqual(artifact["response_qc_version"], RESPONSE_QC_VERSION)
         self.assertIn('"decision": "COOPERATE or DEFECT"', messages[-1]["content"])
         self.assertNotIn("H8", json.dumps(messages))
 

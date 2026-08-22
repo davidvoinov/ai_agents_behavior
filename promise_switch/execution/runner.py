@@ -1058,7 +1058,11 @@ class PromiseSwitchRunner:
         for event in self.parser_review_events:
             event_config = str(event.get("model_config_id"))
             failure_class = event.get("parser_failure_class")
-            if event_config in by_config and isinstance(failure_class, str):
+            if (
+                event.get("review_scope", "class") == "class"
+                and event_config in by_config
+                and isinstance(failure_class, str)
+            ):
                 by_config[event_config].append(failure_class)
         by_config = {key: sorted(set(values)) for key, values in by_config.items()}
         return by_config
@@ -1078,6 +1082,7 @@ class PromiseSwitchRunner:
         if not isinstance(paused_class, str):
             raise ValueError("Paused run has no durable parser failure class")
         config_id = str(detail.get("model_config_id"))
+        occurrence_only = paused_class.endswith(":other_malformed_json")
         already_reviewed = paused_class in set(
             self._reviewed_parser_failure_classes_for(config_id)
         )
@@ -1087,6 +1092,19 @@ class PromiseSwitchRunner:
                 f"the active pause class {paused_class!r}"
             )
         if already_reviewed:
+            return
+        active_pause_id = next((
+            event.get("pause_event_id")
+            for event in self.storage.read_jsonl("pause_events.jsonl")
+            if event.get("run_status") == RunStatus.PAUSED_BEHAVIORAL_PARSER_REVIEW.value
+            and event.get("detail", {}).get("trial_id") == detail.get("trial_id")
+            and event.get("detail", {}).get("parser_failure_class") == paused_class
+        ), None)
+        if occurrence_only and any(
+            event.get("review_scope") == "occurrence"
+            and event.get("reviewed_pause_event_id") == active_pause_id
+            for event in self.parser_review_events
+        ):
             return
         if approved_class is None:
             raise ValueError(
@@ -1100,7 +1118,11 @@ class PromiseSwitchRunner:
         ]
         if len(matching_pauses) != 1:
             raise ValueError("Active parser-review pause has no unique durable pause event")
-        identity = "|".join((self.parameters.run_id, config_id, paused_class))
+        review_scope = "occurrence" if occurrence_only else "class"
+        identity = "|".join((
+            self.parameters.run_id, config_id, paused_class, review_scope,
+            str(matching_pauses[0].get("pause_event_id") if occurrence_only else ""),
+        ))
         event = sanitize_for_serialization({
             "parser_review_event_id": (
                 "parser-review:" + hashlib.sha256(identity.encode()).hexdigest()[:20]
@@ -1112,6 +1134,7 @@ class PromiseSwitchRunner:
             "model": detail.get("model"),
             "reasoning_mode": detail.get("reasoning_mode"),
             "parser_failure_class": paused_class,
+            "review_scope": review_scope,
             "reviewed_trial_id": detail.get("trial_id"),
             "reviewed_pause_event_id": matching_pauses[0].get("pause_event_id"),
             "reviewed_stage": detail.get("stage"),

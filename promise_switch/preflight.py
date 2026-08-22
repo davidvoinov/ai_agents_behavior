@@ -18,7 +18,7 @@ from .execution.attrition import classify_transport
 from .parser import parse_decision
 from .prompts import final_decision_messages
 from .schemas import ModelConfig, NormalizedResponse, sanitize_for_serialization
-from .version import PROMPT_VERSION, prompt_templates_hash
+from .version import PROMPT_VERSION, RESPONSE_QC_VERSION, prompt_templates_hash
 
 PREFLIGHT_SCHEMA_VERSION = "promise_switch_exact_final_preflight_v1"
 PREFLIGHT_DATASET_ROLE = "technical_preflight"
@@ -179,6 +179,7 @@ class ExactFinalPreflight:
             "configured_output_cap": config.production_max_output_tokens,
             "prompt_version": PROMPT_VERSION,
             "prompt_hash": prompt_templates_hash(),
+            "response_qc_version": RESPONSE_QC_VERSION,
             "request_count": request_count,
             "request_configuration": safe_request_configuration,
             "request_body_sha256": hashlib.sha256(canonical_body.encode("utf-8")).hexdigest(),

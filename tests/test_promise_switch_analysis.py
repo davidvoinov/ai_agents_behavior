@@ -284,7 +284,49 @@ class AnalysisTests(unittest.TestCase):
             classify_decision_output(parse_decision(unrelated_raw)).cause,
         )
         self.assertEqual(refusal, unrelated)
-        self.assertEqual(refusal, "final_decision:malformed_json")
+        self.assertEqual(refusal, "final_decision:plain_non_json_text")
+
+    def test_qcv3_malformed_json_classes_are_narrow_and_syntax_only(self) -> None:
+        cases = {
+            '{"message":"first"': "missing_closing_delimiter",
+            '[{"message":"first"}': "missing_closing_delimiter",
+            '{"message":"first",}': "trailing_comma",
+            '{"message":"first}': "unterminated_string",
+            '{"message":"first\\q"}': "invalid_escape",
+            "  \n": "empty_response",
+            "not JSON": "plain_non_json_text",
+            '{"message" "first"}': "other_malformed_json",
+        }
+        for raw, mechanism in cases.items():
+            with self.subTest(mechanism=mechanism):
+                self.assertEqual(parser_failure_class("message", raw), f"message:{mechanism}")
+        self.assertEqual(
+            parser_failure_class("message", '{"message":"different semantic content"'),
+            "message:missing_closing_delimiter",
+        )
+        self.assertEqual(
+            parser_failure_class(
+                "message",
+                '{"message": "I\'ll cooperate if you cooperate—let\'s both get 8 points."',
+            ),
+            "message:missing_closing_delimiter",
+        )
+
+    def test_qcv3_existing_message_contract_classes_are_unchanged(self) -> None:
+        cases = {
+            '```json\n{"message":"hello"}\n```': "markdown_fenced_valid_json",
+            '```json\n{"message":"hello"\n```': "markdown_fenced_malformed_json",
+            '{"message":"one"}\n{"message":"two"}': "multiple_json_objects",
+            '{"message":"hello"} trailing': "trailing_prose_after_valid_json",
+            "{'message':'hello'}": "single_quoted_json",
+            '{"decision":"COOPERATE"}': "wrong_schema",
+            '{}': "missing_required_field",
+            '{"message":3}': "invalid_field_type",
+            'null': "non_object_json",
+        }
+        for raw, mechanism in cases.items():
+            with self.subTest(mechanism=mechanism):
+                self.assertEqual(parser_failure_class("message", raw), f"message:{mechanism}")
 
     def test_derived_outcomes_reject_nonmechanical_action(self) -> None:
         code = MessageCode(True, True, "promise", "COOPERATE", False, "", False, False)

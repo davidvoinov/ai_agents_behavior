@@ -17,7 +17,7 @@ from promise_switch.analysis import VOLUNTARY_ITT_CONTRAST, binary_contrast
 from promise_switch.artifacts import read_jsonl, validate_run_integrity
 from promise_switch.execution.attrition import classify_transport
 from promise_switch.execution.lock import RunLockError, RunWriterLock
-from promise_switch.execution.planner import plan_trials
+from promise_switch.execution.planner import model_config_id, plan_trials
 from promise_switch.execution.rate_limit import RateLimiter, RateLimitPolicy
 from promise_switch.execution.retry import RetryPolicy
 from promise_switch.execution.runner import (
@@ -542,17 +542,14 @@ class AttritionRetryTests(ExecutionTestCase):
         self.assertEqual([row["parser_failure_class"] for row in reviews], [failure_class])
 
     def test_15c_reviewed_class_survives_restart_but_different_class_still_pauses(self):
-        fenced = (
-            '```json\n{"decision":"DEFECT","justification":"brief"}\n```'
-        )
-        trailing = (
-            '{"decision":"DEFECT","justification":"brief"} trailing prose'
-        )
+        missing = '{"decision":"DEFECT","justification":"brief"'
+        missing_other_words = '{"decision":"DEFECT","justification":"different"'
+        trailing_comma = '{"decision":"DEFECT","justification":"brief",}'
 
         class ContractFailures(FakeTransport):
             def __init__(inner):
                 super().__init__()
-                inner.failures = iter((fenced, fenced, fenced, trailing))
+                inner.failures = iter((missing, missing_other_words, missing, trailing_comma))
 
             def complete(inner, request):
                 inner.calls.append(request)
@@ -571,7 +568,7 @@ class AttritionRetryTests(ExecutionTestCase):
         transport = ContractFailures()
         first = self.runner(params, transport).run()
         class_a = first["pause_detail"]["parser_failure_class"]
-        self.assertIn("markdown_fenced_valid_json", class_a)
+        self.assertEqual(class_a, "final_decision:missing_closing_delimiter")
         with self.assertRaisesRegex(ValueError, "does not match"):
             self.runner(params, transport).run(
                 resume=True, approve_parser_review_class="final_decision:x:y",
@@ -581,7 +578,7 @@ class AttritionRetryTests(ExecutionTestCase):
         )
         self.assertEqual(second["run_status"], "PAUSED_BEHAVIORAL_PARSER_REVIEW")
         class_b = second["pause_detail"]["parser_failure_class"]
-        self.assertIn("trailing_prose_after_valid_json", class_b)
+        self.assertEqual(class_b, "final_decision:trailing_comma")
         self.assertNotEqual(class_a, class_b)
         self.assertEqual(len(self.rows(params, "parser_review_events.jsonl")), 1)
         final = self.runner(params, transport).run(
@@ -595,7 +592,7 @@ class AttritionRetryTests(ExecutionTestCase):
         self.assertEqual(len(failures), 4)
         self.assertEqual(
             [row["raw_final_response"] for row in failures],
-            [fenced, fenced, fenced, trailing],
+            [missing, missing_other_words, missing, trailing_comma],
         )
         failed_ids = {row["trial_id"] for row in failures}
         attempts = [
@@ -605,6 +602,99 @@ class AttritionRetryTests(ExecutionTestCase):
         self.assertEqual(len(attempts), 4)
         self.assertTrue(all(row["attempt_number"] == 1 for row in attempts))
         validate_run_integrity(params.run_dir, require_completed=True)
+
+    def test_15d_residual_malformed_json_approval_is_occurrence_scoped(self):
+        residuals = iter((
+            '{"decision" "DEFECT"}',
+            '{"decision" "COOPERATE"}',
+            '{"justification" "brief"}',
+        ))
+
+        class ResidualFailures(FakeTransport):
+            def complete(inner, request):
+                inner.calls.append(request)
+                if request.metadata["stage"] == "final_decision":
+                    try:
+                        raw = next(residuals)
+                    except StopIteration:
+                        return success_for(request)
+                    return NormalizedResponse(
+                        status="success", raw_response=raw, http_status=200,
+                        finish_reason="stop",
+                    )
+                return success_for(request)
+
+        params = self.params(n=2)
+        transport = ResidualFailures()
+        first = self.runner(params, transport).run()
+        failure_class = first["pause_detail"]["parser_failure_class"]
+        self.assertEqual(failure_class, "final_decision:other_malformed_json")
+        second = self.runner(params, transport).run(
+            resume=True, approve_parser_review_class=failure_class,
+        )
+        self.assertEqual(second["run_status"], "PAUSED_BEHAVIORAL_PARSER_REVIEW")
+        self.assertEqual(second["pause_detail"]["parser_failure_class"], failure_class)
+        final = self.runner(params, transport).run(
+            resume=True, approve_parser_review_class=failure_class,
+        )
+        self.assertEqual(final["run_status"], "COMPLETED")
+        reviews = self.rows(params, "parser_review_events.jsonl")
+        self.assertEqual(len(reviews), 2)
+        self.assertTrue(all(row["review_scope"] == "occurrence" for row in reviews))
+        self.assertEqual(next(iter(final["reviewed_parser_failure_classes"].values())), [])
+        validate_run_integrity(params.run_dir, require_completed=True)
+
+    def test_15e_parser_class_approval_does_not_cross_runs_or_configurations(self):
+        class TwoMissingDelimiters(FakeTransport):
+            def __init__(inner):
+                super().__init__()
+                inner.remaining = 2
+
+            def complete(inner, request):
+                inner.calls.append(request)
+                if request.metadata["stage"] == "final_decision" and inner.remaining:
+                    inner.remaining -= 1
+                    return NormalizedResponse(
+                        status="success",
+                        raw_response='{"decision":"DEFECT","justification":"brief"',
+                        http_status=200, finish_reason="stop",
+                    )
+                return success_for(request)
+
+        first_params = self.params(run_id="approval-run-a")
+        first_transport = TwoMissingDelimiters()
+        first = self.runner(first_params, first_transport).run()
+        failure_class = first["pause_detail"]["parser_failure_class"]
+        self.runner(first_params, first_transport).run(
+            resume=True, approve_parser_review_class=failure_class,
+        )
+        second_params = self.params(run_id="approval-run-b")
+        second = self.runner(second_params, TwoMissingDelimiters()).run()
+        self.assertEqual(second["run_status"], "PAUSED_BEHAVIORAL_PARSER_REVIEW")
+        self.assertEqual(second["pause_detail"]["parser_failure_class"], failure_class)
+
+        other_config = create_model_config(
+            provider="nebius", model_alias="qwen3_32b", reasoning_mode="on",
+        )
+        multi_params = self.params(
+            run_id="approval-configs", model_configs=(self.config, other_config),
+        )
+        transports = {
+            model_config_id(self.config): TwoMissingDelimiters(),
+            model_config_id(other_config): TwoMissingDelimiters(),
+        }
+        first_config_pause = self.runner(multi_params, transports).run()
+        approved_config = first_config_pause["pause_detail"]["model_config_id"]
+        second_config_pause = self.runner(multi_params, transports).run(
+            resume=True,
+            approve_parser_review_class=first_config_pause["pause_detail"]["parser_failure_class"],
+        )
+        self.assertEqual(
+            second_config_pause["run_status"], "PAUSED_BEHAVIORAL_PARSER_REVIEW",
+        )
+        self.assertNotEqual(
+            second_config_pause["pause_detail"]["model_config_id"], approved_config,
+        )
 
     def test_16_transient_failure_retries_and_attempt_numbers(self):
         rate = NormalizedResponse(status="error", raw_response="slow", http_status=429)
@@ -728,6 +818,7 @@ class ResumeSafetyTests(ExecutionTestCase):
         self.assertEqual(manifest["prompt_hash"], prompt_templates_hash())
         self.assertEqual(manifest["dataset_role"], "synthetic")
         self.assertEqual(manifest["response_qc_version"], RESPONSE_QC_VERSION)
+        self.assertEqual(RESPONSE_QC_VERSION, "promise_switch_response_qc_v3")
 
 
 class RateLimitAndProviderTests(ExecutionTestCase):
