@@ -96,7 +96,9 @@ MODEL_DEFINITIONS: dict[tuple[str, str], ModelDefinition] = {
         model_id="deepseek-ai/DeepSeek-V4-Pro",
         reasoning_capability="fixed_on",
         default_reasoning_mode="on",
-        request_kwargs_by_mode={"on": {"thinking": {"type": "enabled"}}},
+        request_kwargs_by_mode={
+            "on": {"chat_template_kwargs": {"thinking": True, "reasoning_effort": "high"}},
+        },
         production_max_output_tokens_by_mode={"on": 2048},
     ),
     ("nebius", "deepseek_v4_pro_nebius_thinking_off"): ModelDefinition(
@@ -105,7 +107,9 @@ MODEL_DEFINITIONS: dict[tuple[str, str], ModelDefinition] = {
         model_id="deepseek-ai/DeepSeek-V4-Pro",
         reasoning_capability="fixed_off",
         default_reasoning_mode="off",
-        request_kwargs_by_mode={"off": {"thinking": {"type": "disabled"}}},
+        request_kwargs_by_mode={
+            "off": {"chat_template_kwargs": {"thinking": False}},
+        },
         production_max_output_tokens_by_mode={"off": 2048},
     ),
     ("nebius", "deepseek_v4_flash_nebius_thinking_on"): ModelDefinition(

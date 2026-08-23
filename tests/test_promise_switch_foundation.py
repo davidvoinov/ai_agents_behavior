@@ -511,34 +511,55 @@ class ProviderClientSchemaTests(unittest.TestCase):
                 self.assertNotIn("enable_thinking", serialized)
                 self.assertNotIn('"thinking"', serialized)
 
-    def test_deepseek_pro_and_flash_have_explicit_paired_thinking_requests(self):
-        families = {
-            "deepseek_v4_pro_nebius": "deepseek-ai/DeepSeek-V4-Pro",
-            "deepseek_v4_flash_nebius": "deepseek-ai/DeepSeek-V4-Flash",
+    def test_deepseek_pro_has_validated_chat_template_thinking_requests(self):
+        """DeepSeek V4 Pro's native `thinking: {"type": ...}` toggle produced no
+        observable reasoning signal on the Nebius serving path (verified via paired
+        live diagnostic: identical null reasoning_content/zero reasoning_tokens in
+        both states). The chat-template-layer toggle was validated instead."""
+        expected_kwargs = {
+            "on": {"chat_template_kwargs": {"thinking": True, "reasoning_effort": "high"}},
+            "off": {"chat_template_kwargs": {"thinking": False}},
         }
-        for alias_stem, model_id in families.items():
-            configs = {}
-            for mode, toggle in (("on", "enabled"), ("off", "disabled")):
-                alias = f"{alias_stem}_thinking_{mode}"
-                config = create_model_config(
-                    provider="nebius", model_alias=alias, reasoning_mode=mode,
-                )
-                request = ProviderAgnosticClient(config).build_request(
-                    messages=[{"role": "user", "content": "offline"}],
-                    temperature=1.0, max_tokens=2048,
-                )
-                self.assertEqual(config.model_id, model_id)
-                self.assertEqual(config.production_max_output_tokens, 2048)
-                self.assertEqual(config.provider_request_kwargs, {
-                    "thinking": {"type": toggle}
-                })
-                self.assertEqual(request.body["thinking"], {"type": toggle})
-                self.assertEqual(request.body["temperature"], 1.0)
-                configs[mode] = config
-            self.assertEqual(
-                configs["on"].production_max_output_tokens,
-                configs["off"].production_max_output_tokens,
+        configs = {}
+        for mode in ("on", "off"):
+            alias = f"deepseek_v4_pro_nebius_thinking_{mode}"
+            config = create_model_config(
+                provider="nebius", model_alias=alias, reasoning_mode=mode,
             )
+            request = ProviderAgnosticClient(config).build_request(
+                messages=[{"role": "user", "content": "offline"}],
+                temperature=1.0, max_tokens=2048,
+            )
+            self.assertEqual(config.model_id, "deepseek-ai/DeepSeek-V4-Pro")
+            self.assertEqual(config.production_max_output_tokens, 2048)
+            self.assertEqual(config.provider_request_kwargs, expected_kwargs[mode])
+            self.assertEqual(request.body["chat_template_kwargs"], expected_kwargs[mode]["chat_template_kwargs"])
+            self.assertEqual(request.body["temperature"], 1.0)
+            configs[mode] = config
+        self.assertEqual(
+            configs["on"].production_max_output_tokens,
+            configs["off"].production_max_output_tokens,
+        )
+
+    def test_deepseek_flash_still_uses_unvalidated_native_thinking_toggle(self):
+        """DeepSeek V4 Flash remains on the original native toggle shape pending its
+        own independent chat-template validation; only Pro has been corrected."""
+        for mode, toggle in (("on", "enabled"), ("off", "disabled")):
+            alias = f"deepseek_v4_flash_nebius_thinking_{mode}"
+            config = create_model_config(
+                provider="nebius", model_alias=alias, reasoning_mode=mode,
+            )
+            request = ProviderAgnosticClient(config).build_request(
+                messages=[{"role": "user", "content": "offline"}],
+                temperature=1.0, max_tokens=2048,
+            )
+            self.assertEqual(config.model_id, "deepseek-ai/DeepSeek-V4-Flash")
+            self.assertEqual(config.production_max_output_tokens, 2048)
+            self.assertEqual(config.provider_request_kwargs, {
+                "thinking": {"type": toggle}
+            })
+            self.assertEqual(request.body["thinking"], {"type": toggle})
+            self.assertEqual(request.body["temperature"], 1.0)
 
     def test_groq_gpt_oss_is_distinct_and_groq_llama_is_not_active(self):
         neb_oss = create_model_config(
