@@ -135,8 +135,8 @@ repeated trials rather than use near-deterministic decoding.
 | `minimax_m3_nebius_thinking_off` | `MiniMaxAI/MiniMax-M3` | Nebius Studio | thinking off | `chat_template_kwargs.thinking_mode="disabled"` | 1.0 / 2,048 | `PENDING_NEBIUS_LIVE_TOGGLE_VALIDATION` | One successful OFF probe | Clean MiniMax ON/OFF pair |
 | `deepseek_v4_pro_nebius_thinking_on` | `deepseek-ai/DeepSeek-V4-Pro` | Nebius Studio | thinking on | `chat_template_kwargs={"thinking":true,"reasoning_effort":"high"}` | 1.0 requested / 2,048 provisional | Validated: non-null `reasoning_content`, `reasoning_tokens>0` | None for toggle mechanics | Clean V4 Pro ON/OFF pair |
 | `deepseek_v4_pro_nebius_thinking_off` | `deepseek-ai/DeepSeek-V4-Pro` | Nebius Studio | thinking off | `chat_template_kwargs={"thinking":false}` | 1.0 requested / 2,048 provisional | Validated: null `reasoning_content`, `reasoning_tokens=0` | None for toggle mechanics | Clean V4 Pro ON/OFF pair |
-| `deepseek_v4_flash_nebius_thinking_on` | `deepseek-ai/DeepSeek-V4-Flash` | Nebius Studio | thinking on | `thinking.type="enabled"` | 1.0 requested / 2,048 provisional | `PENDING_NEBIUS_LIVE_TOGGLE_VALIDATION` | Verify Nebius preserves toggle and normal finish | Clean V4 Flash ON/OFF pair |
-| `deepseek_v4_flash_nebius_thinking_off` | `deepseek-ai/DeepSeek-V4-Flash` | Nebius Studio | thinking off | `thinking.type="disabled"` | 1.0 requested / 2,048 provisional | `PENDING_NEBIUS_LIVE_TOGGLE_VALIDATION` | Verify absent reasoning and normal finish | Clean V4 Flash ON/OFF pair |
+| `deepseek_v4_flash_nebius_thinking_on` | `deepseek-ai/DeepSeek-V4-Flash` | Nebius Studio | thinking on | `chat_template_kwargs={"thinking":true,"reasoning_effort":"high"}` | 1.0 requested / 2,048 provisional | Validated: non-null `reasoning_content`, `reasoning_tokens>0` | None for toggle mechanics | Clean V4 Flash ON/OFF pair |
+| `deepseek_v4_flash_nebius_thinking_off` | `deepseek-ai/DeepSeek-V4-Flash` | Nebius Studio | thinking off | `chat_template_kwargs={"thinking":false}` | 1.0 requested / 2,048 provisional | Validated: null `reasoning_content`, `reasoning_tokens=0` | None for toggle mechanics | Clean V4 Flash ON/OFF pair |
 | `kimi_k3_nebius` | `moonshotai/Kimi-K3` | Nebius Studio | current fixed/default configuration | none | 1.0 / 2,048 | Historically validated | None currently | Single model-family configuration |
 | `llama_3_3_70b` | `meta-llama/Llama-3.3-70B-Instruct` | Nebius Studio | fixed off | none | 1.0 / 256 | Historically validated | None currently | Single model-family configuration |
 | `gpt_oss_120b_nebius` | `openai/gpt-oss-120b` | Nebius Studio | fixed on, low effort | `reasoning_effort=low` | 1.0 / 2,048 | Historically validated | None currently | Same-model/two-provider control |
@@ -179,8 +179,11 @@ genuinely multi-step task, before any confirmatory trials were run. A paired
 live diagnostic confirmed Nebius instead honors the chat-template-layer
 control (`chat_template_kwargs={"thinking": bool, "reasoning_effort": "high"}`
 for ON), which produced a clean mechanical distinction. V4 Pro's registry
-entries were corrected to this shape prior to collection; V4 Flash remains on
-the native toggle pending its own independent validation.
+entries were corrected to this shape prior to collection. The same paired
+diagnostic was independently repeated for V4 Flash and produced the same
+result (non-null `reasoning_content`, `reasoning_tokens=40` ON; null
+`reasoning_content`, `reasoning_tokens=0` OFF); V4 Flash's registry entries
+were corrected identically, prior to any Flash confirmatory collection.
 
 A temperature-range robustness analysis is intended as future secondary work,
 not part of primary H8-H10 inference or the current six-condition matrix. Its

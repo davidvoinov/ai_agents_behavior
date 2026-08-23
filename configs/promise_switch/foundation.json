@@ -130,8 +130,9 @@
       "api_key_env": "NEBIUS_API_KEY",
       "base_url": "https://api.studio.nebius.com/v1/",
       "provider_request_kwargs": {
-        "thinking": {
-          "type": "enabled"
+        "chat_template_kwargs": {
+          "thinking": true,
+          "reasoning_effort": "high"
         }
       }
     },
@@ -145,8 +146,8 @@
       "api_key_env": "NEBIUS_API_KEY",
       "base_url": "https://api.studio.nebius.com/v1/",
       "provider_request_kwargs": {
-        "thinking": {
-          "type": "disabled"
+        "chat_template_kwargs": {
+          "thinking": false
         }
       }
     },

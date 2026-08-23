@@ -190,7 +190,7 @@ class ExactFinalPreflightTests(unittest.TestCase):
         cases = (
             ("nebius_uk", "glm_5_2_nebius_thinking_off", "off", "chat_template_kwargs", {"enable_thinking": False}),
             ("nebius", "minimax_m3_nebius_thinking_on", "on", "chat_template_kwargs", {"thinking_mode": "enabled"}),
-            ("nebius", "deepseek_v4_flash_nebius_thinking_off", "off", "thinking", {"type": "disabled"}),
+            ("nebius", "deepseek_v4_flash_nebius_thinking_off", "off", "chat_template_kwargs", {"thinking": False}),
             ("groq", "gpt_oss_120b_groq", "on", "reasoning_effort", "low"),
         )
         for provider, alias, mode, key, expected in cases:

@@ -541,10 +541,17 @@ class ProviderClientSchemaTests(unittest.TestCase):
             configs["off"].production_max_output_tokens,
         )
 
-    def test_deepseek_flash_still_uses_unvalidated_native_thinking_toggle(self):
-        """DeepSeek V4 Flash remains on the original native toggle shape pending its
-        own independent chat-template validation; only Pro has been corrected."""
-        for mode, toggle in (("on", "enabled"), ("off", "disabled")):
+    def test_deepseek_flash_has_validated_chat_template_thinking_requests(self):
+        """DeepSeek V4 Flash's native `thinking: {"type": ...}` toggle was replaced
+        with the chat-template-layer toggle after an independent paired live
+        diagnostic confirmed the same mechanism validated for Pro: non-null
+        reasoning_content/positive reasoning_tokens ON, null/zero OFF."""
+        expected_kwargs = {
+            "on": {"chat_template_kwargs": {"thinking": True, "reasoning_effort": "high"}},
+            "off": {"chat_template_kwargs": {"thinking": False}},
+        }
+        configs = {}
+        for mode in ("on", "off"):
             alias = f"deepseek_v4_flash_nebius_thinking_{mode}"
             config = create_model_config(
                 provider="nebius", model_alias=alias, reasoning_mode=mode,
@@ -555,11 +562,14 @@ class ProviderClientSchemaTests(unittest.TestCase):
             )
             self.assertEqual(config.model_id, "deepseek-ai/DeepSeek-V4-Flash")
             self.assertEqual(config.production_max_output_tokens, 2048)
-            self.assertEqual(config.provider_request_kwargs, {
-                "thinking": {"type": toggle}
-            })
-            self.assertEqual(request.body["thinking"], {"type": toggle})
+            self.assertEqual(config.provider_request_kwargs, expected_kwargs[mode])
+            self.assertEqual(request.body["chat_template_kwargs"], expected_kwargs[mode]["chat_template_kwargs"])
             self.assertEqual(request.body["temperature"], 1.0)
+            configs[mode] = config
+        self.assertEqual(
+            configs["on"].production_max_output_tokens,
+            configs["off"].production_max_output_tokens,
+        )
 
     def test_groq_gpt_oss_is_distinct_and_groq_llama_is_not_active(self):
         neb_oss = create_model_config(
