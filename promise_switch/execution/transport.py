@@ -16,6 +16,11 @@ import certifi
 from ..client import CompletionTransport, RequestSpec
 from ..schemas import NormalizedResponse
 
+# Some providers front their API with edge bot-protection (e.g. Cloudflare) that
+# blocks the default urllib User-Agent. A static, identifiable client string
+# avoids that without impersonating a browser.
+REQUEST_USER_AGENT = "promise-switch-research/1.0"
+
 
 class OpenAICompatibleTransport(CompletionTransport):
     def __init__(
@@ -35,7 +40,11 @@ class OpenAICompatibleTransport(CompletionTransport):
                 error_metadata={"type": "missing_api_key", "api_key_env": request.api_key_env},
             )
         url = request.base_url.rstrip("/") + "/chat/completions"
-        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": REQUEST_USER_AGENT,
+        }
         http_request = urllib.request.Request(
             url, data=json.dumps(request.body).encode("utf-8"), headers=headers, method="POST"
         )

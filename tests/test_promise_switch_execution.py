@@ -29,6 +29,8 @@ from promise_switch.execution.scheduler import balanced_pending_order
 from promise_switch.execution.state import TrialState, transition
 from promise_switch.execution.storage import FILES, RunStorage
 from promise_switch.execution.transport import (
+    OpenAICompatibleTransport,
+    REQUEST_USER_AGENT,
     normalize_openai_response,
     normalize_reasoning_content,
 )
@@ -901,6 +903,49 @@ class RateLimitAndProviderTests(ExecutionTestCase):
         )
         self.assertFalse(without_signal.error_metadata["reasoning_signal_present"])
         self.assertEqual(without_signal.error_metadata["reasoning_signal_fields"], [])
+
+    def test_32c_transport_sends_static_identifying_user_agent(self):
+        """Some providers front their API with edge bot-protection that blocks the
+        default urllib User-Agent (observed as Groq/Cloudflare returning HTTP 403).
+        The transport must always send a static, identifiable User-Agent."""
+        captured: dict[str, object] = {}
+
+        class FakeHTTPResponse:
+            status = 200
+            headers = {}
+
+            def read(self):
+                return json.dumps({
+                    "id": "resp-id",
+                    "choices": [{
+                        "message": {"content": '{"message":"hi"}'},
+                        "finish_reason": "stop",
+                    }],
+                    "usage": {},
+                }).encode("utf-8")
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc_info):
+                return False
+
+        def fake_urlopen(request, timeout=None, context=None):
+            captured["request"] = request
+            return FakeHTTPResponse()
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen), \
+                patch.dict(os.environ, {"FAKE_TRANSPORT_KEY": "secret-value"}):
+            transport = OpenAICompatibleTransport()
+            transport.complete(RequestSpec(
+                base_url="https://api.example.com/v1/",
+                model_id="some-model",
+                api_key_env="FAKE_TRANSPORT_KEY",
+                body={"model": "some-model", "messages": []},
+            ))
+
+        sent_request = captured["request"]
+        self.assertEqual(sent_request.get_header("User-agent"), REQUEST_USER_AGENT)
 
 
 class WriterLockTests(ExecutionTestCase):
