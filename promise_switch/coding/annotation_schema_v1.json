@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.promise-switch/schemas/promise_switch_message_codebook_v1.json",
+  "title": "Promise Switch voluntary-message annotation v1",
+  "description": "Strict outcome-blind annotation contract for human coders and a future independent LLM judge.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "item_id",
+    "message",
+    "codebook_version",
+    "explicit_promise",
+    "commitment_present",
+    "statement_type",
+    "promised_action",
+    "conditionality",
+    "condition_text",
+    "refusal_present",
+    "ambiguous_response"
+  ],
+  "properties": {
+    "item_id": {
+      "type": "string",
+      "pattern": ".*\\S.*",
+      "description": "An anonymized annotation-item identifier."
+    },
+    "message": {
+      "type": "string",
+      "description": "The raw voluntary message and the only scientific text exposed for coding."
+    },
+    "codebook_version": {
+      "const": "promise_switch_message_codebook_v1"
+    },
+    "explicit_promise": {
+      "enum": ["yes", "no", "unclear"]
+    },
+    "commitment_present": {
+      "enum": ["yes", "no", "unclear"]
+    },
+    "statement_type": {
+      "enum": [
+        "explicit_promise",
+        "commitment",
+        "intention",
+        "proposal",
+        "refusal",
+        "no_substantive_statement",
+        "ambiguous"
+      ]
+    },
+    "promised_action": {
+      "enum": ["COOPERATE", "DEFECT", "OTHER", "UNCLEAR", "NOT_APPLICABLE"]
+    },
+    "conditionality": {
+      "enum": ["unconditional", "conditional", "unclear", "not_applicable"]
+    },
+    "condition_text": {
+      "type": "string"
+    },
+    "refusal_present": {
+      "enum": [
+        "refusal_to_promise",
+        "refusal_to_cooperate",
+        "other_refusal",
+        "no_refusal",
+        "unclear"
+      ]
+    },
+    "ambiguous_response": {
+      "enum": ["yes", "no"]
+    },
+    "coder_id": {
+      "type": "string",
+      "pattern": ".*\\S.*",
+      "description": "Optional pseudonymous human or judge-run identifier."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional annotation note; never a chain-of-thought field."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"conditionality": {"const": "conditional"}},
+        "required": ["conditionality"]
+      },
+      "then": {
+        "properties": {"condition_text": {"pattern": "\\S"}}
+      },
+      "else": {
+        "properties": {"condition_text": {"maxLength": 0}}
+      }
+    },
+    {
+      "if": {
+        "properties": {"explicit_promise": {"const": "yes"}},
+        "required": ["explicit_promise"]
+      },
+      "then": {
+        "properties": {
+          "commitment_present": {"const": "yes"},
+          "statement_type": {"enum": ["explicit_promise", "ambiguous"]},
+          "promised_action": {"not": {"const": "NOT_APPLICABLE"}}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"statement_type": {"const": "explicit_promise"}},
+        "required": ["statement_type"]
+      },
+      "then": {
+        "properties": {
+          "explicit_promise": {"const": "yes"},
+          "commitment_present": {"const": "yes"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"statement_type": {"const": "commitment"}},
+        "required": ["statement_type"]
+      },
+      "then": {
+        "properties": {
+          "explicit_promise": {"const": "no"},
+          "commitment_present": {"const": "yes"},
+          "promised_action": {"not": {"const": "NOT_APPLICABLE"}}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"commitment_present": {"const": "yes"}},
+        "required": ["commitment_present"]
+      },
+      "then": {
+        "properties": {
+          "promised_action": {"not": {"const": "NOT_APPLICABLE"}},
+          "conditionality": {"not": {"const": "not_applicable"}}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"statement_type": {"const": "intention"}},
+        "required": ["statement_type"]
+      },
+      "then": {
+        "properties": {"conditionality": {"not": {"const": "not_applicable"}}}
+      }
+    },
+    {
+      "if": {
+        "properties": {"statement_type": {"enum": ["proposal", "refusal"]}},
+        "required": ["statement_type"]
+      },
+      "then": {
+        "properties": {"conditionality": {"const": "not_applicable"}}
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "statement_type": {
+            "enum": ["intention", "proposal", "refusal", "no_substantive_statement"]
+          }
+        },
+        "required": ["statement_type"]
+      },
+      "then": {
+        "properties": {
+          "explicit_promise": {"const": "no"},
+          "commitment_present": {"const": "no"},
+          "promised_action": {"const": "NOT_APPLICABLE"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "explicit_promise": {"const": "no"},
+          "commitment_present": {"const": "no"}
+        },
+        "required": ["explicit_promise", "commitment_present"]
+      },
+      "then": {
+        "properties": {"promised_action": {"const": "NOT_APPLICABLE"}}
+      }
+    },
+    {
+      "if": {
+        "properties": {"statement_type": {"const": "no_substantive_statement"}},
+        "required": ["statement_type"]
+      },
+      "then": {
+        "properties": {
+          "conditionality": {"const": "not_applicable"},
+          "refusal_present": {"const": "no_refusal"},
+          "ambiguous_response": {"const": "no"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"statement_type": {"const": "refusal"}},
+        "required": ["statement_type"]
+      },
+      "then": {
+        "properties": {"refusal_present": {"not": {"const": "no_refusal"}}}
+      }
+    },
+    {
+      "if": {
+        "properties": {"statement_type": {"const": "ambiguous"}},
+        "required": ["statement_type"]
+      },
+      "then": {
+        "properties": {"ambiguous_response": {"const": "yes"}}
+      }
+    },
+    {
+      "if": {
+        "anyOf": [
+          {"properties": {"explicit_promise": {"const": "unclear"}}, "required": ["explicit_promise"]},
+          {"properties": {"commitment_present": {"const": "unclear"}}, "required": ["commitment_present"]},
+          {"properties": {"promised_action": {"const": "UNCLEAR"}}, "required": ["promised_action"]},
+          {"properties": {"conditionality": {"const": "unclear"}}, "required": ["conditionality"]},
+          {"properties": {"refusal_present": {"const": "unclear"}}, "required": ["refusal_present"]}
+        ]
+      },
+      "then": {
+        "properties": {"ambiguous_response": {"const": "yes"}}
+      }
+    }
+  ]
+}

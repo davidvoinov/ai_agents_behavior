@@ -239,8 +239,9 @@ each provider/model/reasoning configuration. The confirmatory family is H8
 Switch), and H10 (Induced No-Switch vs Expectation Without Own Promise), with
 Holm correction across those three tests. Voluntary Message--No-Switch versus
 Voluntary Message--Switch is a secondary randomized ITT analysis; the
-explicit-promiser subset is a further
-selected-subgroup secondary analysis.
+explicit-promiser subset is a further selected-subgroup secondary analysis,
+limited to `explicit_promise=yes`, `promised_action=COOPERATE`,
+`conditionality=unconditional`, and `ambiguous_response=no`.
 Primary contrast estimates use mechanically valid completed actions and report
 terminal/completed attrition denominators plus worst-case binary-outcome risk-
 difference bounds for missing actions. Behavioral failures remain in the
@@ -256,15 +257,17 @@ pooled observation-level estimate, new significance test, or claim about all
 language models.
 
 `codebook.py` validates semantic coding records and derives compliance from the
-mechanically parsed final action. It never rewrites that action. Actual human
-coding, selection of an independent LLM judge after discussion with David, a
-meaningful Cohen-kappa estimate, and the final semantic codebook freeze remain
-deferred. The future independent judge will use temperature `0` for coding
-reproducibility, without claiming absolute backend determinism; its model is
-still undecided and no judging is implemented. The future confirmatory target
-is a minimum `n=100` completed observations per condition per model configuration; this
-does not authorize collection. No real provider call is part of the offline
-test suite.
+mechanically parsed final action. It never rewrites that action. The field
+contract and validation mechanics existed before confirmatory collection; the
+complete post-collection semantic rubric is now frozen as
+`promise_switch_message_codebook_v1` before any real-message semantic coding or
+promise-conditioned analysis. The human rubric, strict outcome-blind JSON
+Schema, empty CSV annotation template, and future judge prompt are under
+`promise_switch/coding/`. The judge model remains undecided, its intended
+temperature remains `0`, and no judging or real reliability analysis has been
+performed. `agreement_report` calculates field-wise Cohen's kappa and raw
+percentage agreement while excluding free-text `condition_text`. No real
+provider call is part of the offline test suite.
 
 ## Offline power planning
 

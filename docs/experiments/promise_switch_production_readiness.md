@@ -235,8 +235,10 @@ The repository remains consistent on six conditions; payoffs `(8,8)` versus
 `(10,0)`; exact induced promise and expectation wording; B1/B2 switch logic;
 durable voluntary message before assignment; exact decision JSON; H8, induced
 H9, and H10 with Holm correction; voluntary ITT as secondary; the explicit-
-promiser subset as further selected-subgroup secondary; model-configuration-
-specific primary inference; and the future minimum completed-cell target `n=100`.
+promiser subset as further selected-subgroup secondary, restricted to explicit
+unconditional COOPERATE promises with `ambiguous_response=no`; model-
+configuration-specific primary inference; and the future minimum completed-cell
+target `n=100`.
 
 ## Deferred work
 
@@ -246,11 +248,12 @@ standalone model-specific primary analysis unit. Multiple completed run
 directories are combined only for the later descriptive cross-model display.
 The exact terminal workflow is in `promise_switch_sequential_runbook.md`.
 
-- Codebook software mechanics are validated. Human coding, selection of an
-  independent LLM judge after discussion with David, actual Cohen's kappa, and
-  the final semantic codebook freeze remain pending. No new Qwen data are needed
-  solely for kappa. The future independent judge will use temperature `0` for
-  coding reproducibility, but the judge model remains undecided; temperature
+- The codebook field/validation mechanics existed before collection. The complete
+  semantic rubric was finalized after collection as
+  `promise_switch_message_codebook_v1` and is frozen before real-message semantic
+  coding or promise-conditioned analysis. No labels or outcomes informed it.
+  Human/LLM annotation and actual agreement estimation remain pending. The
+  future judge temperature is `0`, but its model remains undecided; temperature
   zero is not claimed to guarantee absolute backend determinism.
 - Proprietary GPT and Claude remain intended, expensive, and deferred.
 - Groq is the approved GPT-OSS second-provider identity. Groq Llama is skipped

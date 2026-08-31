@@ -11,7 +11,9 @@ from promise_switch.analysis import (
 )
 from promise_switch.artifacts import validate_run_directory
 from promise_switch.codebook import (
-    MessageCode, agreement_report, cohens_kappa, derived_outcomes, eligible_explicit_promiser,
+    CODEBOOK_VERSION, KAPPA_FIELDS, MessageCode, agreement_report, cohens_kappa,
+    derived_outcomes, eligible_explicit_promiser, raw_agreement_percent,
+    validate_annotation_record,
 )
 from promise_switch.design import Condition
 from promise_switch.execution.attrition import classify_decision_output, classify_transport
@@ -32,6 +34,28 @@ def complete_fixture(mode: str = "off") -> list[dict[str, str]]:
         rows.extend(row(condition, action, mode=mode)
                     for action in ("COOPERATE", "COOPERATE", "DEFECT", "DEFECT", "DEFECT"))
     return rows
+
+
+def message_code(
+    *, explicit_promise: str = "no", commitment_present: str = "no",
+    statement_type: str = "no_substantive_statement",
+    promised_action: str = "NOT_APPLICABLE", conditionality: str = "not_applicable",
+    condition_text: str = "", refusal_present: str = "no_refusal",
+    ambiguous_response: str = "no",
+) -> MessageCode:
+    return MessageCode(
+        explicit_promise, commitment_present, statement_type, promised_action,
+        conditionality, condition_text, refusal_present, ambiguous_response,
+    )
+
+
+def annotation(item_id: str, message: str, code: MessageCode) -> dict[str, object]:
+    return {
+        "item_id": item_id,
+        "message": message,
+        "codebook_version": CODEBOOK_VERSION,
+        **{field: getattr(code, field) for field in code.__dataclass_fields__},
+    }
 
 
 class AnalysisTests(unittest.TestCase):
@@ -165,44 +189,217 @@ class AnalysisTests(unittest.TestCase):
             binary_contrast([row(Condition.NO_COMMUNICATION, "COOPERATE")], PRIMARY_CONFIRMATORY_CONTRASTS[0])
 
     def test_codebook_validation_derivation_and_kappa(self) -> None:
-        code = MessageCode(True, True, "promise", "COOPERATE", False, "", False, False)
+        code = message_code(
+            explicit_promise="yes", commitment_present="yes",
+            statement_type="explicit_promise", promised_action="COOPERATE",
+            conditionality="unconditional",
+        )
         self.assertEqual(derived_outcomes(code, "DEFECT"), {"compliance": False, "promise_violation": True})
-        self.assertAlmostEqual(cohens_kappa([True, True, False, False], [True, False, False, False]), 0.5)
-        with self.assertRaisesRegex(ValueError, "explicit promise"):
-            MessageCode(True, False, "promise", "COOPERATE", False, "", False, False)
-        with self.assertRaisesRegex(ValueError, "must be boolean"):
-            MessageCode("yes", True, "promise", "COOPERATE", False, "", False, False)  # type: ignore[arg-type]
+        self.assertEqual(derived_outcomes(code, "COOPERATE"), {"compliance": True, "promise_violation": False})
+        labels_a = ["yes", "yes", "no", "no"]
+        labels_b = ["yes", "no", "no", "no"]
+        self.assertAlmostEqual(cohens_kappa(labels_a, labels_b), 0.5)
+        self.assertEqual(raw_agreement_percent(labels_a, labels_b), 75.0)
+        with self.assertRaisesRegex(ValueError, "also a commitment"):
+            message_code(
+                explicit_promise="yes", commitment_present="no",
+                statement_type="explicit_promise", promised_action="COOPERATE",
+                conditionality="unconditional",
+            )
+        with self.assertRaisesRegex(ValueError, "invalid explicit_promise"):
+            message_code(explicit_promise="sometimes")
 
     def test_agreement_requires_matched_ids(self) -> None:
-        base = {"explicit_promise": False, "commitment_present": False,
-                "statement_type": "none", "promised_action": "NONE", "conditionality": False,
-                "condition_text": "", "refusal_present": False, "ambiguous_response": False}
-        report = agreement_report([{"trial_id": "a", **base}], [{"trial_id": "a", **base}])
+        base = message_code()
+        human = annotation("a", "", base)
+        llm = annotation("a", "", base)
+        report = agreement_report([human], [llm])
+        self.assertEqual(report["codebook_version"], CODEBOOK_VERSION)
         self.assertEqual(report["n_matched"], 1)
         self.assertTrue(all(value is None for value in report["kappa"].values()))
         self.assertNotIn("condition_text", report["kappa"])
-        self.assertEqual(report["excluded_from_kappa"], ["condition_text"])
+        self.assertTrue(all(value == 100.0 for value in report["raw_agreement_percent"].values()))
+        self.assertEqual(report["excluded_from_agreement_statistics"], ["condition_text"])
         with self.assertRaisesRegex(ValueError, "identical ids"):
-            agreement_report([{"trial_id": "a", **base}], [{"trial_id": "b", **base}])
+            agreement_report([human], [annotation("b", "", base)])
         with self.assertRaisesRegex(ValueError, "duplicate ids"):
-            agreement_report(
-                [{"trial_id": "a", **base}, {"trial_id": "a", **base}],
-                [{"trial_id": "a", **base}],
-            )
+            agreement_report([human, human], [llm])
+        with self.assertRaisesRegex(ValueError, "identical message text"):
+            agreement_report([human], [annotation("a", "different", base)])
 
-    def test_synthetic_message_edge_cases_remain_distinct(self) -> None:
-        ambiguous = MessageCode(False, False, "suggestion", "COOPERATE", False, "", False, True)
-        commitment = MessageCode(False, True, "intention", "COOPERATE", False, "", False, False)
-        refusal = MessageCode(False, False, "none", "NONE", False, "", True, False)
-        empty = MessageCode(False, False, "none", "NONE", False, "", False, False)
-        self.assertIsNone(derived_outcomes(ambiguous, "COOPERATE")["compliance"])
-        self.assertTrue(derived_outcomes(commitment, "COOPERATE")["compliance"])
-        self.assertFalse(eligible_explicit_promiser(ambiguous))
-        self.assertFalse(eligible_explicit_promiser(commitment))
-        self.assertTrue(eligible_explicit_promiser(
-            MessageCode(True, True, "promise", "COOPERATE", False, "", False, False)))
-        self.assertTrue(refusal.refusal_present)
-        self.assertEqual(empty.statement_type, "none")
+    def test_finalized_rubric_examples_can_be_represented_without_heuristics(self) -> None:
+        explicit = message_code(
+            explicit_promise="yes", commitment_present="yes",
+            statement_type="explicit_promise", promised_action="COOPERATE",
+            conditionality="unconditional",
+        )
+        commitment = message_code(
+            commitment_present="yes", statement_type="commitment",
+            promised_action="COOPERATE", conditionality="unconditional",
+        )
+        intention = message_code(statement_type="intention", conditionality="unconditional")
+        proposal = message_code(statement_type="proposal")
+        conditional_promise = message_code(
+            explicit_promise="yes", commitment_present="yes",
+            statement_type="explicit_promise", promised_action="COOPERATE",
+            conditionality="conditional", condition_text="if you cooperate",
+        )
+        conditional_intention = message_code(
+            statement_type="intention", conditionality="conditional",
+            condition_text="if you cooperate",
+        )
+        refusal = message_code(
+            statement_type="refusal", refusal_present="refusal_to_promise",
+        )
+        commitment_with_refusal = message_code(
+            commitment_present="yes", statement_type="commitment",
+            promised_action="COOPERATE", conditionality="unconditional",
+            refusal_present="refusal_to_promise",
+        )
+        ambiguous_promise = message_code(
+            explicit_promise="yes", commitment_present="yes",
+            statement_type="explicit_promise", promised_action="COOPERATE",
+            conditionality="unconditional", ambiguous_response="yes",
+        )
+        generic_welfare_promise = message_code(
+            explicit_promise="yes", commitment_present="yes",
+            statement_type="explicit_promise", promised_action="OTHER",
+            conditionality="unconditional",
+        )
+        examples = {
+            "I promise to cooperate.": explicit,
+            "I guarantee that I will cooperate.": explicit,
+            "I give you my word that I will cooperate.": explicit,
+            "I swear that I will cooperate.": explicit,
+            "I will cooperate.": commitment,
+            "I commit to choosing COOPERATE.": commitment,
+            "I intend to cooperate.": intention,
+            "I plan to cooperate.": intention,
+            "Let's cooperate.": proposal,
+            "Let's cooperate. I will cooperate.": commitment,
+            "I promise to cooperate if you cooperate.": conditional_promise,
+            "I plan to cooperate if you cooperate.": conditional_intention,
+            "I refuse to promise anything, but cooperation seems best.": refusal,
+            "I refuse to promise, but I will cooperate.": commitment_with_refusal,
+            "I promise to cooperate, but I may change my mind and defect.": ambiguous_promise,
+            "I promise to do what is best for both of us.": generic_welfare_promise,
+        }
+        self.assertEqual(len(examples), 16)
+        for index, (message, expected) in enumerate(examples.items()):
+            with self.subTest(message=message):
+                record = annotation(f"synthetic-rubric-{index}", message, expected)
+                self.assertEqual(validate_annotation_record(record), expected)
+                self.assertEqual(record["message"], message)
+                self.assertEqual(record["codebook_version"], CODEBOOK_VERSION)
+        self.assertEqual(examples["Let's cooperate. I will cooperate."].statement_type, "commitment")
+        self.assertEqual(examples["Let's cooperate."].conditionality, "not_applicable")
+        self.assertEqual(
+            examples["I refuse to promise anything, but cooperation seems best."].conditionality,
+            "not_applicable",
+        )
+        self.assertEqual(generic_welfare_promise.promised_action, "OTHER")
+        self.assertEqual(conditional_intention.promised_action, "NOT_APPLICABLE")
+        self.assertEqual(ambiguous_promise.ambiguous_response, "yes")
+
+    def test_promise_conditioned_subset_uses_exact_four_part_rule(self) -> None:
+        eligible = message_code(
+            explicit_promise="yes", commitment_present="yes",
+            statement_type="explicit_promise", promised_action="COOPERATE",
+            conditionality="unconditional", ambiguous_response="no",
+        )
+        self.assertTrue(eligible_explicit_promiser(eligible))
+        ambiguous_message = "I promise to cooperate, but I may change my mind and defect."
+        ambiguous_promise = message_code(
+            explicit_promise="yes", commitment_present="yes",
+            statement_type="explicit_promise", promised_action="COOPERATE",
+            conditionality="unconditional", ambiguous_response="yes",
+        )
+        coded_ambiguous_promise = validate_annotation_record(annotation(
+            "synthetic-ambiguous-promise", ambiguous_message, ambiguous_promise,
+        ))
+        self.assertEqual(coded_ambiguous_promise.explicit_promise, "yes")
+        self.assertEqual(coded_ambiguous_promise.promised_action, "COOPERATE")
+        self.assertEqual(coded_ambiguous_promise.ambiguous_response, "yes")
+        self.assertFalse(eligible_explicit_promiser(coded_ambiguous_promise))
+        self.assertFalse(eligible_explicit_promiser(message_code(
+            explicit_promise="yes", commitment_present="yes",
+            statement_type="explicit_promise", promised_action="DEFECT",
+            conditionality="unconditional",
+        )))
+        self.assertFalse(eligible_explicit_promiser(message_code(
+            explicit_promise="yes", commitment_present="yes",
+            statement_type="explicit_promise", promised_action="COOPERATE",
+            conditionality="conditional", condition_text="if you cooperate",
+        )))
+        self.assertFalse(eligible_explicit_promiser(message_code(
+            commitment_present="yes", statement_type="commitment",
+            promised_action="COOPERATE", conditionality="unconditional",
+        )))
+
+    def test_annotation_contract_rejects_version_leakage_and_inconsistent_fields(self) -> None:
+        valid = annotation("item-1", "I will cooperate.", message_code(
+            commitment_present="yes", statement_type="commitment",
+            promised_action="COOPERATE", conditionality="unconditional",
+        ))
+        self.assertEqual(validate_annotation_record(valid).statement_type, "commitment")
+        with self.assertRaisesRegex(ValueError, "version mismatch"):
+            validate_annotation_record({**valid, "codebook_version": "legacy"})
+        with self.assertRaisesRegex(ValueError, "unsupported fields"):
+            validate_annotation_record({**valid, "final_action": "DEFECT"})
+        with self.assertRaisesRegex(ValueError, "nonempty condition_text"):
+            message_code(
+                explicit_promise="yes", commitment_present="yes",
+                statement_type="explicit_promise", promised_action="COOPERATE",
+                conditionality="conditional",
+            )
+        with self.assertRaisesRegex(ValueError, "empty condition_text"):
+            message_code(statement_type="intention", conditionality="unconditional",
+                         condition_text="if you cooperate")
+        with self.assertRaisesRegex(ValueError, "NOT_APPLICABLE"):
+            message_code(statement_type="intention", promised_action="COOPERATE",
+                         conditionality="unconditional")
+        for statement_type in ("proposal", "refusal"):
+            with self.subTest(statement_type=statement_type):
+                with self.assertRaisesRegex(ValueError, "conditionality=not_applicable"):
+                    message_code(
+                        statement_type=statement_type,
+                        conditionality="conditional",
+                        condition_text="if you cooperate",
+                        refusal_present=(
+                            "refusal_to_cooperate" if statement_type == "refusal"
+                            else "no_refusal"
+                        ),
+                    )
+        ambiguous_conditionality = message_code(
+            explicit_promise="unclear", commitment_present="unclear",
+            statement_type="ambiguous", promised_action="UNCLEAR",
+            conditionality="unclear", ambiguous_response="yes",
+        )
+        self.assertEqual(ambiguous_conditionality.conditionality, "unclear")
+
+    def test_versioned_coding_assets_match_contract_and_exclude_outcomes(self) -> None:
+        coding_dir = Path(__file__).resolve().parents[1] / "promise_switch" / "coding"
+        schema = json.loads((coding_dir / "annotation_schema_v1.json").read_text(encoding="utf-8"))
+        self.assertEqual(schema["properties"]["codebook_version"]["const"], CODEBOOK_VERSION)
+        self.assertFalse(schema["additionalProperties"])
+        self.assertEqual(set(KAPPA_FIELDS), {
+            "explicit_promise", "commitment_present", "statement_type", "promised_action",
+            "conditionality", "refusal_present", "ambiguous_response",
+        })
+        forbidden = {"final_action", "condition", "model", "provider", "reasoning_content"}
+        self.assertTrue(forbidden.isdisjoint(schema["properties"]))
+        header = (coding_dir / "human_annotation_template_v1.csv").read_text(
+            encoding="utf-8",
+        ).strip().split(",")
+        self.assertTrue(forbidden.isdisjoint(header))
+        prompt = (coding_dir / "judge_prompt_v1.txt").read_text(encoding="utf-8")
+        self.assertIn(CODEBOOK_VERSION, prompt)
+        self.assertIn("Return exactly one JSON object", prompt)
+        self.assertIn("<BEGIN_VOLUNTARY_MESSAGE_DATA>", prompt)
+        self.assertIn('"conditionality": "conditional"', prompt)
+        self.assertIn('"condition_text": "if you cooperate"', prompt)
+        self.assertNotIn('"yes|no|unclear"', prompt)
+        self.assertNotIn('"final_action"', prompt)
 
     def test_synthetic_attrition_edges(self) -> None:
         timeout = classify_transport(NormalizedResponse(status="timeout", raw_response=""))
@@ -329,7 +526,11 @@ class AnalysisTests(unittest.TestCase):
                 self.assertEqual(parser_failure_class("message", raw), f"message:{mechanism}")
 
     def test_derived_outcomes_reject_nonmechanical_action(self) -> None:
-        code = MessageCode(True, True, "promise", "COOPERATE", False, "", False, False)
+        code = message_code(
+            explicit_promise="yes", commitment_present="yes",
+            statement_type="explicit_promise", promised_action="COOPERATE",
+            conditionality="unconditional",
+        )
         with self.assertRaisesRegex(ValueError, "mechanical decision parser"):
             derived_outcomes(code, "cooperate")
 
