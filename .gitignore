@@ -1,8 +1,7 @@
 # Secrets
 .env
 
-# Experiment output
-# data/
+# Working notes and the manuscript, kept out of version control by decision
 notes/
 paper/
 
@@ -11,10 +10,71 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 
+# OS
+.DS_Store
+
+# Run logs
+*.log
+
+# Superseded copies and rollback snapshots, kept on disk under data/_archive
+berg/data/_archive/
+berg/_archive/
+*.bak
+*.bak_*
+*.prepurge
+*.predupe
+
+# ---------------------------------------------------------------------------
+# Experiment output.
+#
+# The rule is that a run reaches the repository when an estimate in the paper
+# rests on it. That is the fifteen configurations of the main design, the
+# fourteen arms of the incentive control, and the coded transcripts. Everything
+# else on disk stays on disk, since it is either superseded by a later
+# collection, excluded from the estimates, or a pilot that answered its
+# question and was replaced.
+# ---------------------------------------------------------------------------
+berg/data/*
+!berg/data/full/
+!berg/data/batch/
+!berg/data/incentive/
+!berg/data/coding/
+
+# the main design, one file per configuration, and nothing else from that folder
+berg/data/full/*
+!berg/data/full/full_deepseek-v4-flash.jsonl
+!berg/data/full/full_deepseek-v4-pro.jsonl
+!berg/data/full/full_deepseek-v4-pro-think.jsonl
+!berg/data/full/full_glm-5.2-nothink.jsonl
+!berg/data/full/full_glm-5.2-think.jsonl
+!berg/data/full/full_gpt-oss-120b.jsonl
+!berg/data/full/full_kimi-k3.jsonl
+!berg/data/full/full_llama-3.3-70b.jsonl
+!berg/data/full/full_minimax-m3-nothink.jsonl
+!berg/data/full/full_minimax-m3-think.jsonl
+!berg/data/full/full_qwen3-nothink.jsonl
+
+# the four closed frontier arms, collected through the Batch APIs
+berg/data/batch/*/*
+!berg/data/batch/*/full_*.jsonl
+berg/data/batch/*/full_*_attrition.jsonl
+
+# the incentive control, the completed record only
+berg/data/incentive/*
+!berg/data/incentive/incentive_*.jsonl
+berg/data/incentive/*_attrition.jsonl
+
+# the coded transcripts and every validation round
+!berg/data/coding/**
+
+# Superseded elsewhere in the tree
 submission.ipynb
 Literature_Review_5_Papers.md
-
 smeta_berg_experiment.xlsx
 AGENTS.md
 literature/
 NEBIUS_GUIDE.md
+
+# process id files left by background runs
+pid_*
+pid2_*

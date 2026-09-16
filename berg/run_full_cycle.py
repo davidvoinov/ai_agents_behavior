@@ -28,7 +28,9 @@ Env knobs (all optional):
     N              dyads per cell             (default: 100)
     COMM_ROUNDS    message rounds for comm    (default: 2)
     MAX_TOKENS     output cap                 (default: 1500; raise for reasoning)
+    HARD_TIMEOUT   per-call wall clock, sec  (default: 300; raise with MAX_TOKENS)
     MIN_CALL_INTERVAL / LLM_TEMPERATURE
+    OUT_TAG        suffix for the output file, for parallel shards of one model
     DRY=1          print the plan + a sample history report and exit (no API)
 
 Output -> data/full/full_<model>[__x__<trustee>].jsonl  (+ _attrition.jsonl)
@@ -128,6 +130,11 @@ def main() -> None:
     comm_rounds = int(os.environ.get("COMM_ROUNDS", "2"))
     temp = float(os.environ.get("LLM_TEMPERATURE", "1.0"))
     max_tokens = int(os.environ.get("MAX_TOKENS", "1500"))
+    # A reasoning model generating to a high cap can exceed the per-call wall clock
+    # and be killed as a hang, which turns a slow cell into an endless retry loop.
+    # Raise this together with MAX_TOKENS. Qwen3-32B runs near 23 tok/s, so 4000
+    # tokens needs about 175s of generation before any provider queueing.
+    hard_timeout = float(os.environ.get("HARD_TIMEOUT", "300"))
     min_iv = float(os.environ.get("MIN_CALL_INTERVAL", "0"))
     max_consec_infra = int(os.environ.get("MAX_CONSEC_INFRA", "8"))
     dry = os.environ.get("DRY", "0") == "1"
@@ -164,13 +171,20 @@ def main() -> None:
         sys.exit("Missing API keys:\n  " + "\n  ".join(miss))
 
     for model in models:
-        mcfg = P.model_config(model, temperature=temp, min_call_interval=min_iv, max_tokens=max_tokens)
+        mcfg = P.model_config(model, temperature=temp, min_call_interval=min_iv,
+                              max_tokens=max_tokens, hard_timeout=hard_timeout)
         chat = B.make_chat_fn(mcfg)
         tru_chat = tru_mcfg = None
         if trustee:
-            tru_mcfg = P.model_config(trustee, temperature=temp, min_call_interval=min_iv, max_tokens=max_tokens)
+            tru_mcfg = P.model_config(trustee, temperature=temp, min_call_interval=min_iv,
+                                      max_tokens=max_tokens, hard_timeout=hard_timeout)
             tru_chat = B.make_chat_fn(tru_mcfg)
-        tag = model + ("__x__" + trustee if trustee else "")
+        # OUT_TAG lets several processes work one model in parallel without
+        # sharing a file. Two writers on one file interleave partial lines and
+        # both start from the same finished-dyad list, so they duplicate work.
+        # Give each shard its own tag, then merge with dedup_runs.py.
+        out_tag = os.environ.get("OUT_TAG", "").strip()
+        tag = model + ("__x__" + trustee if trustee else "") + (f"__{out_tag}" if out_tag else "")
         out = Path(__file__).resolve().parent / "data" / "full" / f"full_{tag}.jsonl"
         out.parent.mkdir(parents=True, exist_ok=True)
         att_path = out.with_name(out.stem + "_attrition.jsonl")
@@ -218,6 +232,15 @@ def main() -> None:
                         except Exception as e:
                             att.add(cell=cell, dyad_id=did, role="dyad",
                                     cause=ATT.classify_exception(e), snippet=f"{type(e).__name__}: {e}")
+                            cause = ATT.classify_exception(e)
+                            if cause == "model_missing":
+                                # the id is gone from the catalogue, so every further
+                                # call fails the same way. Stop now and say why.
+                                print(f"    ABORT {tag}: provider no longer serves "
+                                      f"{mcfg.model!r}. Check the catalogue for a "
+                                      f"replacement id before resuming.")
+                                abort = True
+                                break
                             consec_infra += 1
                             if consec_infra >= max_consec_infra:
                                 print(f"    ABORT {tag}: {consec_infra} consecutive infrastructure "
@@ -232,7 +255,15 @@ def main() -> None:
                                    condition=condition, valence=valence,
                                    history_variant=(variant if valence != "none" else None))
                         clean = rec["investor_parse_clean"] and rec["trustee_parse_clean"]
-                        att.add(cell=cell, dyad_id=did, role="dyad", cause="ok" if clean else "format")
+                        # classify each role separately, so a cut reply is logged
+                        # as infrastructure and only a real format break as behavioral
+                        for role in ("investor", "trustee"):
+                            att.add(cell=cell, dyad_id=did, role=role,
+                                    cause=ATT.classify_completion(
+                                        rec.get(f"{role}_raw") or "",
+                                        rec[f"{role}_parse_clean"]),
+                                    snippet=("" if rec[f"{role}_parse_clean"]
+                                             else (rec.get(f"{role}_raw") or "")[:200]))
                         fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
                         fh.flush()
                         ok += clean

@@ -39,10 +39,12 @@ CAUSES = {
     "empty":          INFRA,   # provider returned empty content
     "truncated":      INFRA,   # hit max_tokens / finish_reason=length
     "auth":           INFRA,   # 401/403 bad or missing key
+    "model_missing":  INFRA,   # 404, the id is no longer served -- NOT transient
     # behavioral
     "format":         BEHAV,   # returned text, no parseable decision
     "refusal":        BEHAV,   # model declined to play
     "think_only":     BEHAV,   # only hidden reasoning, no answer, NOT truncated
+    "degenerate":     BEHAV,   # collapsed into repetition and never decided
     # success
     "ok":             "ok",
 }
@@ -64,6 +66,11 @@ def classify_exception(exc: BaseException) -> str:
         if isinstance(v, int):
             status = v
             break
+    # A 404 on the model id is terminal, not a blip. Folding it into "connection"
+    # hid a catalogue removal behind what looked like network trouble and sent the
+    # diagnosis chasing concurrency instead.
+    if status == 404 or "does not exist" in s or "model_not_found" in s:
+        return "model_missing"
     if status == 429 or "rate limit" in s or "429" in s or "too many requests" in s:
         return "rate_limit"
     if status in (401, 403) or "unauthorized" in s or "invalid api key" in s or "forbidden" in s:
@@ -89,6 +96,32 @@ _REFUSAL_MARKERS = (
 _THINK_OPEN = re.compile(r"<think>", re.IGNORECASE)
 
 
+def _is_degenerate(t: str, min_len: int = 200) -> bool:
+    """True when a reply collapsed into repetition instead of deciding.
+
+    A model that loops on one token until the cap has failed behaviorally even
+    though the reply is also cut at the cap, so the repetition test runs before
+    the truncation test. The criterion is lexical diversity, since a genuine
+    reply of this length carries far more distinct words than a loop does.
+    """
+    if len(t) < min_len:
+        return False
+    words = t.split()
+    if len(words) < 40:
+        return False
+    return len(set(words)) / len(words) < 0.15
+
+
+def _looks_truncated(t: str) -> bool:
+    """True when a reply was cut before it could close, absent a finish_reason.
+
+    An opened object that never closes is the reliable signal. A reply ending
+    without terminal punctuation supports it but is not sufficient alone, since
+    a model can also stop early on its own.
+    """
+    return t.count("{") > t.count("}")
+
+
 def classify_completion(text: str, parsed_ok: bool,
                         finish_reason: str | None = None) -> str:
     """Classify a returned completion.
@@ -103,9 +136,13 @@ def classify_completion(text: str, parsed_ok: bool,
     t = (text or "").strip()
     if not t:
         return "empty"
-    if finish_reason == "length":
+    if _is_degenerate(t):
+        return "degenerate"
+    if finish_reason == "length" or _looks_truncated(t):
         return "truncated"
-    low = t.lower()
+    # models emit typographic quotes, so the refusal markers below (written with
+    # ASCII apostrophes) never match unless the text is folded first
+    low = t.lower().replace("\u2019", "'").replace("\u2018", "'").replace("\u201c", '"').replace("\u201d", '"')
     # only hidden reasoning came back and it never closed / never produced JSON
     if _THINK_OPEN.search(t) and "</think>" not in low:
         return "truncated"          # the think block was cut at max_tokens

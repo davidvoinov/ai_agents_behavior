@@ -90,7 +90,11 @@ def main() -> None:
 
     for model in models:
         mcfg = P.model_config(model, temperature=temp, min_call_interval=min_iv, max_tokens=max_tokens)
-        chat = B.make_chat_fn(mcfg)
+        # Through the dispatcher, so a model whose arms live outside the
+        # OpenAI-compatible surface reaches its own API instead of silently
+        # losing the parameter that defines the arm.
+        chat = P.chat_for(model, temperature=temp, min_call_interval=min_iv,
+                          max_tokens=max_tokens)
         out = Path(__file__).resolve().parent / "data" / "incentive" / f"incentive_{model}.jsonl"
         out.parent.mkdir(parents=True, exist_ok=True)
         done = set()

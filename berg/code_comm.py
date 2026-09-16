@@ -84,14 +84,70 @@ def _coerce(data: dict) -> dict:
     }
 
 
+# --------------------------------------------------------------------------- #
+# Structured output schema                                                    #
+# --------------------------------------------------------------------------- #
+# A judge that emits its chain of thought into the content field never reaches
+# the JSON, which is how a coding run produced 1,511 replies and 3 usable codes.
+# Constraining generation to this schema removes that failure at the source,
+# since no prose can precede a token the grammar does not allow. The schema is
+# also given in the prompt, which the provider recommends and which raises the
+# quality of the values inside the shape.
+JUDGE_SCHEMA = {
+    "name": "communication_codes",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "explicit_agreement": {"type": "boolean"},
+            "agreement_type": {"enum": ["amount", "rule", "vague", "none"]},
+            "equality_framing": {"type": "boolean"},
+            "promise_investor": {"type": "boolean"},
+            "promise_trustee": {"type": "boolean"},
+            "agreed_send": {"type": ["integer", "null"]},
+            "agreed_return": {"type": ["integer", "null"]},
+            "conditions": {"type": "string"},
+        },
+        "required": ["explicit_agreement", "agreement_type", "equality_framing",
+                     "promise_investor", "promise_trustee", "agreed_send",
+                     "agreed_return", "conditions"],
+        "additionalProperties": False,
+    },
+}
+
+
 def parse_codes(text: str) -> dict:
-    m = re.search(r"\{.*\}", text or "", re.DOTALL)
-    if not m:
-        return {"coded_clean": False}
-    try:
-        return _coerce(json.loads(m.group(0)))
-    except Exception:
-        return {"coded_clean": False}
+    """Extract the code object, tolerating the ways a judge wraps its answer.
+
+    The greedy span from the first brace to the last one fails whenever the model
+    writes a brace inside its prose, so the innermost-rightmost object is tried as
+    well, along with a fenced block and a doubled-brace repair. The raw reply is
+    carried on failure, since a judge that stops parsing is impossible to diagnose
+    without it.
+    """
+    t = text or ""
+    cands = []
+    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", t, re.DOTALL)
+    if m:
+        cands.append(m.group(1))
+    end = t.rfind("}")
+    if end != -1:
+        start = t.find("{")
+        if start != -1 and end > start:
+            cands.append(t[start:end + 1])
+        last = t.rfind("{", 0, end)
+        if last != -1 and last != start:
+            cands.append(t[last:end + 1])
+    for c in cands:
+        for attempt in (c, c.replace("{{", "{").replace("}}", "}"),
+                        re.sub(r'\\(?!["\\/bfnrtu])', "", c)):
+            try:
+                data = json.loads(attempt)
+            except Exception:
+                continue
+            if isinstance(data, dict):
+                return _coerce(data)
+    return {"coded_clean": False, "raw": t[:1200]}
 
 
 def code_transcript(chat_fn: ChatFn, transcript: str) -> dict:

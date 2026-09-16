@@ -151,7 +151,28 @@ def make_chat_fn(mcfg: ModelConfig) -> ChatFn:
         except _futures.TimeoutError:
             raise TimeoutError(f"chat call exceeded hard timeout {mcfg.hard_timeout}s")
         last_call[0] = time.time()
+        # Families differ in where the thinking goes. Qwen emits inline <think>
+        # tags inside the content, while GLM, MiniMax and Kimi are served with a
+        # reasoning parser that moves it into a separate field, newer builds
+        # calling it `reasoning` and older ones `reasoning_content`. Capturing it
+        # here keeps the paradigm-reference measure comparable across families,
+        # since otherwise it would be read from an empty string for half of them.
+        block = ""
+        for src in (getattr(resp, "additional_kwargs", None) or {},
+                    getattr(resp, "response_metadata", None) or {}):
+            for field in ("reasoning", "reasoning_content"):
+                v = src.get(field)
+                if isinstance(v, dict):
+                    v = v.get("content") or v.get("text") or ""
+                if isinstance(v, str) and v.strip():
+                    block = v
+                    break
+            if block:
+                break
+        chat_fn.last_reasoning_block = block
         return resp.content if isinstance(resp.content, str) else str(resp.content)
+
+    chat_fn.last_reasoning_block = ""
 
     return chat_fn
 
@@ -196,12 +217,14 @@ class Agent:
         self.role = role
         self.system_prompt = system_prompt
         self.chat_fn = chat_fn
+        self.reasoning_block = ""   # server-side thinking, when the API exposes it
 
     def respond(self, user_prompt: str) -> str:
         out = with_retry(lambda: self.chat_fn(self.system_prompt, user_prompt))
         if not (out or "").strip():            # reasoning models occasionally
             out = with_retry(                  # return empty content; retry once
                 lambda: self.chat_fn(self.system_prompt, user_prompt))
+        self.reasoning_block = getattr(self.chat_fn, "last_reasoning_block", "")
         return out
 
 
@@ -371,23 +394,47 @@ def trustee_user_prompt(cfg: GameConfig, sent: int, tripled: int,
 # --------------------------------------------------------------------------- #
 # Robust decision parsing                                                     #
 # --------------------------------------------------------------------------- #
+def _undouble_braces(text: str) -> str:
+    """Collapse doubled braces in a reply.
+
+    The JSON instruction carries brace characters that reach the model doubled,
+    so a model that copies the shown form exactly returns {{...}} instead of
+    {...}. The content is well formed apart from that doubling, so it is
+    repaired here rather than discarded. Used only as a fallback parse, which
+    leaves every reply that already parses untouched.
+    """
+    return text.replace("{{", "{").replace("}}", "}")
+
+
 def _extract_json(text: str) -> Optional[dict]:
     # Prefer a fenced ```json ... ``` block, else the outermost {...}.
     m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-    candidate = m.group(1) if m else None
-    if candidate is None:
-        start, end = text.find("{"), text.rfind("}")
+    candidates = [m.group(1)] if m else []
+    end = text.rfind("}")
+    if end != -1:
+        # outermost span first, then the innermost-rightmost object. The second
+        # is what survives when a model writes a brace inside its own reasoning,
+        # which makes the outermost span start in the middle of prose.
+        start = text.find("{")
         if start != -1 and end > start:
-            candidate = text[start:end + 1]
-    if candidate is None:
+            candidates.append(text[start:end + 1])
+        last = text.rfind("{", 0, end)
+        if last != -1 and last != start:
+            candidates.append(text[last:end + 1])
+    if not candidates:
         return None
     # Try as-is; if it fails, strip invalid backslash escapes (e.g. "\$" -> "$",
     # which models sometimes emit and which breaks json.loads) and retry.
-    for attempt in (candidate, re.sub(r'\\(?!["\\/bfnrtu])', "", candidate)):
-        try:
-            return json.loads(attempt)
-        except Exception:
-            continue
+    for candidate in candidates:
+        unescaped = re.sub(r'\\(?!["\\/bfnrtu])', "", candidate)
+        for attempt in (candidate, unescaped,
+                        _undouble_braces(candidate), _undouble_braces(unescaped)):
+            try:
+                data = json.loads(attempt)
+            except Exception:
+                continue
+            if isinstance(data, dict):
+                return data
     return None
 
 
@@ -497,6 +544,9 @@ def run_dyad(chat_fn: ChatFn, cfg: GameConfig, treatment: str, dyad_id: str,
         # full provenance for reproducibility
         "investor_reasoning": inv_reasoning,
         "trustee_reasoning": tru_reasoning,
+        # server-side reasoning block, empty when the family inlines it instead
+        "investor_reasoning_block": getattr(inv, "reasoning_block", ""),
+        "trustee_reasoning_block": getattr(tru, "reasoning_block", ""),
         "investor_prompt": inv_user,
         "trustee_prompt": tru_user,
         "investor_raw": inv_raw,
