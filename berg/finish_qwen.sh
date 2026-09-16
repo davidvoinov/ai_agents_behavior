@@ -1,24 +1,4 @@
 #!/usr/bin/env bash
-# finish_qwen.sh — consolidate what is finished, then shard the one model left.
-#
-# State this repairs
-# ------------------
-# kimi-k3 is DONE but split. The main run was never killed when the shards were
-# launched, so both worked the same cells and 493 of the 500 shard dyads are also
-# in the main file. The union is exactly 2800 over all 28 cells with nothing above
-# 100, so merging on dyad_id completes the model. Either copy of a collided dyad
-# is a valid independent draw from the same cell, and dedup_runs keeps the first
-# written, which is a rule independent of the outcome and so does not bias.
-#
-# qwen3-think has the same collision, still live: two processes are appending to
-# one file and 53 duplicate ids have accumulated, the newest 30 minutes ago.
-#
-# Why qwen3-think is sharded rather than tuned again. The timeout fix worked, its
-# calls now succeed (4 gaps in the last 40 ids, against a solid run of failures
-# before). It is simply slow in an honest way: about 3000 tokens of inline
-# reasoning per call at roughly 23 tok/s is about 130s of generation, and no
-# setting removes that. At 0.16 dyad/min the remaining 1837 dyads need 190 hours
-# in one process. Eight shards bring it near a day.
 set -u
 cd "$(dirname "$0")"
 

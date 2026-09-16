@@ -1,20 +1,3 @@
-#!/usr/bin/env python3
-"""
-score_kappa.py — score the human coding against the automated judge.
-
-Run this only after coding_form.csv is complete. It reads the human codes, the
-judge codes for the same transcripts, and reports Cohen's kappa per categorical
-variable together with raw agreement and the disagreements themselves, since the
-disagreements are what a revision would have to act on.
-
-A kappa is undefined when one coder used a single category throughout, which
-happens on a rare variable at this sample size. That case is reported as such
-and not as a zero, because the two carry opposite meanings.
-
-Usage
-    python3 score_kappa.py              # the newest round on disk
-    python3 score_kappa.py --round 2    # an earlier one
-"""
 from __future__ import annotations
 
 import csv
@@ -25,9 +8,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 JUDGE = HERE / "data" / "coding" / "judge_comm.jsonl"
 
-
 def round_dir(n: int | None = None) -> Path:
-    """Which validation round to score. Defaults to the newest one on disk."""
     if n is not None:
         return HERE / "data" / "coding" / f"kappa_round{n}"
     dirs = sorted((HERE / "data" / "coding").glob("kappa_round*"),
@@ -36,22 +17,13 @@ def round_dir(n: int | None = None) -> Path:
         sys.exit("no kappa_round* directory, run make_kappa_sample.py first")
     return dirs[-1]
 
-
 ROUND = round_dir()
 
 CATEGORICAL = ["explicit_agreement", "agreement_type", "equality_framing",
                "promise_investor", "promise_trustee"]
 NUMERIC = ["agreed_send", "agreed_return"]
 
-
 def norm(v, var=None):
-    """Fold the spellings a human and a judge use for the same value.
-
-    `none` is a real category of agreement_type in the codebook and a missing
-    marker everywhere else, so the variable has to be known before folding it.
-    Treating it as missing would silently drop every transcript without an
-    agreement, which is a third of the sample and the easiest third to agree on.
-    """
     if v is None:
         return None
     s = str(v).strip().lower()
@@ -65,9 +37,7 @@ def norm(v, var=None):
         return False
     return s
 
-
 def kappa(a, b):
-    """Cohen's kappa on paired labels, ignoring pairs where either is missing."""
     pairs = [(x, y) for x, y in zip(a, b) if x is not None and y is not None]
     if not pairs:
         return None, 0.0, 0
@@ -75,13 +45,12 @@ def kappa(a, b):
     n = len(pairs)
     obs = sum(1 for x, y in pairs if x == y) / n
     if len(cats) == 1:
-        return None, obs, n          # both coders used one category throughout
+        return None, obs, n
     exp = sum((sum(1 for x, _ in pairs if x == c) / n) *
               (sum(1 for _, y in pairs if y == c) / n) for c in cats)
     if exp >= 1.0:
         return None, obs, n
     return (obs - exp) / (1 - exp), obs, n
-
 
 def main() -> None:
     global ROUND
@@ -91,8 +60,6 @@ def main() -> None:
     form = ROUND / "coding_form.csv"
     if not form.exists():
         sys.exit(f"no coding form at {form}")
-    # a form round-tripped through a spreadsheet comes back semicolon separated
-    # in a European locale, so the delimiter is detected instead of assumed
     raw = form.read_text(encoding="utf-8-sig")
     try:
         delim = csv.Sniffer().sniff(raw[:4000], delimiters=",;\t").delimiter
@@ -167,7 +134,6 @@ def main() -> None:
         print("  none")
     print("\nA kappa at or above 0.70 across the categorical variables supports "
           "reporting\nthe automated coding as validated against a human reading.")
-
 
 if __name__ == "__main__":
     main()

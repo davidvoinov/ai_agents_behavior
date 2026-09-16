@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-"""Remove duplicate dyad_id records left by two runners writing the same file.
-Keeps the first occurrence. Back up first. Run only when no runner is active."""
 import json, sys, shutil
 for path in sys.argv[1:]:
     rows=[json.loads(l) for l in open(path) if l.strip()]

@@ -1,21 +1,4 @@
 #!/usr/bin/env bash
-# run_batch.sh — start or resume a batch arm in the background, safely.
-#
-# Written because `export VAR=x nohup cmd` is a zsh error, not an assignment:
-# zsh reads everything after the first word as further names to export and
-# refuses on the script name. The export has to be its own statement, which is
-# what this file guarantees.
-#
-# Rerunning is always safe. A live batch is re-attached from batches.jsonl
-# rather than resubmitted, so nothing is ever paid for twice.
-#
-# Arms are locked one process each, so several may run side by side as long as
-# each gets its own invocation. Passing a comma list to batch_runner would run
-# them one after the other in a single process, which is not the same thing.
-#
-#   ./run_batch.sh gpt-5.6-nothink
-#   ./run_batch.sh gpt-5.6-think sonnet-5-nothink    # side by side
-#   tail -f log_batch_<arm>.log
 set -u
 cd "$(dirname "$0")"
 

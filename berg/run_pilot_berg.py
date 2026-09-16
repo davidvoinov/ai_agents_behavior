@@ -1,30 +1,3 @@
-#!/usr/bin/env python3
-"""
-run_pilot_berg.py — recognition-vs-reaction pilot for the Berg game.
-
-Routing (David, 2026-07-22):
-    * DeepSeek (v4-pro, v4-flash) via the DeepSeek API on its free 5M tokens.
-    * every other open model via Nebius Token Factory (no throttling).
-    * GPT / Claude are NOT in the pilot.
-
-What it runs. For each model key and each surface in the gradient, PILOT_N
-no-history dyads (the recognition-vs-reaction core), optionally a communication
-block on the canonical surface. Every record is tagged with `surface`,
-`model_key`, and `reasoning_class` so power_analysis.py and later analysis can
-group by cell. Behavioral parse failures are counted per cell; an aborting
-infrastructure error is classified via attrition.classify_exception.
-
-Env knobs (all optional):
-    MODELS        comma list of pack keys      (default: deepseek-v4-pro,deepseek-v4-flash)
-    SURFACES      comma list of reskin keys    (default: canonical,reskin,shifted,reskin_shifted,strong_novel)
-    PILOT_N       dyads per cell               (default: 20)
-    COMM          1 to add a communication block on canonical (default: 0)
-    COMM_ROUNDS   message rounds when COMM=1   (default: 2)
-    LLM_TEMPERATURE  default 1.0
-
-Keys come from the project-root .env (DEEPSEEK_API_KEY, NEBIUS_API_KEY, ...).
-Output -> data/pilot/pilot_<timestamp>.jsonl   (+ an attrition summary printed).
-"""
 import os
 import sys
 import json
@@ -43,9 +16,7 @@ import reskin as R
 import providers as P
 import attrition as ATT
 
-
 def tag_and_write(records, fh, *, surface, model_key):
-    """Add cell identity to each record and append to the master pilot file."""
     rcls = P.reasoning_class(model_key)
     n_behav = 0
     for rec in records:
@@ -58,7 +29,6 @@ def tag_and_write(records, fh, *, surface, model_key):
     fh.flush()
     return n_behav
 
-
 def main() -> None:
     keys = [k.strip() for k in os.environ.get(
         "MODELS", ",".join(P.PILOT_KEYS)).split(",") if k.strip()]
@@ -68,10 +38,7 @@ def main() -> None:
     temp = float(os.environ.get("LLM_TEMPERATURE", "1.0"))
     do_comm = os.environ.get("COMM", "0") == "1"
     comm_rounds = int(os.environ.get("COMM_ROUNDS", "2"))
-    # Rate pacing for capped free tiers (Cerebras free = 5 req/min -> 12s).
     min_interval = float(os.environ.get("MIN_CALL_INTERVAL", "0"))
-    # Output headroom. Reasoning models (gpt-oss, DeepSeek Pro) need more or the
-    # think block truncates and shows up as infra 'truncated' in attrition.
     max_tokens = int(os.environ.get("MAX_TOKENS", "1500"))
 
     for k in keys:
@@ -156,7 +123,6 @@ def main() -> None:
               f"rate={s['attrition_rate']}")
     print(f"\nDone. Pilot data -> {out_path}\n"
           f"Next: python power_analysis.py {out_path} --contrast canonical strong_novel")
-
 
 if __name__ == "__main__":
     main()

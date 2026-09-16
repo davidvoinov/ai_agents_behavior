@@ -1,34 +1,3 @@
-#!/usr/bin/env python3
-"""
-bargaining_proxy.py — does "recognizable wording suppresses explicit bargaining"
-survive outside the one model it was measured on?
-
-Background
-----------
-The result the supervisor singled out is that under a wording the model
-identifies, agents transfer MORE and negotiate LESS, while under an unfamiliar
-wording they build an explicit plan and that plan is more conservative. It rests
-on coded transcripts, and the coded set covers only the two Qwen configurations,
-596 transcripts in the plain arm and 179 in the reasoning arm. The claim is
-therefore a single family result at present, and the family whose reasoning arm
-the provider withdrew.
-
-Coding all 7,946 transcripts with the judge costs a run. This script asks first
-whether the effect is even present elsewhere, using surface markers that need no
-model call. The markers are deliberately crude and they are not the codebook,
-so a positive reading here is a reason to spend the run and a flat reading is a
-reason to look again before spending it.
-
-Markers, per transcript
-    n_amounts    distinct explicit sums named in the messages
-    has_number   any explicit sum named at all
-    chars        total characters exchanged
-    haggle       a counter-proposal marker (but, instead, how about, what if,
-                 rather, actually, prefer, counter)
-
-Usage
-    python3 bargaining_proxy.py
-"""
 from __future__ import annotations
 
 import json
@@ -48,14 +17,12 @@ HAGGLE = re.compile(r"\b(but|instead|how about|what if|rather|actually|"
 NUM = re.compile(r"\b\d+(?:\.\d+)?\b")
 THINK = re.compile(r"<think>.*?</think>", re.S)
 
-
 def markers(rec: dict) -> dict:
     msgs = rec.get("transcript") or []
     text = " ".join(THINK.sub("", str(m.get("message", ""))) for m in msgs)
     nums = {n for n in NUM.findall(text)}
     return {"n_amounts": len(nums), "has_number": float(bool(nums)),
             "chars": len(text), "haggle": float(bool(HAGGLE.search(text)))}
-
 
 def main() -> None:
     print("Recognizable wording against its de-recognized counterpart, "
@@ -94,7 +61,6 @@ def main() -> None:
                                    [x["chars"] for x in plain_side],
                                    alternative="two-sided")
         dn, dc, dh = d("n_amounts"), d("chars"), d("haggle")
-        # the reported direction is less explicit bargaining under recognition
         votes = sum(1 for v in (dn, dc, dh) if v < 0)
         direction = "reported" if votes >= 2 else "opposite"
         agree[direction] += 1
@@ -105,7 +71,6 @@ def main() -> None:
           f"{agree['opposite']} against it.")
     print("\nThese markers are a screen and not the codebook. The judge run is what\n"
           "settles the claim, and this says how likely that run is to confirm it.")
-
 
 if __name__ == "__main__":
     main()

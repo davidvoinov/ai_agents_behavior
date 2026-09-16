@@ -1,13 +1,3 @@
-#!/usr/bin/env python3
-"""Raw HTTP probe of a Nebius model, bypassing langchain entirely.
-
-Answers three questions with explicit status codes and no retry loops:
-  1. is the model id actually served?
-  2. does a minimal completion work?
-  3. does the toggle payload change the outcome?
-
-Usage:  python3 diag_http.py zai-org/GLM-5.2
-"""
 import json, os, sys, time, urllib.request, urllib.error
 from pathlib import Path
 try:

@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-"""list_models.py — what the provider currently serves, so a judge can be chosen.
-
-The coding judge must not be a model under study, and the catalogue changes, so
-the choice has to be made against what is live and not against the registry.
-
-    python3 list_models.py            # nebius
-    python3 list_models.py nebius-uk  # a specific provider entry
-"""
 import os, sys
 from pathlib import Path
 try:

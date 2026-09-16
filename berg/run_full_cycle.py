@@ -1,40 +1,3 @@
-#!/usr/bin/env python3
-"""
-run_full_cycle.py — the full Berg experiment, resumable.
-
-Crosses  surfaces x conditions x model  in one run:
-    surfaces    the six recognition surfaces (reskin.RESKINS)
-    conditions  no_history, social_history_pos, social_history_neg, communication
-    model       any providers.PACK key (self play, or a cross pair via TRUSTEE_MODEL)
-
-Design decisions it implements (PI directives 2026-07-22):
-  * social history VALENCE is a manipulated factor (positive = trust rewarded,
-    negative = trust exploited), which is the direct test of H5.
-  * every attempted dyad is tagged and its failure cause is split into
-    infrastructure vs behavioral by attrition.py.
-  * RESUMABLE. Output is a stable file per model. Re-running the same command
-    skips the dyads already written and continues, so a crash or a rate wall
-    (the Nebius trial running dry) costs nothing but a restart.
-
-Routing note: the provider is decided by providers.PACK[key].provider, so a
-Nebius model goes to Nebius and a DeepSeek model to DeepSeek. Override per model
-with providers.model_config(key, provider=...). See NEBIUS_GUIDE.md.
-
-Env knobs (all optional):
-    MODELS         comma keys                (default: gpt-oss-120b-nebius)
-    TRUSTEE_MODEL  key for a cross pair       (default: empty = self play)
-    SURFACES       comma reskin keys          (default: all six)
-    CONDITIONS     comma condition names      (default: the four above)
-    N              dyads per cell             (default: 100)
-    COMM_ROUNDS    message rounds for comm    (default: 2)
-    MAX_TOKENS     output cap                 (default: 1500; raise for reasoning)
-    HARD_TIMEOUT   per-call wall clock, sec  (default: 300; raise with MAX_TOKENS)
-    MIN_CALL_INTERVAL / LLM_TEMPERATURE
-    OUT_TAG        suffix for the output file, for parallel shards of one model
-    DRY=1          print the plan + a sample history report and exit (no API)
-
-Output -> data/full/full_<model>[__x__<trustee>].jsonl  (+ _attrition.jsonl)
-"""
 import os
 import sys
 import json
@@ -62,26 +25,13 @@ ENGINE_TREATMENT = {
     "communication": "communication",
 }
 
-
 N_HISTORY_VARIANTS = 10
-
 
 def valence_history_report(cfg: B.GameConfig, valence: str, variant: int = 0,
                            n: int = 12) -> str:
-    """A prior-session report with a fixed valence, drawn independently per variant.
-
-    The valence is unambiguous in every variant, since a positive report shows
-    trust repaid at a profit on average and a negative report shows it exploited.
-    Within a report the rows vary, and each report carries one or two rows that
-    run against its own valence, so the stimulus is a distribution and not a
-    degenerate one. Variants are drawn from independent seeds, so a cell can
-    spread several reports across its dyads and the idiosyncrasy of any single
-    report stops being confounded with the valence itself.
-    """
     rng = random.Random(hash((valence, variant, cfg.endowment, cfg.multiplier)) & 0xFFFFFFFF)
     E, m = cfg.endowment, cfg.multiplier
     rows = []
-    # index of the row that runs against the valence, so no report is degenerate
     against = rng.randrange(n)
     for i in range(n):
         x = max(1, round(E * rng.uniform(0.3, 0.8)))
@@ -94,9 +44,7 @@ def valence_history_report(cfg: B.GameConfig, valence: str, variant: int = 0,
                      "investor_parse_clean": True, "trustee_parse_clean": True})
     return B.build_history_report(rows, cfg)
 
-
 def condition_setup(cfg, condition, comm_rounds, variant=0):
-    """Return (history_report, comm_rounds, valence_tag) for a condition."""
     if condition == "no_history":
         return None, 0, "none"
     if condition == "social_history_pos":
@@ -106,7 +54,6 @@ def condition_setup(cfg, condition, comm_rounds, variant=0):
     if condition == "communication":
         return None, comm_rounds, "none"
     sys.exit(f"unknown condition {condition!r}")
-
 
 def load_done(path: Path) -> set:
     done = set()
@@ -119,7 +66,6 @@ def load_done(path: Path) -> set:
                     pass
     return done
 
-
 def main() -> None:
     models = [m.strip() for m in os.environ.get("MODELS", "gpt-oss-120b-nebius").split(",") if m.strip()]
     trustee = os.environ.get("TRUSTEE_MODEL", "").strip()
@@ -130,10 +76,6 @@ def main() -> None:
     comm_rounds = int(os.environ.get("COMM_ROUNDS", "2"))
     temp = float(os.environ.get("LLM_TEMPERATURE", "1.0"))
     max_tokens = int(os.environ.get("MAX_TOKENS", "1500"))
-    # A reasoning model generating to a high cap can exceed the per-call wall clock
-    # and be killed as a hang, which turns a slow cell into an endless retry loop.
-    # Raise this together with MAX_TOKENS. Qwen3-32B runs near 23 tok/s, so 4000
-    # tokens needs about 175s of generation before any provider queueing.
     hard_timeout = float(os.environ.get("HARD_TIMEOUT", "300"))
     min_iv = float(os.environ.get("MIN_CALL_INTERVAL", "0"))
     max_consec_infra = int(os.environ.get("MAX_CONSEC_INFRA", "8"))
@@ -179,10 +121,6 @@ def main() -> None:
             tru_mcfg = P.model_config(trustee, temperature=temp, min_call_interval=min_iv,
                                       max_tokens=max_tokens, hard_timeout=hard_timeout)
             tru_chat = B.make_chat_fn(tru_mcfg)
-        # OUT_TAG lets several processes work one model in parallel without
-        # sharing a file. Two writers on one file interleave partial lines and
-        # both start from the same finished-dyad list, so they duplicate work.
-        # Give each shard its own tag, then merge with dedup_runs.py.
         out_tag = os.environ.get("OUT_TAG", "").strip()
         tag = model + ("__x__" + trustee if trustee else "") + (f"__{out_tag}" if out_tag else "")
         out = Path(__file__).resolve().parent / "data" / "full" / f"full_{tag}.jsonl"
@@ -191,7 +129,7 @@ def main() -> None:
 
         done = load_done(out)
         att = ATT.AttritionLog()
-        if att_path.exists():   # keep prior attrition across resumes
+        if att_path.exists():
             for line in att_path.read_text().splitlines():
                 if line.strip():
                     att.records.append(json.loads(line))
@@ -234,8 +172,6 @@ def main() -> None:
                                     cause=ATT.classify_exception(e), snippet=f"{type(e).__name__}: {e}")
                             cause = ATT.classify_exception(e)
                             if cause == "model_missing":
-                                # the id is gone from the catalogue, so every further
-                                # call fails the same way. Stop now and say why.
                                 print(f"    ABORT {tag}: provider no longer serves "
                                       f"{mcfg.model!r}. Check the catalogue for a "
                                       f"replacement id before resuming.")
@@ -248,15 +184,13 @@ def main() -> None:
                                       f"Fix and re-run the same command to resume.")
                                 abort = True
                                 break
-                            continue   # not marked done -> retried on resume
+                            continue
                         consec_infra = 0
                         rec.update(surface=surface, model_key=model,
                                    reasoning_class=P.reasoning_class(model),
                                    condition=condition, valence=valence,
                                    history_variant=(variant if valence != "none" else None))
                         clean = rec["investor_parse_clean"] and rec["trustee_parse_clean"]
-                        # classify each role separately, so a cut reply is logged
-                        # as infrastructure and only a real format break as behavioral
                         for role in ("investor", "trustee"):
                             att.add(cell=cell, dyad_id=did, role=role,
                                     cause=ATT.classify_completion(
@@ -274,7 +208,6 @@ def main() -> None:
         infra = sum(c["infrastructure"] for c in s.values())
         behav = sum(c["behavioral"] for c in s.values())
         print(f"    attrition: infrastructure={infra}  behavioral={behav}  -> {att_path}")
-
 
 if __name__ == "__main__":
     main()

@@ -1,20 +1,3 @@
-#!/usr/bin/env python3
-"""
-score_promise_recode.py — score the promise recode against the judge.
-
-Reports three things, because the recode is asking a question about the
-instrument and not only about a number.
-
-    the new kappa            does the corrected reading agree with the judge
-    against the first pass   how far the first reading moved, and in which
-                             direction, which says whether the drift was the
-                             loose application of a rule or something else
-    failed_rule tallies      which of the three conditions carries the Falses,
-                             so a codebook revision has somewhere to aim
-
-Usage
-    python3 score_promise_recode.py
-"""
 from __future__ import annotations
 
 import csv
@@ -29,7 +12,6 @@ ROUND = HERE / "data" / "coding" / "kappa_round2"
 JUDGE = HERE / "data" / "coding" / "judge_comm.jsonl"
 VARS = ["promise_investor", "promise_trustee"]
 
-
 def read_csv(path: Path) -> list[dict]:
     raw = path.read_text(encoding="utf-8-sig")
     try:
@@ -38,7 +20,6 @@ def read_csv(path: Path) -> list[dict]:
         delim = ","
     with path.open(encoding="utf-8-sig", newline="") as fh:
         return list(csv.DictReader(fh, delimiter=delim))
-
 
 def norm(v):
     if v is None:
@@ -52,7 +33,6 @@ def norm(v):
         return False
     return None
 
-
 def kappa(a, b):
     pairs = [(x, y) for x, y in zip(a, b) if x is not None and y is not None]
     if not pairs:
@@ -65,7 +45,6 @@ def kappa(a, b):
     exp = sum((sum(1 for x, _ in pairs if x == c) / n) *
               (sum(1 for _, y in pairs if y == c) / n) for c in cats)
     return ((obs - exp) / (1 - exp) if exp < 1 else None), obs, n
-
 
 def main() -> None:
     form = RECODE / "promise_form.csv"
@@ -121,9 +100,6 @@ def main() -> None:
     print("\nwhich condition carries the Falses")
     for v in VARS:
         col = f"failed_rule_{v.split('_')[1]}"
-        # a coder may record more than one failing condition, so the cell is
-        # split and each condition counted, which makes the tally a count of
-        # conditions and not of items
         c = collections.Counter()
         multi = 0
         for i in items:
@@ -142,7 +118,6 @@ def main() -> None:
     print("\nAt or above 0.70 the corrected coding is usable and the promise based\n"
           "analysis stands. Below it the definition does not carry between readers,\n"
           "which is a result about the instrument and is reported as one.")
-
 
 if __name__ == "__main__":
     main()

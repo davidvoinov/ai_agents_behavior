@@ -1,36 +1,3 @@
-#!/usr/bin/env python3
-"""
-diag_valence_empty.py — why do positive-history cells lose so many replies?
-
-The finding this probes
------------------------
-Failure to return a parseable decision tracks the VALENCE of the social history
-report, not the length of the prompt. Measured within a single hour, so the
-state of the provider is held fixed:
-
-    deepseek-v4-flash        positive 52.3%   negative 31.8%
-    deepseek-v4-pro-think    positive 35.6%   negative  5.4%
-
-Both reports are the same length to within a character, and the communication
-condition has a prompt three times longer with a far lower failure rate. So the
-usual suspects are ruled out. Attrition that tracks the manipulated factor is
-the kind that biases every conditional estimate, which makes the mechanism worth
-one cheap probe before the paper reports the effect of valence at all.
-
-What it separates
------------------
-    content empty + reasoning long   -> the budget went to hidden reasoning,
-                                        so raising max_tokens fixes it
-    content empty + reasoning empty  -> the provider returned nothing, which is
-                                        infrastructure and should be retried
-    content long, unparseable        -> the model really does answer differently
-                                        under a positive report, which is a
-                                        finding and must be reported, not fixed
-    finish_reason == 'length'        -> plain truncation
-
-Run it where the API is reachable:
-    python3 diag_valence_empty.py [model_key] [n_per_arm]
-"""
 from __future__ import annotations
 
 import os
@@ -52,7 +19,6 @@ from run_full_cycle import valence_history_report
 
 MODEL = sys.argv[1] if len(sys.argv) > 1 else "deepseek-v4-pro-think"
 N = int(sys.argv[2]) if len(sys.argv) > 2 else 20
-
 
 def main() -> None:
     from openai import OpenAI
@@ -102,7 +68,6 @@ def main() -> None:
               f"{sum(r_len)/n:.0f} ch | mean completion tokens {sum(comp)/n:.0f}\n")
 
     print("read the result against the four cases in this file's docstring")
-
 
 if __name__ == "__main__":
     main()

@@ -1,10 +1,3 @@
-#!/usr/bin/env python3
-"""Probe a model with and without its toggle payload, on a short timeout.
-
-Usage:  python3 diag_toggle.py glm-5.2-think glm-5.2-nothink minimax-m3-think minimax-m3-nothink
-Prints latency, output length, and whether a <think> block appears, so an inert
-or rejected toggle is visible immediately instead of after 30 minutes of retries.
-"""
 import os, sys, time
 from pathlib import Path
 try:
@@ -20,12 +13,12 @@ PROMPT = ("You are a participant. Reply with ONLY this JSON: "
 def probe(key, extra, label):
     mcfg = P.model_config(key, temperature=0.0, max_tokens=800)
     mcfg.extra_body = extra
-    mcfg.hard_timeout = 45.0          # fail fast instead of hanging
+    mcfg.hard_timeout = 45.0
     mcfg.request_timeout = 45
     chat = B.make_chat_fn(mcfg)
     t0 = time.time()
     try:
-        out = chat("You output only JSON.", PROMPT)     # no retry wrapper on purpose
+        out = chat("You output only JSON.", PROMPT)
         dt = time.time() - t0
         print(f"  {label:34} OK  {dt:5.1f}s  chars={len(out):>5}  think={'YES' if '<think>' in out.lower() else 'no'}")
         print(f"      {out[:110].replace(chr(10),' ')}")

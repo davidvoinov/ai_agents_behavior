@@ -1,41 +1,3 @@
-#!/usr/bin/env python3
-"""
-anthropic_chat.py — a chat_fn over the native Claude Messages API.
-
-Why this exists rather than routing Claude through the OpenAI-compatible
-endpoint already registered in providers.py. The compatibility layer exposes no
-`output_config`, returns an empty `completion_tokens_details`, and offers no
-Batch API. All three matter here, since the arms are defined by the thinking
-switch, the cost estimate needs the token split, and the run is meant to go
-through Message Batches at half price. Verified against the compatibility table
-on 2026-09-11.
-
-Thinking on Claude Sonnet 5 is adaptive and on by default. It is switched off
-with thinking {"type": "disabled"}. Manual extended thinking, meaning
-{"type": "enabled", "budget_tokens": N}, is removed on this model and returns a
-400, which is a different parameter and not the off switch.
-
-`thinking.type` and `effort` are different controls and not alternatives. The
-type is adaptive or disabled and says whether Claude thinks at all, while effort
-is low, medium, high, xhigh or max and says how much work goes into the whole
-response. The documentation states outright that adaptive must not be passed as
-an effort value.
-
-`display` defaults to "omitted" on this model, so a thinking block comes back
-with an EMPTY thinking field and the text is invisible unless "summarized" is
-asked for. Counting characters of that field therefore measures the display
-setting and not whether the model thought. The block count is the honest signal,
-and the token total is the honest cost, since an omitted block is billed in
-full.
-
-The engine injects `chat_fn(system, user) -> str`, so this file only has to
-produce that callable. Token usage is recorded as a side effect in USAGE, which
-the smoke test reads to measure what thinking actually costs.
-
-    from anthropic_chat import make_anthropic_chat_fn, USAGE
-    chat = make_anthropic_chat_fn("claude-sonnet-5", effort="medium",
-                                  thinking={"type": "disabled"})
-"""
 from __future__ import annotations
 
 import os
@@ -43,20 +5,15 @@ import threading
 import time
 from typing import Callable, Optional
 
-# Every call appends one record, so a caller can price a run after the fact.
 USAGE: list[dict] = []
 _LOCK = threading.Lock()
 
-# Claude Sonnet 5 rejects a non-default temperature with a 400, so the parameter
-# is sent only when it equals the model default. The study runs at 1.0, which is
-# that default, and the field is therefore simply omitted.
 _DEFAULT_TEMPERATURE = 1.0
-
 
 def _client(api_key_env: str = "ANTHROPIC_API_KEY"):
     try:
         import anthropic
-    except ImportError as exc:                                  # noqa: BLE001
+    except ImportError as exc:
         raise SystemExit(
             "the anthropic package is required for the native Claude client\n"
             "    pip install anthropic --break-system-packages"
@@ -65,7 +22,6 @@ def _client(api_key_env: str = "ANTHROPIC_API_KEY"):
     if not key:
         raise SystemExit(f"set {api_key_env} before calling Claude")
     return anthropic.Anthropic(api_key=key)
-
 
 def make_anthropic_chat_fn(
     model: str = "claude-sonnet-5",
@@ -78,13 +34,6 @@ def make_anthropic_chat_fn(
     min_call_interval: float = 0.0,
     max_retries: int = 4,
 ) -> Callable[[str, str], str]:
-    """Build the injectable chat_fn.
-
-    `effort` is low, medium, high, xhigh or max and shapes every output token.
-    `thinking` is {"type": "adaptive"} or {"type": "disabled"} and is the on/off
-    switch. Holding effort fixed across the two arms leaves thinking as the only
-    thing that differs between them.
-    """
     client = _client(api_key_env)
     last = [0.0]
 
@@ -103,8 +52,6 @@ def make_anthropic_chat_fn(
             kwargs["output_config"] = {"effort": effort}
         if thinking:
             th = dict(thinking)
-            # display is rejected alongside type disabled, since there is
-            # nothing to display, so it is attached only to a thinking arm.
             if display and th.get("type") != "disabled":
                 th.setdefault("display", display)
             kwargs["thinking"] = th
@@ -116,7 +63,7 @@ def make_anthropic_chat_fn(
             try:
                 r = client.messages.create(**kwargs)
                 break
-            except Exception as exc:                            # noqa: BLE001
+            except Exception as exc:
                 name = type(exc).__name__
                 retryable = any(s in name for s in
                                 ("RateLimit", "Overloaded", "APIConnection",
@@ -128,8 +75,6 @@ def make_anthropic_chat_fn(
         last[0] = time.time()
 
         text = "".join(b.text for b in r.content if getattr(b, "type", "") == "text")
-        # Count BLOCKS, because the text inside one is empty whenever display is
-        # omitted. A block present with zero characters still means Claude thought.
         blocks = [b for b in r.content
                   if getattr(b, "type", "") in ("thinking", "redacted_thinking")]
         think = sum(len(getattr(b, "thinking", "") or "") for b in blocks)
@@ -149,9 +94,7 @@ def make_anthropic_chat_fn(
 
     return chat_fn
 
-
 def usage_total(price_in: float, price_out: float, batch: bool = False) -> dict:
-    """Sum the recorded usage and price it. Prices are USD per 1M tokens."""
     ti = sum(u["input_tokens"] or 0 for u in USAGE)
     to = sum(u["output_tokens"] or 0 for u in USAGE)
     f = 0.5 if batch else 1.0

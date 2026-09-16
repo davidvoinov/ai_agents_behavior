@@ -1,22 +1,4 @@
 #!/usr/bin/env bash
-# qwen_resume3.sh — resume qwen3-think with THREE shards, not seven.
-#
-# Why three
-# ---------
-# Two sustained measurements now exist, and they disagree with the burst figure
-# that motivated seven:
-#     1 process   0.16 dyad/min
-#     3 shards    1.36 dyad/min   over 3.3 h
-#     7 shards    0.81 dyad/min   over 6.5 h, then all six aborted
-# The 5.12/min that argued for seven was read over the first 12 minutes, while
-# the shards were still clearing their cheapest cells, and did not survive. Seven
-# concurrent requests crowd Qwen3-32B enough that latency climbs into the 600s
-# wall clock -- 107 timeouts and 140 connection errors, with zero behavioral
-# failures, and deaths staggered across five hours rather than all at once, which
-# is self-inflicted congestion and not a network outage.
-#
-# So the surfaces are grouped into three shards balanced by remaining work.
-# Each group is seeded from the merged main file, so no shard repeats a dyad.
 set -u
 cd "$(dirname "$0")"
 MAIN=data/full/full_qwen3-think.jsonl

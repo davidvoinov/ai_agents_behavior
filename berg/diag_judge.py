@@ -1,28 +1,3 @@
-#!/usr/bin/env python3
-"""
-diag_judge.py — find out what a judge actually returns before paying for a run.
-
-Why this exists
----------------
-A coding run on judge-nemotron produced 1,511 codes of which 3 parsed. The
-records kept no raw reply, so nothing in the data said why, and the run would
-have spent another day producing the same. Whatever a judge is, its first
-several replies have to be read before the rest are trusted.
-
-The probe uses the same structured output the runner uses, so a green probe
-means the run is green. Without that constraint a judge that writes its chain of
-thought into the content field never reaches the JSON, which is what happened on
-the first attempt.
-
-Reported per call, which separates the four ways a judge fails
-    content empty, reasoning long   the budget went to hidden reasoning
-    content empty, reasoning empty  the provider returned nothing
-    content present, no JSON        the model answers in prose
-    finish_reason length            the reply was cut before it closed
-
-Usage
-    python3 diag_judge.py [model_key] [n]
-"""
 from __future__ import annotations
 
 import os
@@ -44,7 +19,6 @@ import code_comm as CC
 KEY = sys.argv[1] if len(sys.argv) > 1 else "judge-nemotron"
 N = int(sys.argv[2]) if len(sys.argv) > 2 else 3
 
-
 def transcript_text(rec: dict) -> str:
     tx = rec.get("transcript") or []
     if isinstance(tx, str):
@@ -56,7 +30,6 @@ def transcript_text(rec: dict) -> str:
         else:
             out.append(str(m))
     return "\n".join(out)
-
 
 def main() -> None:
     from openai import OpenAI
@@ -107,7 +80,6 @@ def main() -> None:
             if reasoning:
                 print(f"    reasoning head: {reasoning[:160]!r}")
         print("\n  read the four cases in this file's docstring against the lines above")
-
 
 if __name__ == "__main__":
     main()

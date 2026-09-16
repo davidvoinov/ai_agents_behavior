@@ -1,26 +1,3 @@
-#!/usr/bin/env python3
-"""
-run_bz.py — full Bohnet & Zeckhauser (2004) betrayal-aversion run.
-
-Runs the three conditions (Decision Problem, Risky Dictator Game, Trust Game),
-elicits a Minimum Acceptable Probability from each Decision Maker, elicits the
-Trustee's choice in the Trust Game, and prints the risk / social-preference /
-betrayal-aversion decomposition against the human benchmarks.
-
-Usage:
-    pip install -r ../requirements.txt   # langchain-openai, langchain-core, python-dotenv
-    # keys live in the project-root .env (same file the Berg runners use)
-    LLM_PROVIDER=cerebras python run_bz.py
-
-Env knobs (all optional):
-    LLM_PROVIDER      groq | openrouter | cerebras | openai   (default groq)
-    MODEL_OVERRIDE    override the provider's default model
-    N_PER_CONDITION   Decision Makers per condition            (default 32)
-    LLM_TEMPERATURE   default 1.0
-    MIN_CALL_INTERVAL seconds between every call (rate-limit pacing)
-    SLEEP_BETWEEN     seconds between units                    (default 0.0)
-Output: data/bz_<provider>_<timestamp>.jsonl
-"""
 import os
 import sys
 from pathlib import Path
@@ -42,7 +19,6 @@ PROVIDERS = {
     "openai":     ("gpt-4o",                  None,                             "OPENAI_API_KEY",     "https://platform.openai.com/api-keys"),
 }
 
-
 def main() -> None:
     provider = os.environ.get("LLM_PROVIDER", "groq").strip().lower()
     if provider not in PROVIDERS:
@@ -60,7 +36,7 @@ def main() -> None:
     temp = float(os.environ.get("LLM_TEMPERATURE", "1.0"))
     sleep = float(os.environ.get("SLEEP_BETWEEN", "0.0"))
     min_interval = float(os.environ.get("MIN_CALL_INTERVAL", "0"))
-    method = os.environ.get("METHOD", "choicelist").strip().lower()  # choicelist | map
+    method = os.environ.get("METHOD", "choicelist").strip().lower()
     grid_env = os.environ.get("BZ_GRID", "").strip()
     grid = [float(x) for x in grid_env.split(",") if x.strip()] or BZ.DEFAULT_GRID
 
@@ -70,10 +46,10 @@ def main() -> None:
     chat = BZ.make_chat_fn(mcfg)
 
     if method == "choicelist":
-        calls = 3 * n * len(grid) + n     # 3 conditions x n x grid, + n trustees in TG
+        calls = 3 * n * len(grid) + n
         plan = f"choice-list over {len(grid)} probabilities [{grid[0]:.2f} .. {grid[-1]:.2f}]"
     else:
-        calls = 4 * n                      # DP(n) + RDG(n) + TG(2n)
+        calls = 4 * n
         plan = "direct MAP threshold"
     print(f"Provider={provider}  model={model}  temp={temp}  method={method}")
     print(f"Plan: {n} Decision Makers x 3 conditions, {plan} ~= {calls} calls.")
@@ -103,7 +79,6 @@ def main() -> None:
 
     BZ.betrayal_decomposition(summaries)
     print(f"\nDone. Raw records: {out_path}")
-
 
 if __name__ == "__main__":
     main()

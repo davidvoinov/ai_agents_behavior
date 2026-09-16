@@ -1,16 +1,3 @@
-#!/usr/bin/env python3
-"""
-_transcripts.py — one place that knows where a completed dyad lives.
-
-The eleven open-weight arms were written to data/full/full_<arm>.jsonl. The four
-closed frontier arms went through the Batch API and landed in
-data/batch/<arm>/full_<arm>.jsonl instead. Three scripts globbed the first
-layout only, so the new arms were invisible to the judge, to the kappa sample
-and to the toggle check, without any of them reporting a problem.
-
-Anything that needs completed dyads imports from here, so a future layout
-change is one edit and not four.
-"""
 from __future__ import annotations
 
 import json
@@ -20,14 +7,9 @@ HERE = Path(__file__).resolve().parent
 FULL = HERE / "data" / "full"
 BATCH = HERE / "data" / "batch"
 
-# archives of failed dyads, shards and backups match the same glob as the
-# estimating sample, and coding either would put dyads into the reliability
-# figures that no estimate uses
 SKIP = ("attrition", "purged", "quarantine", "bak", "prepurge", "__")
 
-
 def sources() -> list[tuple[str, Path]]:
-    """Every (arm, file) pair that holds completed dyads, in a stable order."""
     out: dict[str, Path] = {}
     for p in sorted(FULL.glob("full_*.jsonl")):
         if any(x in p.name for x in SKIP):
@@ -40,15 +22,7 @@ def sources() -> list[tuple[str, Path]]:
         out.setdefault(arm, p)
     return sorted(out.items())
 
-
 def communication(exclude: set[str] | None = None):
-    """Yield (arm, record) for every usable communication dyad.
-
-    A dyad enters only when both roles parsed, since compliance compares a
-    coded plan against a realized decision and an unparsed decision has none.
-    Duplicates across shards are dropped on the configuration and dyad id
-    together, because a dyad id is unique only inside a configuration.
-    """
     exclude = exclude or set()
     seen = set()
     for arm, p in sources():
@@ -68,7 +42,6 @@ def communication(exclude: set[str] | None = None):
             seen.add(key)
             r.setdefault("model_key", arm)
             yield arm, r
-
 
 if __name__ == "__main__":
     import collections

@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-"""Sweep every plausible reasoning-off payload and report reasoning_content.
-
-The decisive signal is reasoning_content collapsing to 0 (or completion_tokens
-falling well below the cap). Content length alone is blind, because a served
-reasoning parser moves the thinking into its own field.
-
-Usage: python3 diag_sweep.py MiniMaxAI/MiniMax-M3
-"""
 import json, os, sys, time, urllib.request, urllib.error
 from pathlib import Path
 try:

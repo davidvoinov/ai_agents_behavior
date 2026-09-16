@@ -1,25 +1,3 @@
-#!/usr/bin/env python3
-"""
-lit_reference.py — the paradigm reference rate, which is half of H1.
-
-What it counts
---------------
-H1 claims that decision transcripts under the canonical wording carry
-spontaneous references to the experimental literature at a rate above their
-de-recognized counterparts. The measure is a fixed vocabulary of paradigm terms,
-namely the names of the paradigm and of its original authors.
-
-The role labels of the canonical surface are EXCLUDED on purpose. A pilot found
-that counting them lifted the rate to every canonical dyad while separating no
-surfaces, because an agent told it is the Investor writes the word Investor. The
-restricted count tracks genuine references to a published study.
-
-The comparison is inside the three structure matched pairs, so the payoffs are
-identical and only the wording differs, and it runs on the stated reasoning of
-both roles, which is where a reference would appear.
-
-    python3 lit_reference.py
-"""
 from __future__ import annotations
 
 import re
@@ -33,15 +11,11 @@ from scipy import stats
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import analysis as A
 
-# Names of the paradigm and of the authors of the original study. Nothing here
-# appears in any prompt, so a hit is the model supplying the term itself.
 PARADIGM = re.compile(
     r"\b(trust game|investment game|berg(?:,| and|\s+et\s+al)|dickhaut|mccabe|"
     r"gift[- ]exchange game|behavio(?:u)?ral econom\w*|experimental econom\w*|"
     r"lab experiment|laboratory experiment|classic(?:al)? experiment|"
     r"standard (?:trust|investment) (?:game|experiment))\b", re.I)
-# Generic game theory talk, counted separately. It is not evidence of recalling
-# a particular study, and a pilot showed it does not separate the surfaces.
 GENERIC = re.compile(
     r"\b(nash equilibrium|subgame perfect|backward induction|dominant strateg\w*|"
     r"game theor\w*|one[- ]shot game|prisoner'?s dilemma)\b", re.I)
@@ -60,10 +34,8 @@ ORDER = ["gpt-oss-120b", "deepseek-v4-flash", "deepseek-v4-pro-think", "kimi-k3"
          "minimax-m3-nothink", "glm-5.2-nothink", "glm-5.2-think", "llama-3.3-70b",
          "gpt-5.6-think", "gpt-5.6-nothink", "sonnet-5-think", "sonnet-5-nothink"]
 
-
 def reasoning(r: dict) -> str:
     return f"{r.get('investor_reasoning') or ''} {r.get('trustee_reasoning') or ''}"
-
 
 def main() -> None:
     data = A.load()
@@ -104,7 +76,6 @@ def main() -> None:
     print(f"generic game theory vocabulary appears in "
           f"{np.mean([r[5] for r in rows]):.1%} of dyads on average, and it is "
           f"reported\nseparately because naming a concept is not recalling a study")
-
 
 if __name__ == "__main__":
     main()

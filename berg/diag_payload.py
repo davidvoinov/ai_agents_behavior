@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-"""Find which thinking-toggle payload (if any) actually works for a model.
-
-Tries several documented formats plus a deliberately invalid control. If the
-invalid control also returns 200, the endpoint silently drops unknown fields and
-NO toggle can ever work through it — the model must be reached another way.
-
-Usage: python3 diag_payload.py minimax-m3-think glm-5.2-think
-"""
 import os, sys, time, json
 from pathlib import Path
 try:

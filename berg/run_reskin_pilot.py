@@ -1,44 +1,3 @@
-#!/usr/bin/env python3
-"""
-run_reskin_pilot.py — REAL-AGENT pilot of the contamination controls
-(RESKIN_PLAN.md): behavioral dyads across skin variants + recognition probes.
-
-This is a PILOT (exploratory): its job is to answer, cheaply,
-  1. Does behavior shift between canonical and re-skinned/shifted variants?
-  2. Do models actually recognize the canonical game, and stop recognizing
-     the re-skinned one? (Probe C)
-before we commit confirmatory sample sizes to the design.
-
-Every variant now runs the full original three-treatment series (project
-decision: no baseline-only runs):
-  1. <variant>_no_history      — N_NO dyads, no history report.
-  2. <variant>_social_history  — N_SOC dyads, history report built from that
-     SAME variant's own clean no_history records (labels/units match the
-     variant; a re-skinned variant never sees canonical wording in its
-     history report).
-  3. <variant>_communication   — N_COMM dyads, COMM_ROUNDS of pre-play cheap
-     talk, no history report.
-
-Safety: refuses to run if test_reskin.py fails (never burn quota on a
-harness bug). Recognition probes are separate calls, never mixed into dyads.
-
-Usage (locally, key in .env):
-    python run_reskin_pilot.py
-Env knobs (all optional):
-    LLM_PROVIDER      groq | openrouter | cerebras | openai   (default cerebras)
-    MODEL_OVERRIDE    override the provider's default model
-    N_NO              no_history dyads per variant             (default 6)
-    N_SOC             social_history dyads per variant          (default 6)
-    N_COMM            communication dyads per variant           (default 6)
-    COMM_ROUNDS       pre-play message rounds for communication (default 2)
-    RECOG_N           recognition probes per variant         (default 3)
-    VARIANTS          comma list from: canonical,reskin,shifted,reskin_shifted
-    LLM_TEMPERATURE   default 1.0
-    MIN_CALL_INTERVAL seconds between calls (default 2 — Cerebras is 30 RPM now)
-Outputs:
-    data/reskin_pilot_<provider>_<ts>.jsonl   behavioral records
-    data/recog_<provider>_<ts>.jsonl          recognition-probe records
-"""
 import json
 import os
 import statistics
@@ -67,9 +26,7 @@ PROVIDERS = {
     "openai":     ("gpt-4o",                  None,                             "OPENAI_API_KEY",     "https://platform.openai.com/api-keys"),
 }
 
-
 def gate_on_tests() -> None:
-    """Abort unless the offline harness tests pass."""
     here = Path(__file__).resolve().parent
     r = subprocess.run([sys.executable, str(here / "test_reskin.py")],
                        capture_output=True, text=True)
@@ -79,22 +36,9 @@ def gate_on_tests() -> None:
         sys.exit("test_reskin.py FAILED — fix the harness before spending API quota.")
     print("Offline tests: OK")
 
-
 def run_full_series(chat, cfg, mcfg, name: str, n_no: int, n_soc: int,
                     n_comm: int, comm_rounds: int, out_path: Path,
                     sleep_between: float = 0.0) -> dict[str, list[dict]]:
-    """Run the full three-treatment series for ONE variant (`name`'s cfg).
-
-    1. <name>_no_history      — n_no dyads, no history report.
-    2. <name>_social_history  — n_soc dyads, history report built from THIS
-       call's own clean no_history records (via build_history_report(cfg=cfg),
-       so a re-skinned variant's report uses the variant's own labels/units).
-    3. <name>_communication   — n_comm dyads, comm_rounds of pre-play cheap
-       talk, no history report.
-
-    Returns {treatment_name: records} for all three treatments (a treatment
-    is omitted if its n is 0).
-    """
     out: dict[str, list[dict]] = {}
 
     if n_no > 0:
@@ -121,10 +65,8 @@ def run_full_series(chat, cfg, mcfg, name: str, n_no: int, n_soc: int,
 
     return out
 
-
 def run_recognition(chat, cfg, variant: str, n: int, mcfg,
                     out_path: Path) -> list[dict]:
-    """Probe C: n independent recognition calls for this variant's rules."""
     rules = B._rules_block(cfg)
     system, user = recognition_probe_prompt(rules)
     records = []
@@ -143,12 +85,8 @@ def run_recognition(chat, cfg, variant: str, n: int, mcfg,
             records.append(rec)
     return records
 
-
 def summarize_pilot(behavioral: dict[str, dict[str, list[dict]]],
                     recognition: dict[str, list[dict]]) -> None:
-    """behavioral: {variant_name: {treatment_name: records}} — one sub-dict
-    per variant covering all three treatments (no_history/social_history/
-    communication) it ran."""
     print("\n" + "=" * 88)
     print(f"{'variant/treatment':<32}{'n':>3}{'sent/E':>9}{'ret/recv':>10}"
           f"{'sent>0':>8}{'trustee_recv':>13}")
@@ -185,10 +123,8 @@ def summarize_pilot(behavioral: dict[str, dict[str, list[dict]]],
     print("Hoped-for pattern: sent/E similar across variants (behavior, not")
     print("memorization); recognized high for canonical, low for reskin_shifted.")
 
-
 def cfg_mult(name: str) -> int:
     return RESKINS[name].multiplier
-
 
 def main() -> None:
     gate_on_tests()
@@ -218,8 +154,6 @@ def main() -> None:
     temp = float(os.environ.get("LLM_TEMPERATURE", "1.0"))
     min_interval = float(os.environ.get("MIN_CALL_INTERVAL", "2"))
     sleep = float(os.environ.get("SLEEP_BETWEEN", "0"))
-    # Reasoning/thinking models (e.g. qwen3-32b) spend completion tokens on
-    # chain-of-thought before the JSON — give them headroom via MAX_TOKENS.
     max_tokens = int(os.environ.get("MAX_TOKENS", "1500"))
 
     mcfg = B.ModelConfig(model=model, base_url=base_url, api_key_env=key_env,
@@ -227,9 +161,6 @@ def main() -> None:
                          max_tokens=max_tokens)
     chat = B.make_chat_fn(mcfg)
 
-    # Per-variant calls: no_history + social_history cost 2 calls/dyad each;
-    # communication costs (2 + 2*comm_rounds) calls/dyad (comm_rounds rounds
-    # of alternating investor/trustee messages, then 1 decision call each).
     calls_per_variant = (
         (n_no + n_soc) * 2 + n_comm * (2 + 2 * comm_rounds) + n_recog
     )
@@ -269,7 +200,6 @@ def main() -> None:
 
     summarize_pilot(behavioral, recognition)
     print(f"\nDone. Raw: {beh_path} + {rec_path}")
-
 
 if __name__ == "__main__":
     main()

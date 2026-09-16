@@ -1,24 +1,3 @@
-#!/usr/bin/env python3
-"""
-redo_truncated_batch.py — send the dyads the token budget cut off back for a retry.
-
-Claude Sonnet 5 at xhigh effort lost 215 of 2,800 dyads to a 4,000-token output
-budget. Thinking counts against that budget as a strict limit, so the completions
-where the model thought longest came back empty or cut mid-sentence. Every one of
-the 215 failed on the investor call, and they sit in the cells where the decision
-takes most thought, which makes the loss non-random and not safe to simply drop.
-
-The runner marks those dyads complete, because a wave that returns a reply has
-done its job whether or not the reply parses. This resets the affected dyads to
-the investor-decision wave and clears what came back, so a rerun asks again with
-the larger budget now set in batch_runner. The communication transcript is
-untouched, since the messages parsed fine and re-running them would change the
-stimulus the decision was made under.
-
-    python3 redo_truncated_batch.py --arm sonnet-5-think --check
-    python3 redo_truncated_batch.py --arm sonnet-5-think
-    ./run_batch.sh sonnet-5-think          # then rerun as usual
-"""
 from __future__ import annotations
 
 import argparse
@@ -33,7 +12,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import batch_runner as BR
 
 DECIDE_INVESTOR = BR.WAVES.index(("decide", None, "investor"))
-
 
 def main() -> None:
     ap = argparse.ArgumentParser()
@@ -72,8 +50,6 @@ def main() -> None:
     for x in state:
         if x["dyad_id"] not in bad:
             continue
-        # Back to the investor decision. The transcript stays, because those
-        # messages parsed and the decision has to be made under the same ones.
         x["stage"] = DECIDE_INVESTOR
         x["sent"] = None
         x["inv_raw"] = None
@@ -90,7 +66,6 @@ def main() -> None:
     print(f"  backups: {state_p.with_suffix('.json.bak_before_redo').name}, "
           f"{out.with_suffix('.jsonl.bak_before_redo').name}")
     print(f"\nrerun to fill them:\n    ./run_batch.sh {a.arm}")
-
 
 if __name__ == "__main__":
     main()

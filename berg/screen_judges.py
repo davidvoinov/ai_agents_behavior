@@ -1,27 +1,3 @@
-#!/usr/bin/env python3
-"""
-screen_judges.py — find a model that can actually serve as the coding judge.
-
-The problem this settles
-------------------------
-Two properties are needed at once and neither is visible from a model card.
-The judge must appear nowhere in the study, so it never reads its own
-transcripts, and it must return the codebook object rather than an essay.
-nvidia/Nemotron-3_5-Lightning met the first and failed the second, writing an
-unbounded chain of thought into the content field and never reaching the JSON.
-Passing response_format did not change that, because the provider drops a
-parameter a model does not support without raising, so an unsupported judge
-looks exactly like a supported one until the replies are read.
-
-So every candidate is screened on one real transcript before anything is spent
-on a run. Each is asked for the codebook object with the schema attached, and
-scored on whether the reply parses, how long it is, and whether it stopped on
-its own.
-
-    python3 screen_judges.py                          the built-in candidate list
-    python3 screen_judges.py modelA modelB            specific ids
-    python3 screen_judges.py provider=nebius-uk id    a region-served model
-"""
 from __future__ import annotations
 
 import os
@@ -40,8 +16,6 @@ except ImportError:
 import providers as P
 import code_comm as CC
 
-# Nothing here may appear in the study. Model ids move, so a candidate that
-# 404s is reported and skipped instead of stopping the screen.
 CANDIDATES = [
     "NousResearch/Hermes-4-405B",
     "zai-org/GLM-5.3-Flash",
@@ -57,7 +31,6 @@ STUDY_IDS = {"openai/gpt-oss-120b", "meta-llama/Llama-3.3-70B-Instruct",
              "moonshotai/Kimi-K3", "deepseek-ai/DeepSeek-V4-Pro",
              "deepseek-ai/DeepSeek-V4-Flash"}
 
-
 def sample_transcript() -> str:
     for f in sorted(glob.glob("data/full/full_*.jsonl")):
         if any(x in f for x in ("_attrition", "_purged", "__")):
@@ -72,7 +45,6 @@ def sample_transcript() -> str:
                     f"{m.get('role','?')}: {m.get('content', m.get('message',''))}"
                     for m in tx if isinstance(m, dict))
     raise SystemExit("no communication transcript found")
-
 
 def main() -> None:
     from openai import OpenAI
@@ -129,7 +101,6 @@ def main() -> None:
               "from this catalogue. The fallback is to code with gpt-oss-120b and have\n"
               "a second judge cover only the gpt-oss transcripts, which keeps every\n"
               "configuration read by a model that is not itself.")
-
 
 if __name__ == "__main__":
     main()

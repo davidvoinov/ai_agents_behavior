@@ -1,14 +1,3 @@
-#!/usr/bin/env python3
-"""Detect a thinking toggle correctly, by reading the RAW API response.
-
-Models differ in where reasoning goes. Qwen emits inline <think> tags inside
-`content`, so a length check finds it. GLM, MiniMax and Kimi are served with a
-reasoning parser that moves it into a separate `reasoning_content` field, so
-`content` looks identical whether thinking is on or off and a length check is
-blind. The decisive signals are `reasoning_content` and completion_tokens.
-
-Usage: python3 diag_reasoning.py MiniMaxAI/MiniMax-M3 zai-org/GLM-5.2 Qwen/Qwen3-32B
-"""
 import json, os, sys, time, urllib.request, urllib.error
 from pathlib import Path
 try:

@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-"""
-compare_coders.py — Cohen's kappa between two coding records, plus the
-incidence-of-agreement -> compliance table once a coder is validated.
-
-Usage:
-    python compare_coders.py data/coding/coder_b_v1.jsonl data/coding/judge_gpt-oss-120b-nebius.jsonl
-"""
 import json, sys, collections
 import code_comm as CC
 
@@ -25,13 +17,11 @@ def main():
         k = CC.cohen_kappa([x.get(v) for x in a], [x.get(v) for x in b])
         raw = sum(1 for x,y in zip(a,b) if x.get(v)==y.get(v))/len(shared)
         print(f"{v:22}{k:>8.3f}{raw:>11.1%}")
-    # numeric agreement
     for v in ["agreed_send","agreed_return"]:
         both=[(x.get(v),y.get(v)) for x,y in zip(a,b) if x.get(v) is not None and y.get(v) is not None]
         if both:
             ex=sum(1 for p,q in both if p==q)/len(both)
             print(f"{v:22}{'--':>8}{ex:>11.1%}  (n={len(both)} both non-null)")
-    # disagreements for review
     print("\ndisagreements on explicit_agreement:")
     n=0
     for u in shared:

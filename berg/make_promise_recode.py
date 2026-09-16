@@ -1,31 +1,3 @@
-#!/usr/bin/env python3
-"""
-make_promise_recode.py — materials for recoding the two promise variables.
-
-Why a recode and not a patch
-----------------------------
-The first pass returned kappa 0.467 on promise_investor with disagreement running
-one way in all 16 cases, and 15 of those 16 fail the codebook's own three part
-test. The rule was applied more loosely than written, which is a correctable
-coding error and not evidence about the models.
-
-Why ALL sixty and not the sixteen
----------------------------------
-Recoding only the disputed items would compare a careful second reading against
-a hurried first one on exactly the cases where they differed, which manufactures
-agreement and inflates the kappa. Every item is recoded, the earlier codes are
-not shown, and the order is reshuffled so memory of the first pass carries less.
-
-What is different from the first pass
--------------------------------------
-The three conditions appear above every item as a checklist with the exclusion
-list spelled out, so the third condition cannot fall out of view over sixty
-transcripts. The two parties are separated, since a promise belongs to whoever
-made it. A `failed_rule` column records WHICH condition decided a False, which
-turns the next disagreement into a diagnosis instead of a coin toss.
-
-    python3 make_promise_recode.py
-"""
 from __future__ import annotations
 
 import csv
@@ -62,7 +34,6 @@ Code True only if ALL THREE hold for that party. Any one failing makes it False.
 
   Record in failed_rule which condition decided a False, as 1, 2, or 3.
 """
-
 
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
@@ -154,7 +125,6 @@ Roughly 1 to 2 minutes per item, since only two judgements are needed.
     print("  transcripts.md   checklist above every item, parties separated")
     print("  promise_form.csv two variables plus a failed_rule column")
     print("  README.md        why all sixty and not the sixteen")
-
 
 if __name__ == "__main__":
     main()

@@ -1,29 +1,3 @@
-#!/usr/bin/env python3
-"""
-run_probe.py — the recognition probe, which is the first clause of H1.
-
-What it does
-------------
-Shows a fresh model instance, in a context that has never seen a behavioral
-session, the exact rules text the agents saw under one surface, and asks it to
-identify the study, give the canonical reference, and state any well known
-quantitative result from human participants. The probe machinery lives in
-reskin.recognition_probe_prompt and reskin.score_recognition. This file is the
-runner and the scorer.
-
-Because the probe stands apart from every dyad, it measures recognition without
-disturbing the choices under study, and because it is run across the whole
-surface gradient it says whether the de-recognized wordings actually reduce
-recognition or only reduce the transfer.
-
-    python3 run_probe.py                       # every configuration, 3 reps
-    python3 run_probe.py --reps 5
-    python3 run_probe.py --models glm-5.2-nothink,kimi-k3
-    python3 run_probe.py --score-only          # rescore probe_results.jsonl
-
-Cost is 7 surfaces x N configurations x reps calls of a few hundred tokens
-each, which at the default settings is well under one dollar.
-"""
 from __future__ import annotations
 
 import argparse
@@ -39,8 +13,6 @@ import reskin as R
 
 OUT = Path(__file__).resolve().parent / "data" / "probe_results.jsonl"
 
-# The eleven configurations that complete the confirmatory design. A model is
-# skipped without comment if its key is absent from the environment.
 MODELS = ["gpt-oss-120b", "qwen3-nothink", "deepseek-v4-flash",
           "deepseek-v4-pro-think", "deepseek-v4-pro", "kimi-k3",
           "minimax-m3-think", "minimax-m3-nothink", "glm-5.2-think",
@@ -54,14 +26,10 @@ LABEL = {"gpt-oss-120b": "gpt-oss-120b", "qwen3-nothink": "Qwen3-32B",
          "glm-5.2-think": "GLM-5.2 (r)", "glm-5.2-nothink": "GLM-5.2",
          "llama-3.3-70b": "Llama-3.3-70B"}
 
-# Reported in gradient order, so the columns of the summary read left to right
-# from the canonical wording to the fully renarrated one.
 SURFACES = ["canonical", "social_nonparadigm", "shifted", "reskin",
             "reskin_shifted", "strong_control", "strong_novel"]
 
-
 def done(path: Path) -> set[tuple[str, str, int]]:
-    """Keys already collected, so an interrupted run resumes where it stopped."""
     seen = set()
     if path.exists():
         for line in path.read_text().splitlines():
@@ -69,7 +37,6 @@ def done(path: Path) -> set[tuple[str, str, int]]:
                 r = json.loads(line)
                 seen.add((r["model"], r["surface"], r["rep"]))
     return seen
-
 
 def collect(models: list[str], reps: int, sleep: float) -> None:
     import providers as P
@@ -96,7 +63,7 @@ def collect(models: list[str], reps: int, sleep: float) -> None:
                 text = chat(system, user)
                 rec = R.score_recognition(text)
                 rec.update(model=model, surface=surface, rep=rep, ok=True)
-            except Exception as exc:                       # noqa: BLE001
+            except Exception as exc:
                 rec = {"model": model, "surface": surface, "rep": rep,
                        "ok": False, "error": f"{type(exc).__name__}: {exc}"}
             fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
@@ -107,7 +74,6 @@ def collect(models: list[str], reps: int, sleep: float) -> None:
                 print(f"  {n}/{len(todo)}")
             time.sleep(sleep)
     print("\nstored in", OUT)
-
 
 def report() -> None:
     import numpy as np
@@ -167,7 +133,6 @@ def report() -> None:
     for n, c in sorted(names.items(), key=lambda kv: -kv[1])[:8]:
         print(f"  {c:>4}  {n[:60]}")
 
-
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--models", default=",".join(MODELS))
@@ -179,7 +144,6 @@ def main() -> None:
         collect([m.strip() for m in a.models.split(",") if m.strip()],
                 a.reps, a.sleep)
     report()
-
 
 if __name__ == "__main__":
     main()

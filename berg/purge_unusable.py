@@ -1,22 +1,3 @@
-#!/usr/bin/env python3
-"""
-purge_unusable.py — clear failed dyads out of the way so a resume re-runs them.
-
-The runner resumes by dyad_id, and a failed dyad was still written to the file,
-so a plain restart skips exactly the trials that need another attempt. This
-moves every unusable record into a sidecar archive and leaves the main file
-holding only clean dyads, after which re-running the original command refills
-the gaps.
-
-Nothing is discarded. The archive keeps the failed replies, and the attrition
-ledger built by reclassify_attrition.py already records why each one failed, so
-the paper can still report the loss honestly after the gaps are refilled.
-
-Usage
-    python3 purge_unusable.py                       # report
-    python3 purge_unusable.py --apply               # all models
-    python3 purge_unusable.py --apply MODEL [...]   # named models only
-"""
 from __future__ import annotations
 
 import json
@@ -26,7 +7,6 @@ from collections import Counter
 from pathlib import Path
 
 DATA = Path(__file__).resolve().parent / "data" / "full"
-
 
 def main() -> None:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
@@ -61,7 +41,6 @@ def main() -> None:
     print(f"{'TOTAL':<26}{total['keep']:>8}{total['drop']:>9}")
     print("\nAPPLIED — failed replies archived to *_purged.jsonl, .prepurge backup kept"
           if apply else "\nreport only — pass --apply to purge")
-
 
 if __name__ == "__main__":
     main()

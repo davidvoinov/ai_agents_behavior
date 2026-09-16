@@ -1,24 +1,3 @@
-#!/usr/bin/env python3
-"""
-figures.py — the seven figures of the Empirical results section.
-
-Each one carries a different claim, so the choice is a choice about what the
-paper argues visually and not about taste. They are drawn to journal defaults,
-in grayscale-safe colours, sized for a single column at 3.4 inches or a full
-width at 7 inches.
-
-    A  treatment_landscape   what dominates the design
-    B  surface_gradient      the wording effect and where it lives
-    C  toggle_anatomy        where the reasoning toggle leaves its mark
-    D  attrition_bound       the valence result against its own attrition
-    E  distributions         where the dyads actually sit, against the mean
-    F  agree_vs_comply       forming an agreement against keeping it
-    G  reliability_validity  two machines agreeing is not validation
-
-    python3 figures.py            all seven into figures/
-    python3 figures.py A B        a subset
-    python3 figures.py B --bw     the grayscale variant of one
-"""
 from __future__ import annotations
 
 import sys
@@ -60,24 +39,11 @@ ORDER = ["gpt-oss-120b", "deepseek-v4-flash", "deepseek-v4-pro-think", "kimi-k3"
 HUMAN = 0.516
 GREY = ["#1a1a1a", "#5a5a5a", "#9a9a9a", "#c8c8c8"]
 
-# Okabe and Ito, which stays legible under the common forms of colour blindness.
-# Colour never carries a distinction on its own here, since every series also
-# differs by marker or by fill, so a grayscale printing loses nothing.
 BLUE, VERM, GREEN, ORANGE, PURPLE = ("#0072B2", "#D55E00", "#009E73",
                                      "#E69F00", "#CC79A7")
 COLOR = "--bw" not in sys.argv
 
-
-# --------------------------------------------------------------------------- #
 def _place_labels(ax, pts, colors, dx=0.018, min_gap=0.045, side=None):
-    """Label scattered points without letting neighbours collide.
-
-    Points are labelled from the top down and each label is pushed below the
-    previous one when the two would sit within min_gap of each other, which
-    keeps a dense cluster readable without hand-tuning every offset. A leader
-    line is drawn only when a label had to move far enough that its owner
-    would otherwise be ambiguous.
-    """
     order = sorted(range(len(pts)), key=lambda i: -pts[i][2])
     taken = []
     for i in order:
@@ -94,19 +60,10 @@ def _place_labels(ax, pts, colors, dx=0.018, min_gap=0.045, side=None):
                                      alpha=0.45, shrinkA=0, shrinkB=3)
                                 if abs(ly - y) > 0.012 else None))
 
-
-
-# Figure A carries four treatments at once, which is one series too many for a
-# grayscale ramp to keep apart at bar width. The four Okabe and Ito hues below
-# stay distinguishable under the common forms of colour blindness, and the
-# ordering is by meaning: the two reports of an earlier exchange sit on either
-# side of the neutral baseline, and communication stands apart from all three.
 TREAT_COLOR = {"no_history": "#9a9a9a", "social_history_neg": "#D55E00",
                "communication": "#0072B2", "social_history_pos": "#009E73"}
 
-
 def fig_A(data):
-    """Treatment landscape. Claim: precedent dominates, models spread widely."""
     conds = [("no_history", "Baseline"), ("social_history_neg", "Trust exploited"),
              ("communication", "Communication"), ("social_history_pos", "Trust rewarded")]
     models = [m for m in ORDER if m in data]
@@ -131,9 +88,7 @@ def fig_A(data):
     plt.close(fig)
     return "fig_A_treatment_landscape.pdf"
 
-
 def fig_B(data):
-    """Surface gradient. Claim: the wording effect lives at the far end."""
     models = [m for m in ORDER if m in data]
     pairs = [("canonical", "reskin", "labels only"),
              ("shifted", "reskin_shifted", "labels only, shifted payoffs"),
@@ -166,20 +121,7 @@ def fig_B(data):
     plt.close(fig)
     return "fig_B_surface_gradient.pdf"
 
-
 def fig_C():
-    """Toggle anatomy. Claim: the toggle reaches the choice in four of five.
-
-    Two panels, because the toggle has two separable consequences and the
-    mean transfer shows neither. The left panel asks whether a classifier can
-    tell the arms apart from the stated reasoning alone and from the two
-    decisions alone. The right panel gives the share of dyads transferring
-    nothing, which is where the movement in the decisions actually sits.
-
-    All five numbers come from toggle_check.py on the stored records, so the
-    two frontier families are included on the same footing as the three the
-    check was written for.
-    """
     fams = ["DeepSeek-V4-Pro", "MiniMax-M3", "GPT-5.6", "Sonnet-5", "GLM-5.2"]
     short = ["DeepSeek", "MiniMax", "GPT-5.6", "Sonnet-5", "GLM-5.2"]
     text = [0.841, 0.733, 0.704, 0.626, 0.687]
@@ -192,11 +134,6 @@ def fig_C():
     fig, axes = plt.subplots(1, 2, figsize=(7.0, 2.8),
                              gridspec_kw={"width_ratios": [1.0, 1.0]})
     ax = axes[0]
-    # Blue against green, both from Okabe and Ito. The amber of that palette
-    # was tried here and rejected, since blue against yellow is the pairing
-    # this paper's figures avoid. Red and green are confused by the common
-    # forms of colour blindness, blue and green are not, and the two differ
-    # in lightness as well so the bars stay apart in a grayscale printing.
     c_text, c_dec = (BLUE, GREEN) if COLOR else (GREY[0], GREY[2])
     ax.bar(x - 0.19, text, 0.36, label="stated reasoning", color=c_text,
            edgecolor="white", linewidth=0.4)
@@ -244,9 +181,7 @@ def fig_C():
     plt.close(fig)
     return "fig_C_toggle_anatomy.pdf"
 
-
 def fig_D(data):
-    """Attrition bound. Claim: the valence result survives its own attrition."""
     import json
     models = [m for m in ORDER if m in data]
     obs, bnd = [], []
@@ -267,15 +202,10 @@ def fig_D(data):
     fig, ax = plt.subplots(figsize=(3.6, 3.5))
     obs_c, bnd_c = (BLUE, VERM) if COLOR else (GREY[0], GREY[0])
     for i in y:
-        # a bound that reaches zero is a result the attrition can erase, so the
-        # segment that crosses the threshold is drawn in the alarm colour
         fails = bnd[i] < 0.05
         ax.plot([bnd[i], obs[i]], [i, i],
                 color=(VERM if (fails and COLOR) else GREY[2]),
                 lw=(1.8 if fails else 1.2), zorder=1, alpha=0.9)
-    # The bound is drawn as a ring and the observed value as a smaller filled
-    # dot on top, so a configuration whose bound equals its estimate reads as a
-    # dot inside a ring instead of hiding one marker under the other.
     ax.scatter(bnd, y, s=42, color="white", edgecolor=bnd_c, linewidth=1.2,
                zorder=3, label="worst case bound")
     ax.scatter(obs, y, s=16, color=obs_c, zorder=4, label="observed")
@@ -296,9 +226,7 @@ def fig_D(data):
     plt.close(fig)
     return "fig_D_attrition_bound.pdf"
 
-
 def fig_E(data):
-    """Distributions. Claim: the mean describes few of the dyads it summarises."""
     models = [m for m in ORDER if m in data]
     rows = []
     for m in models:
@@ -329,9 +257,7 @@ def fig_E(data):
     plt.close(fig)
     return "fig_E_distributions.pdf"
 
-
 def fig_F():
-    """Agreement against compliance. Claim: forming and keeping come apart."""
     import json, collections
     codes = collections.defaultdict(list)
     for line in (Path(__file__).resolve().parent / "data" / "coding"
@@ -350,8 +276,6 @@ def fig_F():
         kept = sum(1 for r in amt if r.get("sent") == r.get("agreed_send"))
         pts.append((LABEL[m], len(ag) / len(rows), kept / len(amt), len(amt)))
     fig, ax = plt.subplots(figsize=(5.2, 3.7))
-    # no diagonal here, since the two axes measure different things and a line
-    # of equality between them would assert a relation that does not exist
     ax.axhline(0.5, color="#cccccc", lw=0.8, ls=(0, (4, 3)), zorder=1)
     ax.text(0.02, 0.52, "keeps more often than not", fontsize=6, color="#999999")
     cols = [((VERM if (yv < 0.5 and x > 0.5) else BLUE) if COLOR else GREY[0])
@@ -366,9 +290,6 @@ def fig_F():
     ax.set_ylim(-0.05, 1.10)
     ax.set_xticks(np.arange(0, 1.01, 0.2))
     ax.spines["bottom"].set_bounds(0, 1.0)
-    # The coding covers the eleven configurations collected before the closed
-    # frontier arms. Naming the gap on the figure keeps a reader from taking
-    # the panel for the whole design, and the line goes once the judge has run.
     missing = [LABEL[m] for m in ORDER
                if m in LABEL and m not in codes and m not in ("qwen3-think",)]
     if missing:
@@ -378,13 +299,7 @@ def fig_F():
     plt.close(fig)
     return "fig_F_agree_vs_comply.pdf"
 
-
 def fig_G():
-    """Reliability against validity. Claim: two machines agreeing is not validation."""
-    # The horizontal axis is the judge against a second run of itself over the
-    # same 7,916 transcripts, which is what reproducibility means for a single
-    # instrument. The vertical axis is the same statistic against a human
-    # reading of 75, drawn across all fifteen configurations.
     v = [("agreement present", 0.783, 0.578), ("agreement type", 0.805, 0.598),
          ("equality framing", 0.959, 0.681), ("promise, first mover", 0.929, 0.315),
          ("promise, second mover", 0.875, 0.559)]
@@ -395,14 +310,10 @@ def fig_G():
             rotation=38, rotation_mode="anchor")
     ax.axhline(0.70, color="#999999", lw=0.7, ls=(0, (1, 2)), zorder=1)
     ax.text(lo + 0.005, 0.715, "conventional threshold", fontsize=6, color="#777777")
-    # both promise variables are withdrawn from the estimates, the first for
-    # failing outright and the second because it rests on the same conjunction
     WITHDRAWN = {"promise, first mover", "promise, second mover"}
     cols = [((VERM if name in WITHDRAWN else BLUE) if COLOR else GREY[0])
             for name, _, _ in v]
     for (name, mm, mh), c in zip(v, cols):
-        # a drop line to the diagonal makes the shortfall in validity the
-        # length of a segment instead of a distance the eye has to estimate
         ax.plot([mm, mm], [mh, mm], color=c, lw=0.9, alpha=0.4, zorder=2)
         ax.scatter([mm], [mh], s=36, color=c, zorder=3)
     _place_labels(ax, [(n_, x, y) for n_, x, y in v], cols,
@@ -414,7 +325,6 @@ def fig_G():
     fig.savefig(OUT / "fig_G_reliability_validity.pdf")
     plt.close(fig)
     return "fig_G_reliability_validity.pdf"
-
 
 def main() -> None:
     want = [a.upper() for a in sys.argv[1:] if not a.startswith("--")] \
@@ -432,7 +342,6 @@ def main() -> None:
         print(f"  {OUT / f}")
     print("\nEach figure carries one claim. Pick the claim the paper should make\n"
           "visually, since the supervisor asked for a figure and not for four.")
-
 
 if __name__ == "__main__":
     main()

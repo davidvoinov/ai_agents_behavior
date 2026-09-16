@@ -1,23 +1,3 @@
-#!/usr/bin/env python3
-"""
-reclassify_attrition.py — rebuild the attrition ledger from the stored replies.
-
-Why
----
-The runner used to log every parse failure as "format", which the taxonomy reads
-as behavioral. That is wrong for a reply the provider cut at the token cap or
-returned empty, and the direction of the error matters. Behavioral attrition is
-the quantity that biases an estimate when it correlates with the treatment,
-so inflating it with our own token budget overstates the problem and understates
-how much of the loss we can fix by spending more tokens.
-
-This rebuilds the ledger role by role from the raw text kept in the data files,
-which needs no API calls, and prints the split per model and per cell.
-
-Usage
-    python3 reclassify_attrition.py            # report
-    python3 reclassify_attrition.py --apply    # rewrite *_attrition.jsonl
-"""
 from __future__ import annotations
 
 import json
@@ -28,7 +8,6 @@ from pathlib import Path
 import attrition as ATT
 
 DATA = Path(__file__).resolve().parent / "data" / "full"
-
 
 def main() -> None:
     apply = "--apply" in sys.argv
@@ -93,7 +72,6 @@ def main() -> None:
         for frac, name, cell, bad, tot in sorted(worst, reverse=True)[:15]:
             print(f"   {frac:6.1%}  {name:<22} {cell:<34} {bad}/{tot}")
     print("\nAPPLIED" if apply else "\nreport only — pass --apply to rewrite the ledgers")
-
 
 if __name__ == "__main__":
     main()

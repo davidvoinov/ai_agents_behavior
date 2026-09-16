@@ -1,23 +1,3 @@
-"""
-attrition.py
-============
-Separate INFRASTRUCTURE dropouts from BEHAVIORAL dropouts in every run
-(PI directive 2026-07-22, points 2 and 5).
-
-Why this matters for validity: a trial can fail to complete because the provider
-rate-limited us, timed out, or truncated the output (infrastructure), or because
-the model produced a well-formed response that did not follow the required format,
-refused, or emitted only hidden reasoning (behavioral). If behavioral
-non-compliance correlates with the decision (e.g. a model that is about to send 0
-is also more likely to break format), then dropping those trials biases every
-conditional estimate. Infrastructure failures are missing-at-random noise;
-behavioral failures are not. They must be logged apart and reported in a
-dedicated attrition subsection with a sensitivity analysis.
-
-This module has NO API calls. It classifies (a) exceptions raised by a call and
-(b) completions that came back but did not parse, and it accumulates a per-cell
-attrition table.
-"""
 from __future__ import annotations
 
 import json
@@ -26,39 +6,29 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
-# Two top-level categories and their fine-grained causes.
 INFRA = "infrastructure"
 BEHAV = "behavioral"
 
 CAUSES = {
-    # infrastructure
     "rate_limit":     INFRA,
     "timeout":        INFRA,
-    "connection":     INFRA,   # SSL / EOF / reset / DNS
-    "server_error":   INFRA,   # 5xx
-    "empty":          INFRA,   # provider returned empty content
-    "truncated":      INFRA,   # hit max_tokens / finish_reason=length
-    "auth":           INFRA,   # 401/403 bad or missing key
-    "model_missing":  INFRA,   # 404, the id is no longer served -- NOT transient
-    # behavioral
-    "format":         BEHAV,   # returned text, no parseable decision
-    "refusal":        BEHAV,   # model declined to play
-    "think_only":     BEHAV,   # only hidden reasoning, no answer, NOT truncated
-    "degenerate":     BEHAV,   # collapsed into repetition and never decided
-    # success
+    "connection":     INFRA,
+    "server_error":   INFRA,
+    "empty":          INFRA,
+    "truncated":      INFRA,
+    "auth":           INFRA,
+    "model_missing":  INFRA,
+    "format":         BEHAV,
+    "refusal":        BEHAV,
+    "think_only":     BEHAV,
+    "degenerate":     BEHAV,
     "ok":             "ok",
 }
-
 
 def category(cause: str) -> str:
     return CAUSES.get(cause, "unknown")
 
-
-# --------------------------------------------------------------------------- #
-# Classify an exception raised while calling the endpoint                      #
-# --------------------------------------------------------------------------- #
 def classify_exception(exc: BaseException) -> str:
-    """Map a raised exception to an infrastructure cause."""
     s = f"{type(exc).__name__}: {exc}".lower()
     status = None
     for attr in ("status_code", "http_status", "code"):
@@ -66,9 +36,6 @@ def classify_exception(exc: BaseException) -> str:
         if isinstance(v, int):
             status = v
             break
-    # A 404 on the model id is terminal, not a blip. Folding it into "connection"
-    # hid a catalogue removal behind what looked like network trouble and sent the
-    # diagnosis chasing concurrency instead.
     if status == 404 or "does not exist" in s or "model_not_found" in s:
         return "model_missing"
     if status == 429 or "rate limit" in s or "429" in s or "too many requests" in s:
@@ -82,12 +49,8 @@ def classify_exception(exc: BaseException) -> str:
     if ("ssl" in s or "eof" in s or "connection" in s or "reset by peer" in s
             or "getaddrinfo" in s or "network" in s):
         return "connection"
-    return "connection"  # default unknown call-time failure to infra, not behavioral
+    return "connection"
 
-
-# --------------------------------------------------------------------------- #
-# Classify a completion that came back but did not yield a decision            #
-# --------------------------------------------------------------------------- #
 _REFUSAL_MARKERS = (
     "i cannot", "i can't", "i won't", "i will not", "as an ai",
     "i'm not able", "i am not able", "cannot assist", "cannot help",
@@ -95,15 +58,7 @@ _REFUSAL_MARKERS = (
 )
 _THINK_OPEN = re.compile(r"<think>", re.IGNORECASE)
 
-
 def _is_degenerate(t: str, min_len: int = 200) -> bool:
-    """True when a reply collapsed into repetition instead of deciding.
-
-    A model that loops on one token until the cap has failed behaviorally even
-    though the reply is also cut at the cap, so the repetition test runs before
-    the truncation test. The criterion is lexical diversity, since a genuine
-    reply of this length carries far more distinct words than a loop does.
-    """
     if len(t) < min_len:
         return False
     words = t.split()
@@ -111,26 +66,11 @@ def _is_degenerate(t: str, min_len: int = 200) -> bool:
         return False
     return len(set(words)) / len(words) < 0.15
 
-
 def _looks_truncated(t: str) -> bool:
-    """True when a reply was cut before it could close, absent a finish_reason.
-
-    An opened object that never closes is the reliable signal. A reply ending
-    without terminal punctuation supports it but is not sufficient alone, since
-    a model can also stop early on its own.
-    """
     return t.count("{") > t.count("}")
-
 
 def classify_completion(text: str, parsed_ok: bool,
                         finish_reason: str | None = None) -> str:
-    """Classify a returned completion.
-
-    parsed_ok    True if the caller's parser extracted a valid decision.
-    finish_reason optional provider signal ('length','stop',...). When the
-                  provider says it truncated ('length'), an unparseable output
-                  is infrastructure ('truncated'), not behavioral.
-    """
     if parsed_ok:
         return "ok"
     t = (text or "").strip()
@@ -140,25 +80,17 @@ def classify_completion(text: str, parsed_ok: bool,
         return "degenerate"
     if finish_reason == "length" or _looks_truncated(t):
         return "truncated"
-    # models emit typographic quotes, so the refusal markers below (written with
-    # ASCII apostrophes) never match unless the text is folded first
     low = t.lower().replace("\u2019", "'").replace("\u2018", "'").replace("\u201c", '"').replace("\u201d", '"')
-    # only hidden reasoning came back and it never closed / never produced JSON
     if _THINK_OPEN.search(t) and "</think>" not in low:
-        return "truncated"          # the think block was cut at max_tokens
+        return "truncated"
     if _THINK_OPEN.search(t) and not re.search(r"\{.*\}", t, re.DOTALL):
-        return "think_only"         # closed think, but no answer after it
+        return "think_only"
     if any(m in low for m in _REFUSAL_MARKERS):
         return "refusal"
     return "format"
 
-
-# --------------------------------------------------------------------------- #
-# Accumulator: per-cell attrition table for the paper                         #
-# --------------------------------------------------------------------------- #
 @dataclass
 class AttritionLog:
-    """Collects one record per trial outcome and summarizes by cell."""
     records: list[dict] = field(default_factory=list)
 
     def add(self, *, cell: str, dyad_id: str, role: str, cause: str,
@@ -177,8 +109,6 @@ class AttritionLog:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
     def summary(self) -> dict:
-        """Per-cell counts by category + attrition rate = (infra+behav)/total.
-        This is the table the attrition subsection reports."""
         by_cell: dict[str, Counter] = defaultdict(Counter)
         for r in self.records:
             by_cell[r["cell"]][r["category"]] += 1
@@ -196,18 +126,14 @@ class AttritionLog:
             }
         return out
 
-
 def load_summary(path: str | Path) -> dict:
-    """Rebuild the per-cell summary from a written attrition JSONL."""
     log = AttritionLog()
     for line in Path(path).read_text().splitlines():
         if line.strip():
             log.records.append(json.loads(line))
     return log.summary()
 
-
 if __name__ == "__main__":
-    # offline self-test
     assert classify_exception(TimeoutError("request timed out")) == "timeout"
     e = Exception("Error code: 429 - rate limit reached"); assert classify_exception(e) == "rate_limit"
     e = Exception("SSLError: UNEXPECTED_EOF_WHILE_READING"); assert classify_exception(e) == "connection"

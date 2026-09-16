@@ -1,15 +1,3 @@
-"""
-code_comm.py
-============
-Code communication transcripts into the variables of COMM_CODEBOOK.md, compute
-Cohen's kappa between a human coder and the LLM judge, and build the
-incidence-of-agreement -> compliance-rate table (PI directive 2026-07-22, point 6).
-
-The judge call is injected as a chat_fn (system, user) -> text, so the module
-runs and tests offline with a stub. For a real pass, pass
-providers.chat_for("deepseek-v4-flash") as the judge, and NEVER a model that is
-under study in the dyad being coded (judge independence).
-"""
 from __future__ import annotations
 
 import json
@@ -50,14 +38,12 @@ CODEBOOK_BRIEF = (
 CATEGORICAL = ["explicit_agreement", "agreement_type", "equality_framing",
                "promise_investor", "promise_trustee"]
 
-
 def judge_prompt(transcript: str) -> tuple[str, str]:
     user = (
         CODEBOOK_BRIEF + "\n\nTranscript:\n-----\n" + transcript.strip()
         + "\n-----\n\n" + _JUDGE_JSON
     )
     return JUDGE_SYSTEM, user
-
 
 def _coerce(data: dict) -> dict:
     def b(x): return bool(x) if isinstance(x, bool) else str(x).strip().lower() in ("true", "yes", "1")
@@ -67,7 +53,7 @@ def _coerce(data: dict) -> dict:
         except (TypeError, ValueError):
             return None
     at = str(data.get("agreement_type", "none")).strip().lower()
-    if at == "equal_split":      # v1 label folded into v2 scheme
+    if at == "equal_split":
         at = "amount"
     if at not in ("none", "amount", "rule"):
         at = "none"
@@ -83,16 +69,6 @@ def _coerce(data: dict) -> dict:
         "coded_clean": True,
     }
 
-
-# --------------------------------------------------------------------------- #
-# Structured output schema                                                    #
-# --------------------------------------------------------------------------- #
-# A judge that emits its chain of thought into the content field never reaches
-# the JSON, which is how a coding run produced 1,511 replies and 3 usable codes.
-# Constraining generation to this schema removes that failure at the source,
-# since no prose can precede a token the grammar does not allow. The schema is
-# also given in the prompt, which the provider recommends and which raises the
-# quality of the values inside the shape.
 JUDGE_SCHEMA = {
     "name": "communication_codes",
     "strict": True,
@@ -115,16 +91,7 @@ JUDGE_SCHEMA = {
     },
 }
 
-
 def parse_codes(text: str) -> dict:
-    """Extract the code object, tolerating the ways a judge wraps its answer.
-
-    The greedy span from the first brace to the last one fails whenever the model
-    writes a brace inside its prose, so the innermost-rightmost object is tried as
-    well, along with a fenced block and a doubled-brace repair. The raw reply is
-    carried on failure, since a judge that stops parsing is impossible to diagnose
-    without it.
-    """
     t = text or ""
     cands = []
     m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", t, re.DOTALL)
@@ -149,17 +116,11 @@ def parse_codes(text: str) -> dict:
                 return _coerce(data)
     return {"coded_clean": False, "raw": t[:1200]}
 
-
 def code_transcript(chat_fn: ChatFn, transcript: str) -> dict:
     sysp, user = judge_prompt(transcript)
     return parse_codes(chat_fn(sysp, user))
 
-
-# --------------------------------------------------------------------------- #
-# Cohen's kappa                                                               #
-# --------------------------------------------------------------------------- #
 def cohen_kappa(a: list, b: list) -> float:
-    """Cohen's kappa for two raters' categorical labels (paired lists)."""
     pairs = [(x, y) for x, y in zip(a, b) if x is not None and y is not None]
     n = len(pairs)
     if n == 0:
@@ -170,22 +131,15 @@ def cohen_kappa(a: list, b: list) -> float:
     pe = sum((ca.get(l, 0) / n) * (cb.get(l, 0) / n) for l in labels)
     return 1.0 if pe == 1 else (po - pe) / (1 - pe)
 
-
 def reliability(human: list[dict], judge: list[dict]) -> dict:
-    """Cohen's kappa per categorical variable over paired coding records."""
     out = {}
     for var in CATEGORICAL:
         out[var] = round(cohen_kappa([h.get(var) for h in human],
                                      [j.get(var) for j in judge]), 3)
     return out
 
-
-# --------------------------------------------------------------------------- #
-# incidence -> compliance table                                              #
-# --------------------------------------------------------------------------- #
 def compliance(codes: dict, sent: Optional[int], returned: Optional[int],
                tol: int = 0) -> dict:
-    """Did the realized decisions match the coded plan?"""
     out = {"investor_complied": None, "trustee_complied": None}
     if codes.get("agreed_send") is not None and sent is not None:
         out["investor_complied"] = abs(sent - codes["agreed_send"]) <= tol
@@ -193,10 +147,7 @@ def compliance(codes: dict, sent: Optional[int], returned: Optional[int],
         out["trustee_complied"] = abs(returned - codes["agreed_return"]) <= tol
     return out
 
-
 def incidence_compliance_table(rows: list[dict], tol: int = 0) -> dict:
-    """rows: dicts with keys cell, codes(dict), sent, returned.
-    Returns per-cell incidence of agreement and compliance rate."""
     agg: dict[str, dict] = defaultdict(lambda: {"n": 0, "agreements": 0,
                                                 "inv_ok": 0, "inv_tot": 0,
                                                 "tru_ok": 0, "tru_tot": 0})
@@ -222,9 +173,7 @@ def incidence_compliance_table(rows: list[dict], tol: int = 0) -> dict:
         }
     return out
 
-
 if __name__ == "__main__":
-    # offline self-test with a stub judge
     def stub(system, user):
         if "send 10" in user.lower():
             return ('{"explicit_agreement": true, "agreement_type": "amount", '
@@ -246,9 +195,9 @@ if __name__ == "__main__":
     assert -1 <= k <= 1
 
     rows = [
-        {"cell": "canonical/comm", "codes": c1, "sent": 10, "returned": 4},   # agreed, trustee broke it
-        {"cell": "canonical/comm", "codes": c1, "sent": 3,  "returned": 15},  # investor broke it
-        {"cell": "canonical/comm", "codes": c2, "sent": 0,  "returned": 0},   # no agreement
+        {"cell": "canonical/comm", "codes": c1, "sent": 10, "returned": 4},
+        {"cell": "canonical/comm", "codes": c1, "sent": 3,  "returned": 15},
+        {"cell": "canonical/comm", "codes": c2, "sent": 0,  "returned": 0},
     ]
     tbl = incidence_compliance_table(rows)["canonical/comm"]
     assert tbl["n"] == 3 and abs(tbl["incidence"] - 0.667) < 1e-2

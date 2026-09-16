@@ -1,25 +1,3 @@
-#!/usr/bin/env python3
-"""
-smoke_new_models.py — five dyads per arm, before any money is committed.
-
-Three things have to be true before GPT-5.6 and Claude Sonnet 5 join the design,
-and none of them can be settled from documentation alone.
-
-  1. The reasoning parameter is accepted and not silently dropped. A provider
-     that ignores a field leaves two arms behaving identically, which is the
-     failure that cost this study a model once already.
-  2. The two arms actually differ. The check is the reasoning token count the
-     provider bills, which separates a working toggle from a dead one long
-     before a transfer difference would.
-  3. The JSON contract holds, so the parser sees a decision and the dyad counts.
-
-It also measures the hidden reasoning multiplier, which is the one term the cost
-estimate cannot get from the completed runs, and reprices the design with it.
-
-    python3 smoke_new_models.py                     # all four arms
-    python3 smoke_new_models.py --dyads 5
-    python3 smoke_new_models.py --arms gpt-5.6-think,gpt-5.6-nothink
-"""
 from __future__ import annotations
 
 import argparse
@@ -36,11 +14,7 @@ import providers as P
 import reskin as R
 
 OUT = Path(__file__).resolve().parent / "data" / "smoke_new_models.jsonl"
-# Written after every dyad, so a run in progress can be watched from another
-# shell. The results file only appears at the end, which made an earlier run
-# impossible to distinguish from one that never started.
 BEAT = Path(__file__).resolve().parent / "data" / "smoke_progress.log"
-
 
 def beat(msg: str) -> None:
     BEAT.parent.mkdir(parents=True, exist_ok=True)
@@ -52,19 +26,12 @@ SURFACE = "canonical"
 TREATMENT = "no_history"
 MAX_TOKENS = 4000
 
-# One record per API call, filled by whichever client made it.
 CALLS: list[dict] = []
 
-
 def openai_chat_fn(spec: P.ModelSpec, max_tokens: int):
-    """Raw OpenAI client, so completion_tokens_details.reasoning_tokens survives.
-
-    LangChain's wrapper discards the usage breakdown, and the breakdown is the
-    whole point of this test.
-    """
     try:
         from openai import OpenAI
-    except ImportError as exc:                                  # noqa: BLE001
+    except ImportError as exc:
         raise SystemExit("pip install openai --break-system-packages") from exc
     base_url, key_env, _ = P.PROVIDERS[spec.provider]
     key = os.environ.get(key_env, "").strip()
@@ -92,7 +59,6 @@ def openai_chat_fn(spec: P.ModelSpec, max_tokens: int):
 
     return chat_fn
 
-
 def anthropic_chat_fn(spec: P.ModelSpec, max_tokens: int):
     import anthropic_chat as AC
     eb = spec.extra_body or {}
@@ -109,9 +75,6 @@ def anthropic_chat_fn(spec: P.ModelSpec, max_tokens: int):
                 "arm": spec.key,
                 "input_tokens": u["input_tokens"],
                 "output_tokens": u["output_tokens"],
-                # Claude bills thinking inside output_tokens and does not break
-                # it out, so the visible thinking blocks and the output total are
-                # the signals that the switch took effect.
                 "reasoning_tokens": None,
                 "thinking_blocks": u.get("thinking_blocks", 0),
                 "thinking_chars_visible": u["thinking_chars_visible"],
@@ -122,11 +85,9 @@ def anthropic_chat_fn(spec: P.ModelSpec, max_tokens: int):
 
     return chat_fn
 
-
 def build(spec: P.ModelSpec, max_tokens: int):
     return (anthropic_chat_fn(spec, max_tokens) if spec.api == "anthropic"
             else openai_chat_fn(spec, max_tokens))
-
 
 def run_arm(key: str, dyads: int, max_tokens: int) -> dict:
     spec = P.PACK[key]
@@ -141,7 +102,7 @@ def run_arm(key: str, dyads: int, max_tokens: int) -> dict:
             rec = B.run_dyad(chat, cfg, TREATMENT, f"smoke-{key}-{i}", mcfg)
             rows.append(rec)
             beat(f"{key} dyad {i+1}/{dyads} ok, sent={rec.get('sent')}")
-        except Exception as exc:                                # noqa: BLE001
+        except Exception as exc:
             errors.append(f"{type(exc).__name__}: {exc}")
             beat(f"{key} dyad {i+1}/{dyads} FAILED {type(exc).__name__}: {exc}")
         print(".", end="", flush=True)
@@ -164,13 +125,9 @@ def run_arm(key: str, dyads: int, max_tokens: int) -> dict:
         "thinking_chars_visible": sum(vis) if any(vis) else None,
         "mean_transfer": (sum(r["sent"] / r["endowment"] for r in clean) / len(clean)
                           if clean else None),
-        # Per-call usage, so the share of calls on which thinking actually fired
-        # can be read off later. Adaptive thinking is a mixture and the block
-        # total alone cannot say how the blocks were spread over the calls.
         "calls_detail": calls,
         "rows": rows,
     }
-
 
 def report(results: list[dict], price_lookup) -> None:
     print("\n\n" + "=" * 78)
@@ -205,10 +162,6 @@ def report(results: list[dict], price_lookup) -> None:
                    else "THE TWO ARMS DO NOT SEPARATE, treat the parameter as dropped")
         print(f"  {verdict}")
 
-    # Reprice the design with the measured multiplier. Where the provider breaks
-    # reasoning out, the split is exact. Where it does not, the plain arm of the
-    # same family is the best estimate of visible output, so the difference
-    # between the arms is the thinking.
     print("\nmeasured hidden reasoning, for cost_estimate.py --reasoning")
     pairs = {"gpt-5.6-think": "gpt-5.6-nothink",
              "sonnet-5-think": "sonnet-5-nothink"}
@@ -237,7 +190,6 @@ def report(results: list[dict], price_lookup) -> None:
                 for r in results)
     print(f"\nthis smoke test cost about {total:.3f} $ at list price")
 
-
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dyads", type=int, default=5)
@@ -251,7 +203,7 @@ def main() -> None:
         sys.exit(f"unknown arm: {', '.join(unknown)}")
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text("")                       # a fresh run starts a fresh file
+    OUT.write_text("")
     beat(f"start, arms {arms}, {a.dyads} dyads each")
 
     results = []
@@ -264,12 +216,12 @@ def main() -> None:
             print(f"\n  skipped: {exc}")
             beat(f"{key} skipped: {exc}")
             continue
-        except Exception as exc:                                # noqa: BLE001
+        except Exception as exc:
             print(f"\n  FAILED: {type(exc).__name__}: {exc}")
             beat(f"{key} FAILED {type(exc).__name__}: {exc}")
             continue
         results.append(r)
-        with OUT.open("a") as fh:            # one arm, one line, written at once
+        with OUT.open("a") as fh:
             fh.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
         beat(f"{key} done, {r['clean']}/{r['attempted']} clean, "
              f"{r['output_tokens']} output tokens")
@@ -282,7 +234,6 @@ def main() -> None:
         print(f"\nerrors in {r['arm']}:")
         for e in r["errors"][:3]:
             print("   ", e)
-
 
 if __name__ == "__main__":
     main()

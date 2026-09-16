@@ -1,35 +1,3 @@
-#!/usr/bin/env python3
-"""
-reparse.py — recover dyads lost to a parser fault, without new API calls.
-
-Why this exists
----------------
-The JSON instruction reaches the model with doubled braces, so a model that
-copies the shown form exactly replies {{"reasoning": ..., "amount": N}}. That
-text is well formed apart from the doubling, but the original parser rejected
-it and fell back to scraping the last integer out of the reply. The scrape sets
-parse_clean=False, and the dyad was then dropped from analysis as a behavioral
-failure even though the model had answered correctly.
-
-The parser now collapses doubled braces as a fallback, so the stored raw replies
-can be re-read offline. Roughly a third of all failures come back.
-
-The one thing that cannot be waved through
-------------------------------------------
-The first mover's amount is not a leaf. It was passed to the second mover, whose
-prompt was built from it. So a first-mover reply that reparses to a DIFFERENT
-amount describes a dyad whose second mover answered a question that was never
-asked, and that dyad is contaminated no matter how clean the reply now looks.
-Only reparses that agree with the value actually used downstream are recovered.
-Disagreements are quarantined for a re-run.
-
-The second mover's amount is a leaf, so a reparse there is always safe and the
-payoffs are simply recomputed.
-
-Usage
-    python3 reparse.py            # report only, writes nothing
-    python3 reparse.py --apply    # rewrite the files in place (.bak kept)
-"""
 from __future__ import annotations
 
 import json
@@ -42,15 +10,11 @@ import berg_trust_game as B
 
 DATA = Path(__file__).resolve().parent / "data" / "full"
 
-
 def min_return_of(rec: dict) -> int:
-    """Floor on the second mover's return, mirroring the engine."""
     frac = rec.get("min_return_frac") or 0.0
-    return int(-(-frac * rec["tripled"] // 1)) if frac else 0   # ceil
-
+    return int(-(-frac * rec["tripled"] // 1)) if frac else 0
 
 def recompute(rec: dict, sent: int, returned: int) -> None:
-    """Refresh every field derived from the pair of actions."""
     E, m = rec["endowment"], rec["multiplier"]
     tripled = m * sent
     rec.update(
@@ -66,7 +30,6 @@ def recompute(rec: dict, sent: int, returned: int) -> None:
         full_betrayal=bool(tripled > 0 and returned == 0),
         reciprocated=bool(tripled > 0 and returned >= sent),
     )
-
 
 def main() -> None:
     apply = "--apply" in sys.argv
@@ -96,14 +59,11 @@ def main() -> None:
                     rec.get("investor_raw") or "", 0, rec["endowment"])
                 if clean:
                     if new_sent == rec["sent"]:
-                        # the scrape had landed on the right number, so the
-                        # second mover saw the correct amount and the dyad holds
                         rec["investor_parse_clean"] = True
                         rec["investor_reasoning"] = new_reason or rec.get("investor_reasoning", "")
                         rec["reparsed_investor"] = True
                         inv_ok += 1
                     else:
-                        # downstream prompt was built from the wrong amount
                         rec["reparse_conflict"] = {"stored": rec["sent"], "reparsed": new_sent}
                         contaminated = True
                         inv_bad += 1
@@ -148,7 +108,6 @@ def main() -> None:
           f"{grand['inv_bad']} dyads contaminated (second mover answered a "
           f"different first move) and must be re-run.")
     print("APPLIED, .bak kept" if apply else "\nreport only — pass --apply to write")
-
 
 if __name__ == "__main__":
     main()
