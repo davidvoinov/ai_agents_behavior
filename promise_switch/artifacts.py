@@ -93,6 +93,10 @@ def validate_run_integrity(
         PlannedTrial, model_config_id, plan_top_up_expansion, plan_trials,
         plan_voluntary_message_recovery,
     )
+    from .execution.batch_identity import (
+        verify_claude_wire_configuration, verify_production_batch_attempt,
+    )
+    from .schemas import NormalizedResponse
 
     manifest = validate_run_directory(
         run_dir, required_dataset_role=required_dataset_role,
@@ -138,6 +142,7 @@ def validate_run_integrity(
         raise ValueError(f"top-up plans differ from durable expansion events: {run_dir}")
     plans = {row["trial_id"]: PlannedTrial(**row) for row in plan_rows}
     _require_unique(plan_rows, "trial_id", "planned trial", run_dir)
+    config_by_id = {model_config_id(config): config for config in configs}
 
     messages = read_jsonl(run_dir / "message_events.jsonl")
     assignments = read_jsonl(run_dir / "assignments.jsonl")
@@ -157,7 +162,75 @@ def validate_run_integrity(
         raise ValueError(f"duplicate trial/stage/attempt number: {run_dir}")
     attempts_by_key = {key: row for key, row in zip(attempt_keys, attempts, strict=True)}
 
-    config_by_id = {model_config_id(config): config for config in configs}
+    batch_mappings = read_jsonl(run_dir / "batch_request_mappings.jsonl")
+    batch_jobs = read_jsonl(run_dir / "batch_jobs.jsonl")
+    if normalized.get("execution_mode", "synchronous") == "provider_batch":
+        from .execution.batch_transport import canonical_json_hash, deterministic_custom_id
+        _require_unique(batch_mappings, "custom_id", "batch custom id", run_dir)
+        for row in batch_mappings:
+            request = row.get("request", {})
+            if row.get("request_body_hash") != canonical_json_hash(request.get("body")):
+                raise ValueError(f"batch request-body hash mismatch: {run_dir}")
+            if row.get("custom_id") != deterministic_custom_id(
+                str(row.get("trial_id")), str(row.get("stage")),
+                int(row.get("attempt_number", 0)),
+            ):
+                raise ValueError(f"batch custom-id mapping mismatch: {run_dir}")
+            if row.get("trial_id") not in {plan.trial_id for plan in plans.values()}:
+                raise ValueError(f"batch mapping references unknown trial: {run_dir}")
+        latest_jobs = {row.get("batch_key"): row for row in batch_jobs}
+        mapping_by_custom_id = {
+            str(row["custom_id"]): row for row in batch_mappings
+        }
+        for batch_key, job in latest_jobs.items():
+            input_path = job.get("input_path")
+            input_hash = job.get("input_artifact_hash")
+            if not isinstance(input_path, str) or not isinstance(input_hash, str):
+                raise ValueError(f"batch lacks durable input identity: {run_dir}")
+            path = Path(input_path)
+            if not path.is_absolute():
+                path = Path.cwd() / path
+            if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != input_hash:
+                raise ValueError(f"batch input artifact hash mismatch: {run_dir}")
+            try:
+                wire_rows = [
+                    json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                ]
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"batch input artifact is malformed: {run_dir}") from exc
+            expected_rows = [
+                row for row in batch_mappings if row.get("batch_key") == batch_key
+            ]
+            if (
+                len(wire_rows) != len(expected_rows)
+                or {str(row.get("custom_id")) for row in wire_rows}
+                != {str(row.get("custom_id")) for row in expected_rows}
+            ):
+                raise ValueError(f"batch input/mapping coverage mismatch: {run_dir}")
+            for wire in wire_rows:
+                mapping = mapping_by_custom_id[str(wire["custom_id"])]
+                plan = plans[str(mapping["trial_id"])]
+                config = config_by_id[plan.config_id]
+                params = wire.get("params")
+                if config.provider == "anthropic":
+                    if not isinstance(params, dict):
+                        raise ValueError(f"Anthropic Batch wire params missing: {run_dir}")
+                    check = verify_claude_wire_configuration(config=config, params=params)
+                    if not check.verified:
+                        raise ValueError(
+                            f"Batch wire configuration mismatch: {', '.join(check.failures)}: "
+                            f"{run_dir}"
+                        )
+        if any(
+            row.get("status") in {"SUBMITTED", "AWAITING_RESULTS", "RESULTS_RETRIEVED", "INGESTED"}
+            and not row.get("provider_job_id")
+            for row in latest_jobs.values()
+        ):
+            raise ValueError(f"submitted batch lacks durable provider job ID: {run_dir}")
+        if any(row.get("status") != "INGESTED" for row in latest_jobs.values()) and require_completed:
+            raise ValueError(f"completed run contains an un-ingested batch: {run_dir}")
+
     reviewed_keys: set[tuple[str, str]] = set()
     for review in parser_reviews:
         config_id = str(review.get("model_config_id"))
@@ -344,6 +417,7 @@ def validate_run_integrity(
     forbidden_labels += [scientific_condition_label(condition) for condition in Condition]
     for row in attempts:
         plan = _known_plan(plans, row.get("trial_id"), "API attempt", run_dir)
+        config = config_by_id[plan.config_id]
         stage = row.get("stage")
         if stage not in {"message", "final_decision"}:
             raise ValueError(f"invalid API-attempt stage: {run_dir}")
@@ -353,6 +427,24 @@ def validate_run_integrity(
             raise ValueError(f"final attempt has no durable assignment: {run_dir}")
         if row.get("prompt_version") != PROMPT_VERSION:
             raise ValueError(f"attempt prompt-version mismatch: {run_dir}")
+        try:
+            response = NormalizedResponse(**row["response"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"attempt response identity is malformed: {run_dir}") from exc
+        identity = verify_production_batch_attempt(
+            config=config, request=row.get("request", {}), response=response,
+        )
+        if not identity.verified:
+            raise ValueError(
+                f"production attempt identity mismatch: {', '.join(identity.failures)}: "
+                f"{run_dir}"
+            )
+        if (
+            config.provider == "anthropic"
+            and config.model_id == "claude-sonnet-5"
+            and row.get("identity_verification") != "VERIFIED_MATCH"
+        ):
+            raise ValueError(f"Claude attempt lacks durable identity verification: {run_dir}")
         prompt_text = json.dumps(
             row.get("request", {}).get("body", {}).get("messages", []),
             ensure_ascii=False,

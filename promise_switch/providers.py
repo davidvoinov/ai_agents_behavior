@@ -14,6 +14,10 @@ class ProviderDefinition:
     base_url: str
     api_key_env: str
     rate_limit_metadata: dict[str, Any] = field(default_factory=dict)
+    batch_protocol: Literal[
+        "none", "openai_batch_chat_completions", "anthropic_message_batches"
+    ] = "none"
+    output_token_field: Literal["max_tokens", "max_completion_tokens"] = "max_tokens"
 
 
 @dataclass(frozen=True)
@@ -24,7 +28,8 @@ class ModelDefinition:
     reasoning_capability: Literal["toggle", "fixed_on", "fixed_off", "unavailable"]
     default_reasoning_mode: ReasoningMode
     request_kwargs_by_mode: dict[str, dict[str, Any]] = field(default_factory=dict)
-    production_max_output_tokens_by_mode: dict[str, int] = field(default_factory=dict)
+    production_max_output_tokens_by_mode: dict[str, int | None] = field(default_factory=dict)
+    batch_only_confirmatory: bool = False
 
 
 PROVIDERS: dict[str, ProviderDefinition] = {
@@ -58,9 +63,60 @@ PROVIDERS: dict[str, ProviderDefinition] = {
             "source": "confirm account-specific limits before confirmatory collection",
         },
     ),
+    "openai": ProviderDefinition(
+        name="openai",
+        base_url="https://api.openai.com/v1/",
+        api_key_env="OPENAI_API_KEY",
+        rate_limit_metadata={
+            "batch_queue_limit": None,
+            "source": "confirm account Batch limits before paid preflight",
+        },
+        batch_protocol="openai_batch_chat_completions",
+        output_token_field="max_completion_tokens",
+    ),
+    "anthropic": ProviderDefinition(
+        name="anthropic",
+        base_url="https://api.anthropic.com/v1/",
+        api_key_env="ANTHROPIC_API_KEY",
+        rate_limit_metadata={
+            "batch_queue_limit": None,
+            "source": "confirm workspace Message Batches limits before paid preflight",
+        },
+        batch_protocol="anthropic_message_batches",
+        output_token_field="max_tokens",
+    ),
 }
 
 MODEL_DEFINITIONS: dict[tuple[str, str], ModelDefinition] = {
+    ("openai", "gpt_5_6_luna_openai"): ModelDefinition(
+        provider="openai",
+        model_alias="gpt_5_6_luna_openai",
+        model_id="gpt-5.6-luna",
+        reasoning_capability="toggle",
+        default_reasoning_mode="off",
+        request_kwargs_by_mode={
+            "off": {"reasoning_effort": "none"},
+            "on": {"reasoning_effort": "medium"},
+        },
+        production_max_output_tokens_by_mode={"off": None, "on": None},
+        batch_only_confirmatory=True,
+    ),
+    ("anthropic", "claude_sonnet_5_anthropic"): ModelDefinition(
+        provider="anthropic",
+        model_alias="claude_sonnet_5_anthropic",
+        model_id="claude-sonnet-5",
+        reasoning_capability="toggle",
+        default_reasoning_mode="off",
+        request_kwargs_by_mode={
+            "off": {"thinking": {"type": "disabled"}},
+            "on": {
+                "thinking": {"type": "adaptive", "display": "omitted"},
+                "output_config": {"effort": "xhigh"},
+            },
+        },
+        production_max_output_tokens_by_mode={"off": None, "on": None},
+        batch_only_confirmatory=True,
+    ),
     ("nebius", "qwen3_32b"): ModelDefinition(
         provider="nebius",
         model_alias="qwen3_32b",
@@ -222,6 +278,9 @@ def create_model_config(
         ],
         provider_request_kwargs=dict(definition.request_kwargs_by_mode.get(selected_mode, {})),
         rate_limit_metadata=dict(provider_definition.rate_limit_metadata),
+        batch_protocol=provider_definition.batch_protocol,
+        output_token_field=provider_definition.output_token_field,
+        batch_only_confirmatory=definition.batch_only_confirmatory,
     )
 
 

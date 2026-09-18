@@ -19,6 +19,8 @@ FILES = (
     "api_attempts.jsonl",
     "trials.jsonl",
     "errors.jsonl",
+    "batch_jobs.jsonl",
+    "batch_request_mappings.jsonl",
     "run_state.json",
 )
 
@@ -61,8 +63,24 @@ class RunStorage:
             os.close(descriptor)
 
     def append_many(self, name: str, records: Iterable[dict[str, Any]]) -> None:
-        for record in records:
-            self.append(name, record)
+        if name not in FILES or not name.endswith(".jsonl"):
+            raise ValueError(f"Not an append-only run file: {name}")
+        payload = b"".join(
+            (json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
+            for record in records
+        )
+        if not payload:
+            return
+        descriptor = os.open(
+            self.run_dir / name, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644,
+        )
+        try:
+            written = os.write(descriptor, payload)
+            if written != len(payload):
+                raise OSError("short append while writing Promise Switch journal")
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
 
     def read_jsonl(self, name: str) -> list[dict[str, Any]]:
         path = self.run_dir / name

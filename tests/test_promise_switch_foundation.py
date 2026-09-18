@@ -64,6 +64,7 @@ class ArchitectureTests(unittest.TestCase):
             "__init__.py", "version.py", "design.py", "prompts.py",
             "randomization.py", "schemas.py", "providers.py", "client.py", "parser.py",
             "analysis.py", "artifacts.py", "codebook.py", "power.py", "preflight.py",
+            "future_runs.py", "credentials.py",
         }
         actual = {path.name for path in (ROOT / "promise_switch").glob("*.py")}
         self.assertEqual(actual, expected)
@@ -300,6 +301,10 @@ class ParserTests(unittest.TestCase):
 class ProviderClientSchemaTests(unittest.TestCase):
     def test_validated_production_output_caps_cover_current_panel(self):
         expected = {
+            ("openai", "gpt_5_6_luna_openai", "off"): None,
+            ("openai", "gpt_5_6_luna_openai", "on"): None,
+            ("anthropic", "claude_sonnet_5_anthropic", "off"): None,
+            ("anthropic", "claude_sonnet_5_anthropic", "on"): None,
             ("nebius", "qwen3_32b", "off"): 4096,
             ("nebius", "qwen3_32b", "on"): 4096,
             ("nebius", "llama_3_3_70b", "off"): 256,

@@ -32,9 +32,88 @@
         "tokens_per_minute": null,
         "source": "confirm account-specific limits before confirmatory collection"
       }
+    },
+    "openai": {
+      "base_url": "https://api.openai.com/v1/",
+      "api_key_env": "OPENAI_API_KEY",
+      "batch_protocol": "openai_batch_chat_completions",
+      "output_token_field": "max_completion_tokens",
+      "rate_limit_metadata": {
+        "batch_queue_limit": null,
+        "source": "confirm account Batch limits before paid preflight"
+      }
+    },
+    "anthropic": {
+      "base_url": "https://api.anthropic.com/v1/",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "batch_protocol": "anthropic_message_batches",
+      "output_token_field": "max_tokens",
+      "rate_limit_metadata": {
+        "batch_queue_limit": null,
+        "source": "confirm workspace Message Batches limits before paid preflight"
+      }
     }
   },
   "models": [
+    {
+      "provider": "openai",
+      "model_alias": "gpt_5_6_luna_openai",
+      "model_id": "gpt-5.6-luna",
+      "reasoning_capability": "toggle",
+      "reasoning_mode": "off",
+      "production_max_output_tokens": null,
+      "api_key_env": "OPENAI_API_KEY",
+      "base_url": "https://api.openai.com/v1/",
+      "batch_protocol": "openai_batch_chat_completions",
+      "output_token_field": "max_completion_tokens",
+      "batch_only_confirmatory": true,
+      "provider_request_kwargs": {"reasoning_effort": "none"}
+    },
+    {
+      "provider": "openai",
+      "model_alias": "gpt_5_6_luna_openai",
+      "model_id": "gpt-5.6-luna",
+      "reasoning_capability": "toggle",
+      "reasoning_mode": "on",
+      "production_max_output_tokens": null,
+      "api_key_env": "OPENAI_API_KEY",
+      "base_url": "https://api.openai.com/v1/",
+      "batch_protocol": "openai_batch_chat_completions",
+      "output_token_field": "max_completion_tokens",
+      "batch_only_confirmatory": true,
+      "provider_request_kwargs": {"reasoning_effort": "medium"}
+    },
+    {
+      "provider": "anthropic",
+      "model_alias": "claude_sonnet_5_anthropic",
+      "model_id": "claude-sonnet-5",
+      "reasoning_capability": "toggle",
+      "reasoning_mode": "off",
+      "production_max_output_tokens": null,
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "base_url": "https://api.anthropic.com/v1/",
+      "batch_protocol": "anthropic_message_batches",
+      "output_token_field": "max_tokens",
+      "batch_only_confirmatory": true,
+      "provider_request_kwargs": {"thinking": {"type": "disabled"}}
+    },
+    {
+      "provider": "anthropic",
+      "model_alias": "claude_sonnet_5_anthropic",
+      "model_id": "claude-sonnet-5",
+      "reasoning_capability": "toggle",
+      "reasoning_mode": "on",
+      "production_max_output_tokens": null,
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "base_url": "https://api.anthropic.com/v1/",
+      "batch_protocol": "anthropic_message_batches",
+      "output_token_field": "max_tokens",
+      "batch_only_confirmatory": true,
+      "provider_request_kwargs": {
+        "thinking": {"type": "adaptive", "display": "omitted"},
+        "output_config": {"effort": "xhigh"}
+      }
+    },
     {
       "provider": "nebius",
       "model_alias": "qwen3_32b",

@@ -21,12 +21,15 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from promise_switch.client import ProviderAgnosticClient
+from promise_switch.coding.semantic_v2 import validate_v2_judge_route, verify_frozen_codebook
 from promise_switch.codebook import CODEBOOK_VERSION, SEMANTIC_FIELDS, MessageCode, validate_annotation_record
 from promise_switch.execution.transport import OpenAICompatibleTransport
 from promise_switch.providers import create_model_config
 
 
 DEFAULT_CODING_DIR = ROOT / "promise_switch" / "coding"
+DEFAULT_FROZEN_KEY = ROOT / "notes/promise_switch/semantic_coding/promise_switch_message_codebook_v1/private_full_semantic_key_n2738.json"
+PAID_ACK = "I AUTHORIZE PAID PROMISE SWITCH SEMANTIC JUDGE EXECUTION"
 
 
 def parser() -> argparse.ArgumentParser:
@@ -55,6 +58,12 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--timeout-seconds", type=float, default=120.0)
     result.add_argument("--verify-reasoning", action="store_true")
     result.add_argument("--frozen-codebook-commit", default="9e8f59e")
+    result.add_argument(
+        "--semantic-v2-manifest", type=Path,
+        help="Bind this run to the new-only judge inputs and routing policy in a v2 manifest",
+    )
+    result.add_argument("--live-submit", action="store_true")
+    result.add_argument("--acknowledge-paid-provider-call")
     return result
 
 
@@ -109,6 +118,7 @@ def annotation_record(
 ) -> dict[str, Any]:
     result = {
         "item_id": parsed["item_id"],
+        "message": parsed["message"],
         "codebook_version": CODEBOOK_VERSION,
         **{field: parsed[field] for field in SEMANTIC_FIELDS},
         "judge_id": judge_id,
@@ -157,6 +167,39 @@ def validate_output(
 
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
+    if not args.live_submit:
+        raise SystemExit("semantic judge execution requires --live-submit")
+    if args.acknowledge_paid_provider_call != PAID_ACK:
+        raise SystemExit(
+            "semantic judge execution requires --acknowledge-paid-provider-call "
+            f"'{PAID_ACK}'"
+        )
+    if args.semantic_v2_manifest:
+        manifest = json.loads(args.semantic_v2_manifest.read_text(encoding="utf-8"))
+        new_items = manifest.get("new_items", {})
+        if (
+            Path(str(new_items.get("judge_sample_path", ""))).resolve() != args.sample.resolve()
+            or Path(str(new_items.get("judge_private_key_path", ""))).resolve()
+            != args.private_sample_key.resolve()
+        ):
+            raise SystemExit("semantic-v2 judge inputs do not match the versioned manifest")
+        try:
+            observed_hashes = verify_frozen_codebook(
+                codebook_path=DEFAULT_CODING_DIR / "codebook_v1.md",
+                validator_path=ROOT / "promise_switch/codebook.py",
+                judge_prompt_path=args.judge_prompt,
+                annotation_schema_path=args.annotation_schema,
+                frozen_key_path=DEFAULT_FROZEN_KEY,
+            )
+            recorded_hashes = dict(manifest.get("frozen_codebook", {}))
+            recorded_hashes.pop("verified", None)
+            if recorded_hashes != observed_hashes:
+                raise ValueError("semantic-v2 manifest codebook hashes do not match")
+            validate_v2_judge_route(
+                manifest, judge_provider=args.provider, judge_model=args.model,
+            )
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
     if args.max_attempts_per_item < 1:
         raise SystemExit("--max-attempts-per-item must be positive")
     if bool(args.base_provenance) != bool(args.existing_annotations):

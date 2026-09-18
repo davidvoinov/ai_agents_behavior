@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import ssl
 import time
 import urllib.error
@@ -14,6 +13,7 @@ from typing import Any
 import certifi
 
 from ..client import CompletionTransport, RequestSpec
+from ..credentials import api_key_from_environment
 from ..schemas import NormalizedResponse
 
 # Some providers front their API with edge bot-protection (e.g. Cloudflare) that
@@ -33,7 +33,7 @@ class OpenAICompatibleTransport(CompletionTransport):
         self.ssl_context = ssl_context or ssl.create_default_context(cafile=certifi.where())
 
     def complete(self, request: RequestSpec) -> NormalizedResponse:
-        api_key = os.environ.get(request.api_key_env, "").strip()
+        api_key = api_key_from_environment(request.api_key_env)
         if not api_key:
             return NormalizedResponse(
                 status="error", raw_response="", http_status=401,

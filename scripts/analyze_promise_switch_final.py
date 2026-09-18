@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import csv
 import hashlib
 import json
@@ -25,6 +26,8 @@ os.environ.setdefault("MPLCONFIGDIR", str(PLOT_CACHE / "matplotlib"))
 os.environ.setdefault("XDG_CACHE_HOME", str(PLOT_CACHE))
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+from matplotlib.ticker import MaxNLocator
 from jsonschema import Draft202012Validator
 from scipy.stats import chi2_contingency, fisher_exact
 from statsmodels.stats.proportion import confint_proportions_2indep
@@ -38,6 +41,10 @@ from promise_switch.codebook import (
     validate_annotation_record,
 )
 from promise_switch.design import Condition, scientific_condition_label
+from promise_switch.version import prompt_templates_hash
+
+
+plt.rcParams.update({"pdf.fonttype": 42, "ps.fonttype": 42})
 
 
 ANALYSIS_VERSION = "promise_switch_final_analysis_v1"
@@ -49,6 +56,8 @@ SEMANTIC_DIR = (
 )
 ANNOTATION_PATH = SEMANTIC_DIR / "final_full_semantic_annotations_n2738.jsonl"
 SEMANTIC_KEY_PATH = SEMANTIC_DIR / "private_full_semantic_key_n2738.json"
+SEMANTIC_EXPECTED_COUNT = 2738
+SEMANTIC_V2_ACTIVE = False
 SCHEMA_PATH = ROOT / "promise_switch" / "coding" / "annotation_schema_v1.json"
 CODEBOOK_PATH = ROOT / "promise_switch" / "coding" / "codebook_v1.md"
 PROMPT_PATH = ROOT / "promise_switch" / "coding" / "judge_prompt_v1.txt"
@@ -56,7 +65,7 @@ PYTHON_VALIDATOR_PATH = ROOT / "promise_switch" / "codebook.py"
 OUTPUT_DIR = ROOT / "notes" / "promise_switch" / "final_analysis"
 EXCLUDED_RUN = "deepseek_v4_flash_on_confirmatory_qcv3_20260823"
 
-RUN_SPECS = (
+BASE_RUN_SPECS = (
     ("qwen3_32b_on_confirmatory_clean_20260821", "Qwen3-32B — reasoning ON", "Qwen3-32B", "on", "Nebius"),
     ("qwen3_32b_off_confirmatory_clean_20260822", "Qwen3-32B — reasoning OFF", "Qwen3-32B", "off", "Nebius"),
     ("glm_5_2_on_confirmatory_qcv3_20260822", "GLM-5.2 — reasoning ON", "GLM-5.2", "on", "Nebius UK"),
@@ -71,6 +80,22 @@ RUN_SPECS = (
     ("gpt_oss_120b_nebius_confirmatory_qcv3_20260823", "GPT-OSS-120B — Nebius", "GPT-OSS-120B", "on", "Nebius"),
     ("gpt_oss_120b_groq_confirmatory_qcv3_10rpm_20260823", "GPT-OSS-120B — Groq", "GPT-OSS-120B", "on", "Groq"),
 )
+RUN_SPECS = BASE_RUN_SPECS
+
+# Registered future order only. These are deliberately excluded from RUN_SPECS
+# until each run is complete, audited, and the versioned semantic-v2 corpus exists.
+FUTURE_RUN_SPECS = (
+    (None, "GPT-5.6 Luna — no-think", "GPT-5.6 Luna", "off", "OpenAI"),
+    (None, "GPT-5.6 Luna — think, medium", "GPT-5.6 Luna", "on", "OpenAI"),
+    (None, "Claude Sonnet 5 — no-think", "Claude", "off", "Anthropic"),
+    (None, "Claude Sonnet 5 — think, adaptive xHigh", "Claude", "on", "Anthropic"),
+)
+FUTURE_MODEL_IDS = {
+    "GPT-5.6 Luna — no-think": "gpt-5.6-luna",
+    "GPT-5.6 Luna — think, medium": "gpt-5.6-luna",
+    "Claude Sonnet 5 — no-think": "claude-sonnet-5",
+    "Claude Sonnet 5 — think, adaptive xHigh": "claude-sonnet-5",
+}
 
 CONTRASTS = {
     "H8": (Condition.INDUCED_PROMISE_NO_SWITCH, Condition.NO_COMMUNICATION),
@@ -211,13 +236,17 @@ def load_trials() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str,
     for name, observed in frozen_hashes.items():
         if key["file_hashes"].get(name) != observed:
             raise ValueError(f"frozen scientific artifact hash mismatch: {name}")
-    expected_runs = [spec[0] for spec in RUN_SPECS]
-    if key.get("source_runs") != expected_runs or len(expected_runs) != 13:
-        raise ValueError("semantic source runs do not match the fixed 13-configuration set")
+    expected_runs = [Path(spec[0]).name for spec in (
+        RUN_SPECS if SEMANTIC_V2_ACTIVE else BASE_RUN_SPECS
+    )]
+    if key.get("source_runs") != expected_runs:
+        raise ValueError("semantic source runs do not match the active completed configuration set")
     all_trials: list[dict[str, Any]] = []
     run_metadata: list[dict[str, Any]] = []
     for order, (run_name, label, family, display_reasoning, display_provider) in enumerate(RUN_SPECS):
-        run_dir = RUN_ROOT / run_name
+        run_dir = Path(run_name)
+        if not run_dir.is_absolute():
+            run_dir = RUN_ROOT / run_dir
         manifest = validate_run_integrity(
             run_dir, required_dataset_role="confirmatory", require_completed=True,
         )
@@ -239,6 +268,7 @@ def load_trials() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str,
                 "model_alias": config["model_alias"],
                 "model_id": config["model_id"],
                 "source_run": run_name,
+                "source_run_name": Path(run_name).name,
             })
             assignment = assignments.get(row["trial_id"])
             trial["post_message_randomized"] = bool(
@@ -380,17 +410,21 @@ def missingness_bound(contrast: dict[str, Any]) -> dict[str, Any]:
 
 def semantic_records(key: dict[str, Any], trials: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     annotations = read_jsonl(ANNOTATION_PATH)
-    if len(annotations) != 2738:
-        raise ValueError(f"expected 2738 semantic annotations, found {len(annotations)}")
+    if len(annotations) != SEMANTIC_EXPECTED_COUNT:
+        raise ValueError(
+            f"expected {SEMANTIC_EXPECTED_COUNT} semantic annotations, found {len(annotations)}"
+        )
     annotation_ids = [row.get("item_id") for row in annotations]
     if len(annotation_ids) != len(set(annotation_ids)):
         raise ValueError("duplicate semantic annotation item_id")
     key_items = key.get("items", [])
-    if len(key_items) != 2738 or {row["item_id"] for row in key_items} != set(annotation_ids):
+    if len(key_items) != SEMANTIC_EXPECTED_COUNT or {
+        row["item_id"] for row in key_items
+    } != set(annotation_ids):
         raise ValueError("semantic annotation/key coverage mismatch")
     schema = Draft202012Validator(json.loads(SCHEMA_PATH.read_text(encoding="utf-8")))
     by_id = {row["item_id"]: row for row in annotations}
-    trial_by_key = {(row["source_run"], row["trial_id"]): row for row in trials}
+    trial_by_key = {(row["source_run_name"], row["trial_id"]): row for row in trials}
     joined: list[dict[str, Any]] = []
     for item in key_items:
         annotation = by_id[item["item_id"]]
@@ -421,24 +455,31 @@ def semantic_records(key: dict[str, Any], trials: list[dict[str, Any]]) -> tuple
         counts = Counter(row[field] for row in annotations)
         observed_nested[field] = {category: counts[category] for category in categories}
         prevalence.extend(
-            {"field": field, "category": category, "count": counts[category], "proportion": counts[category] / 2738}
+            {"field": field, "category": category, "count": counts[category],
+             "proportion": counts[category] / SEMANTIC_EXPECTED_COUNT}
             for category in categories
         )
-    if observed_nested != EXPECTED_SEMANTIC_COUNTS:
+    if not SEMANTIC_V2_ACTIVE and observed_nested != EXPECTED_SEMANTIC_COUNTS:
         raise ValueError("semantic prevalence counts do not match the frozen expected counts")
     return joined, prevalence
 
 
 def analyze_subgroup(joined: list[dict[str, Any]]) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
     explicit = [row for row in joined if eligible_explicit_promiser(MessageCode.from_mapping(row))]
-    if len(explicit) != 1:
+    if not SEMANTIC_V2_ACTIVE and len(explicit) != 1:
         raise ValueError(f"expected one promise-conditioned record, found {len(explicit)}")
     promise_status = {
         "definition": "explicit_promise=yes AND promised_action=COOPERATE AND conditionality=unconditional AND ambiguous_response=no",
         "n": len(explicit),
         "counts_by_randomized_arm": dict(sorted(Counter(row.get("condition") or "unassigned" for row in explicit).items())),
         "formal_between_arm_analysis_estimable": False,
-        "status": "The pre-specified promise-conditioned behavioral comparison is not meaningfully estimable because only one qualifying voluntary explicit promise occurred.",
+        "status": (
+            "The pre-specified promise-conditioned behavioral comparison is not meaningfully "
+            "estimable because only one qualifying voluntary explicit promise occurred."
+            if not SEMANTIC_V2_ACTIVE else
+            f"Explicit semantic-v2 activation contains {len(explicit)} qualifying voluntary "
+            "explicit promise records; this remains a separately identified descriptive subset."
+        ),
     }
     undertakings = [
         row for row in joined
@@ -622,7 +663,7 @@ def forest_plot(rows: list[dict[str, Any]], hypothesis: str, filename: str) -> N
     lower = [value - row["ci_95_low"] for value, row in zip(values, selected)]
     upper = [row["ci_95_high"] - value for value, row in zip(values, selected)]
     labels = [row["configuration"] for row in selected]
-    figure, axis = plt.subplots(figsize=(9.5, 7.2))
+    figure, axis = plt.subplots(figsize=(9.5, max(7.2, 0.46 * len(selected) + 1.2)))
     positions = range(len(selected))
     axis.errorbar(values, positions, xerr=[lower, upper], fmt="o", color="#1f4e79", capsize=3)
     axis.axvline(0, color="#555555", linewidth=1, linestyle="--")
@@ -634,6 +675,172 @@ def forest_plot(rows: list[dict[str, Any]], hypothesis: str, filename: str) -> N
     figure.savefig(OUTPUT_DIR / f"{filename}.png", dpi=300)
     figure.savefig(OUTPUT_DIR / f"{filename}.pdf")
     plt.close(figure)
+
+
+def save_publication_figure(figure: Any, filename: str) -> None:
+    figure.savefig(OUTPUT_DIR / f"{filename}.pdf", bbox_inches="tight")
+    figure.savefig(OUTPUT_DIR / f"{filename}.png", dpi=300, bbox_inches="tight")
+    plt.close(figure)
+
+
+def publication_confirmatory_forest(rows: list[dict[str, Any]]) -> None:
+    hypotheses = (
+        ("H8", "Induced Promise--No-Switch\nminus No Communication"),
+        ("H9", "Induced Promise--No-Switch\nminus Induced Promise--Switch"),
+        ("H10", "Induced Promise--No-Switch\nminus Expectation Without\nOwn Promise"),
+    )
+    selected = {
+        hypothesis: sorted(
+            (row for row in rows if row["hypothesis"] == hypothesis),
+            key=lambda row: row["configuration_order"],
+        )
+        for hypothesis, _ in hypotheses
+    }
+    limits = [
+        100 * row[field]
+        for hypothesis, _ in hypotheses
+        for row in selected[hypothesis]
+        for field in ("ci_95_low", "ci_95_high")
+    ] + [0.0]
+    span = max(limits) - min(limits)
+    padding = max(4.0, 0.04 * span)
+    x_limits = (min(limits) - padding, max(limits) + padding)
+    labels = [row["configuration"] for row in selected["H8"]]
+    positions = list(range(len(labels)))
+    significant_color = "#1f4e79"
+    figure, axes = plt.subplots(
+        1, 3, figsize=(9.2, max(5.8, 0.34 * len(labels) + 1.4)), sharex=True, sharey=True,
+        gridspec_kw={"wspace": 0.12},
+    )
+    for axis, (hypothesis, comparison) in zip(axes, hypotheses, strict=True):
+        for position, row in zip(positions, selected[hypothesis], strict=True):
+            estimate = 100 * row["risk_difference"]
+            error = [[estimate - 100 * row["ci_95_low"]],
+                     [100 * row["ci_95_high"] - estimate]]
+            significant = row["holm_significant_alpha_0_05"]
+            axis.errorbar(
+                estimate, position, xerr=error, fmt="o", markersize=5.2,
+                markerfacecolor=significant_color if significant else "white",
+                markeredgecolor=significant_color, markeredgewidth=1.1,
+                ecolor=significant_color, elinewidth=1.1, capsize=2.5,
+            )
+        axis.axvline(0, color="#555555", linewidth=0.9, linestyle="--", zorder=0)
+        axis.set_xlim(*x_limits)
+        axis.xaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
+        axis.grid(axis="x", color="#d9d9d9", linewidth=0.6)
+        axis.set_axisbelow(True)
+        axis.set_title(f"{hypothesis}\n{comparison}", fontsize=10.5, pad=8)
+        axis.tick_params(axis="both", labelsize=10.5)
+        axis.spines[["top", "right"]].set_visible(False)
+    axes[0].set_yticks(positions, labels)
+    axes[0].invert_yaxis()
+    figure.supxlabel("Absolute risk difference (percentage points)", fontsize=11, y=0.035)
+    figure.legend(
+        handles=(
+            Line2D([0], [0], marker="o", color=significant_color,
+                   markerfacecolor=significant_color, linestyle="none",
+                   label="Holm-adjusted p < .05"),
+            Line2D([0], [0], marker="o", color=significant_color,
+                   markerfacecolor="white", linestyle="none",
+                   label="Not significant after Holm adjustment"),
+        ),
+        loc="lower center", bbox_to_anchor=(0.57, -0.005), ncol=2,
+        frameon=False, fontsize=10,
+    )
+    figure.subplots_adjust(left=0.29, right=0.99, top=0.88, bottom=0.15)
+    save_publication_figure(figure, "fig_PS_confirmatory_forest")
+
+
+def publication_condition_heatmap(rows: list[dict[str, Any]]) -> None:
+    lookup = {(row["configuration"], row["condition"]): row for row in rows}
+    labels = list(dict.fromkeys(row["configuration"] for row in rows))
+    conditions = tuple(Condition)
+    values = [
+        [100 * lookup[(label, condition.value)]["cooperation_rate"] for condition in conditions]
+        for label in labels
+    ]
+    column_labels = [scientific_condition_label(condition) for condition in conditions]
+    figure, axis = plt.subplots(figsize=(8.8, max(5.7, 0.34 * len(labels) + 1.3)))
+    image = axis.imshow(values, cmap="Blues", vmin=0, vmax=100, aspect="auto")
+    axis.set_xticks(range(len(conditions)), column_labels)
+    axis.set_yticks(range(len(labels)), labels)
+    axis.tick_params(axis="x", labelsize=10, length=0, pad=7, rotation=32)
+    for label in axis.get_xticklabels():
+        label.set_horizontalalignment("right")
+    axis.tick_params(axis="y", labelsize=10.5, length=0)
+    axis.spines[:].set_visible(False)
+    axis.set_xticks([value - 0.5 for value in range(1, len(conditions))], minor=True)
+    axis.set_yticks([value - 0.5 for value in range(1, len(labels))], minor=True)
+    axis.grid(which="minor", color="white", linewidth=1.2)
+    axis.tick_params(which="minor", bottom=False, left=False)
+    for row_index, row_values in enumerate(values):
+        for column_index, value in enumerate(row_values):
+            axis.text(
+                column_index, row_index, f"{value:.1f}%",
+                ha="center", va="center", fontsize=10,
+                color="white" if value >= 55 else "#202020",
+            )
+    colorbar = figure.colorbar(image, ax=axis, fraction=0.025, pad=0.02)
+    colorbar.set_label("Cooperation rate (%)", fontsize=10.5)
+    colorbar.ax.tick_params(labelsize=10)
+    figure.subplots_adjust(left=0.32, right=0.94, top=0.98, bottom=0.34)
+    save_publication_figure(figure, "fig_PS_condition_heatmap")
+
+
+def publication_voluntary_dumbbell(rows: list[dict[str, Any]]) -> None:
+    selected = sorted(rows, key=lambda row: row["configuration_order"])
+    labels = [row["configuration"] for row in selected]
+    positions = list(range(len(selected)))
+    no_switch_color = "#1f4e79"
+    switch_color = "#d27b26"
+    figure, axis = plt.subplots(figsize=(8.2, max(5.7, 0.34 * len(selected) + 1.3)))
+    for position, row in zip(positions, selected, strict=True):
+        no_switch = 100 * row["treatment_rate"]
+        switch = 100 * row["comparison_rate"]
+        significant = row["holm_significant_alpha_0_05"]
+        axis.plot(
+            [switch, no_switch], [position, position],
+            color="#555555" if significant else "#b8b8b8",
+            linewidth=1.7 if significant else 1.0, zorder=1,
+        )
+        axis.scatter(no_switch, position, s=31, color=no_switch_color, zorder=2)
+        axis.scatter(switch, position, s=31, color=switch_color, zorder=2)
+        difference = 100 * row["risk_difference"]
+        marker = "*" if significant else ""
+        axis.text(
+            1.055, position, f"{difference:+.1f}{marker}",
+            transform=axis.get_yaxis_transform(), ha="left", va="center",
+            fontsize=10, fontweight="bold" if significant else "normal",
+        )
+    axis.set_xlim(-2, 102)
+    axis.set_xticks(range(0, 101, 20))
+    axis.set_ylim(-0.7, len(selected) - 0.3)
+    axis.set_yticks(positions, labels)
+    axis.invert_yaxis()
+    axis.set_xlabel("Cooperation rate (%)", fontsize=11)
+    axis.tick_params(axis="both", labelsize=10)
+    axis.grid(axis="x", color="#d9d9d9", linewidth=0.6)
+    axis.set_axisbelow(True)
+    axis.spines[["top", "right"]].set_visible(False)
+    axis.text(
+        1.055, 1.005, "NS − S\n(pp)", transform=axis.transAxes,
+        ha="left", va="bottom", fontsize=10,
+    )
+    axis.legend(
+        handles=(
+            Line2D([0], [0], marker="o", color=no_switch_color,
+                   markerfacecolor=no_switch_color, linestyle="none",
+                   label="Voluntary Message--No-Switch"),
+            Line2D([0], [0], marker="o", color=switch_color,
+                   markerfacecolor=switch_color, linestyle="none",
+                   label="Voluntary Message--Switch"),
+        ),
+        loc="lower left", bbox_to_anchor=(0.0, 1.01), ncol=1,
+        columnspacing=1.0, handletextpad=0.45, frameon=False, fontsize=9.2,
+    )
+    figure.text(0.69, 0.025, "* Holm-adjusted p < .05", fontsize=9.5)
+    figure.subplots_adjust(left=0.35, right=0.86, top=0.91, bottom=0.13)
+    save_publication_figure(figure, "fig_PS_voluntary_itt")
 
 
 def fmt(value: Any, digits: int = 3) -> str:
@@ -696,7 +903,7 @@ def build_report(
         selected = [row for row in confirmatory if row["hypothesis"] == hypothesis]
         positive = sum(row["risk_difference"] > 0 for row in selected)
         significant = sum(row["support_classification"] == "directionally supported and Holm-significant" for row in selected)
-        lines.append(f"- {hypothesis}: {positive}/13 positive; {significant}/13 Holm-significant in the predicted direction.")
+        lines.append(f"- {hypothesis}: {positive}/{len(RUN_SPECS)} positive; {significant}/{len(RUN_SPECS)} Holm-significant in the predicted direction.")
     aggregate_assigned = sum(row["assigned_trials"] for row in condition_rows)
     aggregate_missing = sum(row["total_missing_n"] for row in condition_rows)
     pre_randomization_missing = sum(row["pre_randomization_terminal_failures_n"] for row in pre_randomization)
@@ -706,7 +913,7 @@ def build_report(
         f"Across assigned condition-level trials, {aggregate_missing}/{aggregate_assigned} final outcomes were missing. Detailed model-by-condition and contrast-level diagnostics are in the CSV outputs.",
         f"Separately, {pre_randomization_missing} voluntary-message trials failed before receiving a Switch/No-Switch assignment.",
         "",
-        *[f"- {hypothesis}: worst-case RD remained positive for {worst_positive[hypothesis]}/13 configurations." for hypothesis in ("H8", "H9", "H10", "Voluntary ITT")],
+        *[f"- {hypothesis}: worst-case RD remained positive for {worst_positive[hypothesis]}/{len(RUN_SPECS)} configurations." for hypothesis in ("H8", "H9", "H10", "Voluntary ITT")],
         "", "## Semantic analyses", "",
         f"The frozen semantic prevalence counts matched all expected counts across 2,738 annotations. Promise-conditioned subset n={promise_status['n']}.",
         "",
@@ -721,7 +928,7 @@ def build_report(
         "- Confidence intervals: 95% Newcombe-Wilson intervals for independent-proportion differences.",
         "- Tests: two-sided Fisher exact if any expected cell count was below 5; otherwise two-sided Pearson chi-square without Yates correction.",
         "- Confirmatory multiplicity: Holm correction within each configuration across H8, H9, and H10.",
-        "- Secondary multiplicity: Holm correction across the 13 Voluntary Message ITT comparisons.",
+        f"- Secondary multiplicity: Holm correction across the {len(RUN_SPECS)} Voluntary Message ITT comparisons.",
         "- Extreme-case missing-outcome bounds are deterministic bounds, not confidence intervals.",
         "",
     ])
@@ -747,9 +954,12 @@ def internal_checks(confirmatory: list[dict[str, Any]], voluntary: list[dict[str
         raise ValueError("Fisher routing validation failed")
     if not (chi_name.startswith("Pearson") and chi_min >= 5):
         raise ValueError("Pearson routing validation failed")
-    if len(confirmatory) != 39 or len(voluntary) != 13 or len(condition_rows) != 78:
+    configuration_count = len(RUN_SPECS)
+    if (len(confirmatory) != 3 * configuration_count
+            or len(voluntary) != configuration_count
+            or len(condition_rows) != len(Condition) * configuration_count):
         raise ValueError("analysis table coverage validation failed")
-    for index in range(13):
+    for index in range(configuration_count):
         model_rows = [row for row in confirmatory if row["configuration_order"] == index]
         if {row["hypothesis"] for row in model_rows} != set(CONTRASTS):
             raise ValueError("confirmatory hypothesis coverage validation failed")
@@ -771,7 +981,112 @@ def internal_checks(confirmatory: list[dict[str, Any]], voluntary: list[dict[str
     }
 
 
-def main() -> int:
+def activation_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--activate-run-specs", type=Path,
+        help="JSON activation file containing only completed, audited future runs",
+    )
+    parser.add_argument(
+        "--activate-semantic-v2", type=Path,
+        help="explicit finalized semantic-v2 activation manifest",
+    )
+    return parser
+
+
+def activate_semantic_v2(path: Path, active_specs: tuple[tuple[Any, ...], ...]) -> None:
+    """Activate a finalized v2 corpus only when it matches the activated future runs."""
+    global ANNOTATION_PATH, SEMANTIC_KEY_PATH, SEMANTIC_EXPECTED_COUNT, SEMANTIC_V2_ACTIVE
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("corpus_version") != "promise_switch_semantic_corpus_v2":
+        raise ValueError("semantic-v2 activation has an incompatible version")
+    annotations = Path(str(payload.get("annotations_path", ""))).resolve()
+    key = Path(str(payload.get("private_key_path", ""))).resolve()
+    if not annotations.is_file() or sha256(annotations) != payload.get("annotations_sha256"):
+        raise ValueError("semantic-v2 annotation artifact hash mismatch")
+    if not key.is_file() or sha256(key) != payload.get("private_key_sha256"):
+        raise ValueError("semantic-v2 private-key artifact hash mismatch")
+    if sha256(ANNOTATION_PATH) != payload.get("frozen_base_sha256"):
+        raise ValueError("semantic-v2 activation does not reference the frozen v1 corpus")
+    count = payload.get("combined_count")
+    if not isinstance(count, int) or count <= 2738:
+        raise ValueError("semantic-v2 activation has no validated new records")
+    activated_paths = {str(Path(spec[0]).resolve()) for spec in active_specs}
+    source_rows = payload.get("source_runs")
+    source_paths = {
+        str(Path(str(row.get("run_path", ""))).resolve())
+        for row in source_rows if isinstance(row, dict)
+    } if isinstance(source_rows, list) else set()
+    if not source_paths or source_paths != activated_paths:
+        raise ValueError("semantic-v2 sources do not match explicitly activated future runs")
+    ANNOTATION_PATH = annotations
+    SEMANTIC_KEY_PATH = key
+    SEMANTIC_EXPECTED_COUNT = count
+    SEMANTIC_V2_ACTIVE = True
+
+
+def activated_specs(path: Path) -> tuple[tuple[Any, ...], ...]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    rows = payload.get("runs") if isinstance(payload, dict) else None
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("activation file must contain a non-empty runs list")
+    allowed = {spec[1]: spec for spec in FUTURE_RUN_SPECS}
+    output = []
+    seen_labels: set[str] = set()
+    for row in rows:
+        if not isinstance(row, dict) or row.get("label") not in allowed:
+            raise ValueError("activation contains an unknown future configuration label")
+        label = str(row["label"])
+        if label in seen_labels:
+            raise ValueError("activation contains a duplicate future configuration label")
+        seen_labels.add(label)
+        if not isinstance(row.get("run_path"), str) or not row["run_path"].strip():
+            raise ValueError("activated run requires an explicit nonempty run_path")
+        template = allowed[label]
+        run_dir = Path(row["run_path"]).resolve()
+        manifest = validate_run_integrity(
+            run_dir, required_dataset_role="confirmatory", require_completed=True,
+        )
+        if manifest.get("prompt_hash") != prompt_templates_hash():
+            raise ValueError(f"activated run prompt hash mismatch: {run_dir}")
+        if manifest.get("response_qc_version") != "promise_switch_response_qc_v3":
+            raise ValueError(f"activated run QC version mismatch: {run_dir}")
+        configurations = manifest.get("model_configurations")
+        if not isinstance(configurations, list) or len(configurations) != 1:
+            raise ValueError(f"activated run must contain exactly one model configuration: {run_dir}")
+        if manifest.get("requested_completed_trials_per_final_condition") != 100:
+            raise ValueError(f"activated run minimum completed target mismatch: {run_dir}")
+        config = configurations[0]
+        expected = {
+            "model_id": FUTURE_MODEL_IDS[str(row["label"])],
+            "reasoning_mode": template[3],
+            "provider": str(template[4]).lower(),
+        }
+        observed = {
+            "model_id": config.get("model_id"),
+            "reasoning_mode": config.get("reasoning_mode"),
+            "provider": config.get("provider"),
+        }
+        if observed != expected:
+            raise ValueError(f"activated run model/reasoning identity mismatch: {run_dir}")
+        output.append((str(run_dir), template[1], template[2], template[3], template[4]))
+    order = {spec[1]: index for index, spec in enumerate(FUTURE_RUN_SPECS)}
+    if [order[spec[1]] for spec in output] != sorted(order[spec[1]] for spec in output):
+        raise ValueError("future activation order must match the registered append order")
+    return tuple(output)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = activation_parser().parse_args(argv)
+    global RUN_SPECS
+    future_specs: tuple[tuple[Any, ...], ...] = ()
+    if args.activate_run_specs:
+        future_specs = activated_specs(args.activate_run_specs)
+        RUN_SPECS = (*BASE_RUN_SPECS, *future_specs)
+    if args.activate_semantic_v2:
+        if not future_specs:
+            raise ValueError("semantic-v2 activation requires explicit future run activation")
+        activate_semantic_v2(args.activate_semantic_v2, future_specs)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     trials, run_metadata, semantic_key = load_trials()
     condition_rows = [
@@ -814,8 +1129,8 @@ def main() -> int:
     ]
     voluntary_adjusted = holm_adjust(row["raw_p_value"] for row in voluntary)
     for row, adjusted_p in zip(voluntary, voluntary_adjusted):
-        row["holm_family"] = "Secondary Voluntary Message ITT across 13 configurations"
-        row["holm_family_size"] = 13
+        row["holm_family"] = f"Secondary Voluntary Message ITT across {len(RUN_SPECS)} configurations"
+        row["holm_family_size"] = len(RUN_SPECS)
         row["holm_adjusted_p_value"] = adjusted_p
         row["holm_significant_alpha_0_05"] = adjusted_p < ALPHA
     bounds = [missingness_bound(row) for row in confirmatory + voluntary]
@@ -879,6 +1194,9 @@ def main() -> int:
         ("Voluntary ITT", "forest_voluntary_itt"),
     ):
         forest_plot(confirmatory + voluntary, hypothesis, filename)
+    publication_confirmatory_forest(confirmatory)
+    publication_condition_heatmap(condition_rows)
+    publication_voluntary_dumbbell(voluntary)
     report = build_report(
         condition_rows, confirmatory, voluntary, bounds, promise_status,
         undertaking, compliance, excluded_summary, pre_randomization,
@@ -901,7 +1219,10 @@ def main() -> int:
         "deepseek_flash_on_excluded_diagnostic.csv", "final_analysis_report.md",
         "forest_h10.pdf", "forest_h10.png", "forest_h8.pdf", "forest_h8.png",
         "forest_h9.pdf", "forest_h9.png", "forest_voluntary_itt.pdf",
-        "forest_voluntary_itt.png", "heterogeneity_descriptives.csv",
+        "forest_voluntary_itt.png", "fig_PS_condition_heatmap.pdf",
+        "fig_PS_condition_heatmap.png", "fig_PS_confirmatory_forest.pdf",
+        "fig_PS_confirmatory_forest.png", "fig_PS_voluntary_itt.pdf",
+        "fig_PS_voluntary_itt.png", "heterogeneity_descriptives.csv",
         "missingness_bounds.csv", "pre_randomization_attrition.csv",
         "promise_conditioned_status.json", "semantic_prevalence.csv",
         "trial_level_analysis_dataset.csv", "undertaking_robustness.csv",
@@ -929,8 +1250,8 @@ def main() -> int:
         "confidence_interval": "95% Newcombe-Wilson interval for the difference of two independent proportions",
         "test_selection": "Two-sided Fisher exact if any expected 2x2 cell is <5; otherwise Pearson chi-square without Yates correction",
         "holm_families": {
-            "confirmatory": "13 separate within-configuration families of H8/H9/H10 (size 3)",
-            "secondary": "one family of 13 Voluntary Message ITT comparisons",
+            "confirmatory": f"{len(RUN_SPECS)} separate within-configuration families of H8/H9/H10 (size 3)",
+            "secondary": f"one family of {len(RUN_SPECS)} Voluntary Message ITT comparisons",
         },
         "analysis_unit": "randomized trial; API attempts are not analysis units",
         "input_artifacts": [

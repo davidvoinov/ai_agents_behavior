@@ -30,10 +30,12 @@ from ..version import (
 )
 from .attrition import (
     AttritionOutcome,
+    classify_batch_decision_response,
     classify_decision_output,
     classify_message_output,
     classify_transport,
 )
+from .batch_identity import verify_production_batch_attempt
 from .lock import RunWriterLock
 from .planner import (
     PlannedTrial, model_config_id, plan_top_up_expansion,
@@ -51,6 +53,7 @@ EXECUTION_SCHEMA_VERSION = "promise_switch_execution_v3"
 COMPLETION_POLICY_VERSION = "minimum_completed_binary_v1"
 BEHAVIORAL_PARSER_FAILURE_REVIEW_COUNT = 2
 DatasetRole = Literal["technical", "pilot", "confirmatory", "synthetic"]
+ExecutionMode = Literal["synchronous", "provider_batch"]
 Hook = Callable[[str, Mapping[str, Any]], None]
 
 
@@ -62,6 +65,7 @@ class ExecutionParameters:
     seed: int
     model_configs: tuple[ModelConfig, ...]
     dataset_role: DatasetRole
+    execution_mode: ExecutionMode = "synchronous"
     temperature: float = 1.0
     temperature_override_authorized: bool = False
     message_max_tokens: int | None = None
@@ -86,6 +90,19 @@ class ExecutionParameters:
             raise ValueError("At least one model configuration is required")
         if self.dataset_role not in {"technical", "pilot", "confirmatory", "synthetic"}:
             raise ValueError("dataset_role must explicitly classify every run")
+        if self.execution_mode not in {"synchronous", "provider_batch"}:
+            raise ValueError("unsupported Promise Switch execution mode")
+        if (
+            self.dataset_role == "confirmatory"
+            and any(config.batch_only_confirmatory for config in self.model_configs)
+            and self.execution_mode != "provider_batch"
+        ):
+            raise ValueError("this configuration is Batch-only for confirmatory execution")
+        if (
+            self.execution_mode == "provider_batch"
+            and any(config.batch_protocol == "none" for config in self.model_configs)
+        ):
+            raise ValueError("provider_batch execution requires a registered Batch protocol")
         if self.dry_run != (self.dataset_role == "synthetic"):
             raise ValueError("dry_run must be true exactly for synthetic runs")
         if self.dataset_role == "confirmatory" and self.n_per_condition != 100:
@@ -100,12 +117,17 @@ class ExecutionParameters:
         validated_caps = {
             config.production_max_output_tokens for config in self.model_configs
         }
+        if None in validated_caps:
+            raise ValueError(
+                "production output cap is unresolved; a paid Batch preflight must validate it"
+            )
         if len(validated_caps) != 1:
             raise ValueError(
                 "one run may contain only model configurations with the same validated "
                 "production output cap"
             )
         validated_cap = validated_caps.pop()
+        assert validated_cap is not None
         decision_cap = (
             validated_cap if self.decision_max_tokens is None else self.decision_max_tokens
         )
@@ -188,6 +210,11 @@ class PromiseSwitchRunner:
         resume: bool = False,
         approve_parser_review_class: str | None = None,
     ) -> dict[str, Any]:
+        if self.parameters.execution_mode == "provider_batch":
+            raise RuntimeError(
+                "provider Batch runs must be advanced explicitly with the Batch workflow; "
+                "the synchronous runner is disabled"
+            )
         with RunWriterLock(
             self.parameters.run_dir, run_id=self.parameters.run_id,
         ):
@@ -280,6 +307,7 @@ class PromiseSwitchRunner:
         return {
             "run_id": self.parameters.run_id,
             "dataset_role": self.parameters.dataset_role,
+            "execution_mode": self.parameters.execution_mode,
             "temperature": self.parameters.temperature,
             "temperature_override_authorized": (
                 self.parameters.temperature_override_authorized
@@ -835,6 +863,170 @@ class PromiseSwitchRunner:
             self._set_state(plan.trial_id, target)
         return last_response, last_outcome, len(existing)
 
+    def ingest_batch_response(
+        self, *, plan: PlannedTrial, stage: str, attempt_number: int,
+        request: RequestSpec, response: NormalizedResponse, batch_key: str,
+        custom_id: str, request_body_hash: str, provider_job_id: str | None,
+    ) -> str:
+        """Ingest one normalized Batch result through the ordinary parser/QC path.
+
+        The caller must hold the run writer lock and must have loaded/reconciled
+        this runner. The method is restart-idempotent but never appends an attempt
+        twice.
+        """
+        if self.parameters.execution_mode != "provider_batch":
+            raise ValueError("batch ingestion requires provider_batch execution mode")
+        if stage not in {"message", "final_decision"}:
+            raise ValueError("invalid Promise Switch Batch stage")
+        if attempt_number not in range(1, self.parameters.retry_policy.max_attempts + 1):
+            raise ValueError("scientific attempt exceeds the configured maximum")
+        self._assert_runtime_identity(plan, request.body.get("messages", []))
+        config = self._configs[plan.config_id]
+        key_rows = [
+            row for row in self.api_attempts
+            if row.get("trial_id") == plan.trial_id and row.get("stage") == stage
+            and int(row.get("attempt_number", 0)) == attempt_number
+        ]
+        if len(key_rows) > 1:
+            raise ValueError("duplicate scientific attempt already persisted")
+        if key_rows:
+            persisted = key_rows[0]
+            if (
+                persisted.get("batch_key") != batch_key
+                or persisted.get("custom_id") != custom_id
+                or persisted.get("request_body_hash") != request_body_hash
+            ):
+                raise ValueError("scientific attempt identity conflicts with persisted attempt")
+            response = _response_from_record(persisted)
+        else:
+            identity = verify_production_batch_attempt(
+                config=config, request=request.to_log_dict(), response=response,
+            )
+            outcome = (
+                classify_transport(response) if identity.verified
+                else AttritionOutcome(
+                    "infrastructure", str(identity.failure_cause), False,
+                )
+            )
+            record = self._attempt_record(
+                plan, stage, attempt_number, request, response, outcome,
+            )
+            record.update({
+                "batch_key": batch_key, "custom_id": custom_id,
+                "request_body_hash": request_body_hash,
+                "provider_job_id": provider_job_id,
+                "identity_verification": (
+                    "VERIFIED_MATCH" if identity.verified else "FAILED"
+                ),
+                "identity_failures": list(identity.failures),
+            })
+            self.storage.append("api_attempts.jsonl", record)
+            self.api_attempts.append(record)
+            self.hook("after_batch_api_attempt", record)
+
+        identity = verify_production_batch_attempt(
+            config=config, request=request.to_log_dict(), response=response,
+        )
+
+        if stage == "message" and plan.trial_id in self.message_events:
+            return "already_ingested"
+        if stage == "final_decision" and plan.trial_id in self.trials:
+            return "already_ingested"
+
+        outcome = (
+            classify_transport(response) if identity.verified
+            else AttritionOutcome(
+                "infrastructure", str(identity.failure_cause), False,
+            )
+        )
+        if outcome.category == "infrastructure":
+            if not key_rows:
+                self._append_error(plan, stage, attempt_number, outcome, response)
+            if outcome.quota_pause:
+                self._ensure_stage_pending(plan, stage)
+                self._pause_quota(plan, stage, outcome, response)
+                return "paused_quota"
+            if outcome.retryable and attempt_number < self.parameters.retry_policy.max_attempts:
+                self._ensure_stage_pending(plan, stage)
+                self._set_state(plan.trial_id, TrialState.INFRASTRUCTURE_PENDING_RETRY)
+                target = (TrialState.MESSAGE_PENDING if stage == "message"
+                          else TrialState.DECISION_PENDING)
+                self._set_state(plan.trial_id, target)
+                return "retry_pending"
+            self._append_trial_result(
+                plan, final_action=None, raw_final_response=response.raw_response,
+                completion_status="failed", failure_category="infrastructure",
+                failure_reason=outcome.cause, attempt_number=attempt_number,
+            )
+            self._ensure_stage_pending(plan, stage)
+            self._set_state(plan.trial_id, TrialState.FAILED_INFRASTRUCTURE_FINAL)
+            self._pause_infrastructure_review(plan, stage, outcome, response, attempt_number)
+            return "terminal_infrastructure"
+
+        if stage == "message":
+            parsed = parse_message(response.raw_response)
+            behavioral = classify_message_output(parsed)
+            event_id = "message:" + hashlib.sha256(
+                f"{plan.trial_id}|{response.raw_response}".encode()
+            ).hexdigest()[:20]
+            event = MessageEvent(
+                message_event_id=event_id, trial_id=plan.trial_id,
+                timestamp=self.timestamp(),
+                raw_message=parsed.message if parsed.valid else response.raw_response,
+                message_recorded=True,
+            ).to_dict()
+            event.update({
+                "raw_response": response.raw_response, "parsed_message": parsed.message,
+                "parse_valid": parsed.valid, "parse_error": parsed.error,
+                "behavioral_failure_reason": behavioral.cause,
+                "attempt_number": attempt_number,
+            })
+            self.storage.append("message_events.jsonl", event)
+            self.message_events[plan.trial_id] = event
+            self._ensure_stage_pending(plan, stage)
+            self._set_state(plan.trial_id, TrialState.MESSAGE_RECORDED)
+            self._set_state(plan.trial_id, TrialState.ASSIGNMENT_PENDING)
+            if behavioral.category == "behavioral":
+                self._maybe_pause_behavioral_parser_review(
+                    plan, stage, behavioral, attempt_number, response.raw_response,
+                )
+            return "message_recorded"
+
+        parsed = parse_decision(response.raw_response)
+        behavioral = classify_batch_decision_response(response, parsed)
+        self._ensure_stage_pending(plan, stage)
+        if behavioral.category == "behavioral":
+            self._append_trial_result(
+                plan, final_action=None, raw_final_response=response.raw_response,
+                completion_status="failed", failure_category="behavioral",
+                failure_reason=behavioral.cause, attempt_number=attempt_number,
+            )
+            self._set_state(plan.trial_id, TrialState.BEHAVIORAL_FAILURE)
+            self._maybe_pause_behavioral_parser_review(
+                plan, stage, behavioral, attempt_number, response.raw_response,
+            )
+            return "terminal_behavioral"
+        self._append_trial_result(
+            plan, final_action=parsed.decision, raw_final_response=response.raw_response,
+            completion_status="completed", failure_category=None, failure_reason=None,
+            attempt_number=attempt_number,
+        )
+        self._set_state(plan.trial_id, TrialState.COMPLETED)
+        return "completed"
+
+    def _ensure_stage_pending(self, plan: PlannedTrial, stage: str) -> None:
+        current = self.states[plan.trial_id]
+        target = TrialState.MESSAGE_PENDING if stage == "message" else TrialState.DECISION_PENDING
+        if current == target:
+            return
+        if stage == "final_decision" and current == TrialState.ASSIGNED:
+            self._set_state(plan.trial_id, target)
+            return
+        if current == TrialState.INFRASTRUCTURE_PENDING_RETRY:
+            self._set_state(plan.trial_id, target)
+            return
+        raise ValueError(f"trial is not ready for {stage} Batch ingestion: {current.value}")
+
     def _attempt_record(
         self, plan: PlannedTrial, stage: str, attempt_number: int,
         request: RequestSpec, response: NormalizedResponse, outcome: AttritionOutcome,
@@ -844,6 +1036,18 @@ class PromiseSwitchRunner:
         final_partner_id = assignment.get("final_partner_id")
         if stage == "message":
             original_partner_id = f"{plan.trial_id}:B1"
+        thinking_count = response.error_metadata.get(
+            "thinking_token_count",
+            response.error_metadata.get("reasoning_token_count"),
+        )
+        thinking_signal = response.error_metadata.get(
+            "thinking_present",
+            response.error_metadata.get("reasoning_signal_present"),
+        )
+        thinking_observed = bool(
+            thinking_signal is True
+            or isinstance(thinking_count, (int, float)) and thinking_count > 0
+        )
         return sanitize_for_serialization({
             "attempt_id": "attempt:" + hashlib.sha256(
                 f"{plan.trial_id}|{stage}|{attempt_number}".encode()
@@ -861,6 +1065,11 @@ class PromiseSwitchRunner:
             "provider": plan.provider,
             "model": plan.model,
             "reasoning_mode": plan.reasoning_mode,
+            "configured_reasoning_mode": _configured_reasoning_mode(request.body),
+            "thinking_observed": thinking_observed,
+            "thinking_tokens": (
+                int(thinking_count) if isinstance(thinking_count, (int, float)) else None
+            ),
             "plan_phase": plan.plan_phase,
             "top_up_sequence": plan.top_up_sequence,
             "top_up_block_id": plan.top_up_block_id,
@@ -1192,6 +1401,7 @@ class PromiseSwitchRunner:
             "execution_schema_version": EXECUTION_SCHEMA_VERSION,
             "run_id": self.parameters.run_id,
             "dataset_role": self.parameters.dataset_role,
+            "execution_mode": self.parameters.execution_mode,
             "experiment_version": EXPERIMENT_VERSION,
             "prompt_version": PROMPT_VERSION,
             "prompt_hash": prompt_templates_hash(),
@@ -1246,6 +1456,7 @@ class PromiseSwitchRunner:
         return sanitize_for_serialization({
             "run_id": self.parameters.run_id,
             "dataset_role": self.parameters.dataset_role,
+            "execution_mode": self.parameters.execution_mode,
             "n_per_condition": self.parameters.n_per_condition,
             "seed": self.parameters.seed,
             "model_configurations": [config.to_dict() for config in self.parameters.model_configs],
@@ -1334,6 +1545,7 @@ def parameters_from_manifest(run_dir: Path) -> ExecutionParameters:
         run_id=normalized["run_id"], output_dir=run_dir.parent,
         n_per_condition=int(normalized["n_per_condition"]), seed=int(normalized["seed"]),
         model_configs=configs, dataset_role=normalized["dataset_role"],
+        execution_mode=normalized.get("execution_mode", "synchronous"),
         temperature=float(normalized["temperature"]),
         temperature_override_authorized=bool(
             normalized.get("temperature_override_authorized", False)
@@ -1356,6 +1568,25 @@ def _last_by(rows: Sequence[dict[str, Any]], key: str) -> dict[str, dict[str, An
 
 def _response_from_record(record: dict[str, Any]) -> NormalizedResponse:
     return NormalizedResponse(**record["response"])
+
+
+def _configured_reasoning_mode(body: Mapping[str, Any]) -> str:
+    """Describe the durable provider request without inferring model behavior."""
+    thinking = body.get("thinking")
+    if thinking == {"type": "adaptive", "display": "omitted"}:
+        output_config = body.get("output_config")
+        effort = (
+            output_config.get("effort")
+            if isinstance(output_config, Mapping)
+            else None
+        )
+        return f"adaptive/{effort}" if isinstance(effort, str) else "adaptive"
+    if thinking == {"type": "disabled"}:
+        return "disabled"
+    effort = body.get("reasoning_effort")
+    if isinstance(effort, str):
+        return f"reasoning_effort={effort}"
+    return "unavailable"
 
 
 def _allocation_seed(seed: int, config_id: str, group_id: str) -> int:

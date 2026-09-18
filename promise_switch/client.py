@@ -49,7 +49,7 @@ class ProviderAgnosticClient:
             "model": self.model_config.model_id,
             "messages": [dict(message) for message in messages],
             "temperature": temperature,
-            "max_tokens": max_tokens,
+            self.model_config.output_token_field: max_tokens,
         }
         body.update(self.model_config.provider_request_kwargs)
         return RequestSpec(

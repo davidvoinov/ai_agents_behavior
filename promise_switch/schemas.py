@@ -64,9 +64,14 @@ class ModelConfig(SerializableRecord):
     api_key_env: str
     reasoning_capability: Literal["toggle", "fixed_on", "fixed_off", "unavailable"]
     reasoning_mode: ReasoningMode
-    production_max_output_tokens: int
+    production_max_output_tokens: int | None
     provider_request_kwargs: dict[str, Any] = field(default_factory=dict)
     rate_limit_metadata: dict[str, Any] = field(default_factory=dict)
+    batch_protocol: Literal[
+        "none", "openai_batch_chat_completions", "anthropic_message_batches"
+    ] = "none"
+    output_token_field: Literal["max_tokens", "max_completion_tokens"] = "max_tokens"
+    batch_only_confirmatory: bool = False
 
 
 @dataclass(frozen=True)
@@ -133,6 +138,7 @@ class NormalizedResponse(SerializableRecord):
     retry_after_seconds: float | None = None
     usage: dict[str, Any] = field(default_factory=dict)
     error_metadata: dict[str, Any] = field(default_factory=dict)
+    returned_model_id: str | None = None
 
 
 @dataclass(frozen=True)

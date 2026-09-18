@@ -12,7 +12,8 @@ from .response_contract import submitted_decision_is_contradictory
 InfrastructureCause = Literal[
     "rate_limit_transient", "quota_exhausted", "timeout", "connection_error",
     "provider_error", "model_unavailable", "token_truncation",
-    "malformed_api_response", "other_infrastructure",
+    "malformed_api_response", "model_identity_failure",
+    "request_configuration_identity_failure", "other_infrastructure",
 ]
 BehavioralCause = Literal[
     "refusal_to_decide", "invalid_output_format", "contradictory_action",
@@ -38,6 +39,10 @@ def classify_transport(response: NormalizedResponse) -> AttritionOutcome:
     ).lower()
     if response.status == "malformed_api_response":
         return AttritionOutcome("infrastructure", "malformed_api_response", True)
+    if response.status == "canceled":
+        return AttritionOutcome("infrastructure", "other_infrastructure", False)
+    if response.status == "expired":
+        return AttritionOutcome("infrastructure", "provider_error", True)
     if response.http_status == 429:
         if any(marker in text for marker in (
             "quota", "credit", "insufficient balance", "billing", "hard limit", "exhausted",
@@ -67,6 +72,15 @@ def classify_decision_output(parsed: DecisionParse) -> AttritionOutcome:
     if parsed.error and "decision must be exactly" in parsed.error:
         return AttritionOutcome("behavioral", "unclassifiable_action", False)
     return AttritionOutcome("behavioral", "invalid_output_format", False)
+
+
+def classify_batch_decision_response(
+    response: NormalizedResponse, parsed: DecisionParse,
+) -> AttritionOutcome:
+    """Adapt Batch refusal telemetry without changing frozen legacy QC-v3."""
+    if response.finish_reason == "refusal" or response.error_metadata.get("provider_refusal"):
+        return AttritionOutcome("behavioral", "refusal_to_decide", False)
+    return classify_decision_output(parsed)
 
 
 def classify_message_output(parsed: MessageParse) -> AttritionOutcome:
