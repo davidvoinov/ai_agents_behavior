@@ -1,0 +1,210 @@
+{
+  "cli_invocation": [
+    "scripts/run_promise_switch_batch.py",
+    "initialize",
+    "--run-id",
+    "gpt_5_6_luna_off_confirmatory_20260918",
+    "--provider",
+    "openai",
+    "--model",
+    "gpt_5_6_luna_openai",
+    "--reasoning-mode",
+    "off",
+    "--validated-cap",
+    "256",
+    "--dataset-role",
+    "confirmatory",
+    "--n-per-condition",
+    "100",
+    "--seed",
+    "20260808"
+  ],
+  "completion_policy": {
+    "minimum_completed_binary_per_condition": 100,
+    "prohibited_stopping_inputs": [
+      "action_value",
+      "cooperation_rate",
+      "effect",
+      "p_value",
+      "confidence_interval",
+      "message_content"
+    ],
+    "stopping_inputs": [
+      "completed",
+      "behavioral_missing",
+      "infrastructure_attrition",
+      "pending",
+      "retryable",
+      "paused"
+    ],
+    "top_up_enabled": true,
+    "version": "minimum_completed_binary_v1",
+    "voluntary_top_up_unit": "randomized_balanced_block_of_2"
+  },
+  "config_hash": "5de93a8ce9d514ad2471393336cfa25657e969d259c33f842518639121fde403",
+  "config_snapshot": {
+    "experiment_version": "promise_switch_v1",
+    "parameters": {
+      "dataset_role": "confirmatory",
+      "decision_max_tokens": 256,
+      "dry_run": false,
+      "execution_mode": "provider_batch",
+      "message_max_tokens": 256,
+      "model_configurations": [
+        {
+          "api_key_env": "OPENAI_API_KEY",
+          "base_url": "https://api.openai.com/v1/",
+          "batch_only_confirmatory": true,
+          "batch_protocol": "openai_batch_chat_completions",
+          "model_alias": "gpt_5_6_luna_openai",
+          "model_id": "gpt-5.6-luna",
+          "output_token_field": "max_completion_tokens",
+          "production_max_output_tokens": 256,
+          "provider": "openai",
+          "provider_request_kwargs": {
+            "reasoning_effort": "none"
+          },
+          "rate_limit_metadata": {
+            "batch_queue_limit": null,
+            "source": "confirm account Batch limits before paid preflight"
+          },
+          "reasoning_capability": "toggle",
+          "reasoning_mode": "off"
+        }
+      ],
+      "n_per_condition": 100,
+      "output_cap_override_authorized": false,
+      "rate_limit_policy": {
+        "max_concurrency": 1,
+        "minimum_interval_seconds": 2.0,
+        "requests_per_minute": 30,
+        "tokens_per_minute": null
+      },
+      "retry_policy": {
+        "base_delay_seconds": 1.0,
+        "jitter_fraction": 0.25,
+        "max_delay_seconds": 60.0,
+        "max_retries": 2
+      },
+      "run_id": "gpt_5_6_luna_off_confirmatory_20260918",
+      "seed": 20260808,
+      "temperature": 1.0,
+      "temperature_override_authorized": false,
+      "top_up_enabled": true
+    },
+    "prompt_hash": "17b5f31eaac9d9f2742d74a01fae17bc4a93a847d33f49d1016392035a8f175c",
+    "prompt_version": "promise_switch_v1",
+    "response_qc_version": "promise_switch_response_qc_v3"
+  },
+  "created_at": "2026-09-18T19:19:02.583695+00:00",
+  "dataset_role": "confirmatory",
+  "dry_run": false,
+  "execution_mode": "provider_batch",
+  "execution_schema_version": "promise_switch_execution_v3",
+  "experiment_version": "promise_switch_v1",
+  "git_commit": "f5831fe17c7c7ad95ff1cddde5029f3127a415fe",
+  "max_output_tokens": 256,
+  "model_configurations": [
+    {
+      "api_key_env": "OPENAI_API_KEY",
+      "base_url": "https://api.openai.com/v1/",
+      "batch_only_confirmatory": true,
+      "batch_protocol": "openai_batch_chat_completions",
+      "model_alias": "gpt_5_6_luna_openai",
+      "model_id": "gpt-5.6-luna",
+      "output_token_field": "max_completion_tokens",
+      "production_max_output_tokens": 256,
+      "provider": "openai",
+      "provider_request_kwargs": {
+        "reasoning_effort": "none"
+      },
+      "rate_limit_metadata": {
+        "batch_queue_limit": null,
+        "source": "confirm account Batch limits before paid preflight"
+      },
+      "reasoning_capability": "toggle",
+      "reasoning_mode": "off"
+    }
+  ],
+  "normalized_execution_parameters": {
+    "dataset_role": "confirmatory",
+    "decision_max_tokens": 256,
+    "dry_run": false,
+    "execution_mode": "provider_batch",
+    "message_max_tokens": 256,
+    "model_configurations": [
+      {
+        "api_key_env": "OPENAI_API_KEY",
+        "base_url": "https://api.openai.com/v1/",
+        "batch_only_confirmatory": true,
+        "batch_protocol": "openai_batch_chat_completions",
+        "model_alias": "gpt_5_6_luna_openai",
+        "model_id": "gpt-5.6-luna",
+        "output_token_field": "max_completion_tokens",
+        "production_max_output_tokens": 256,
+        "provider": "openai",
+        "provider_request_kwargs": {
+          "reasoning_effort": "none"
+        },
+        "rate_limit_metadata": {
+          "batch_queue_limit": null,
+          "source": "confirm account Batch limits before paid preflight"
+        },
+        "reasoning_capability": "toggle",
+        "reasoning_mode": "off"
+      }
+    ],
+    "n_per_condition": 100,
+    "output_cap_override_authorized": false,
+    "rate_limit_policy": {
+      "max_concurrency": 1,
+      "minimum_interval_seconds": 2.0,
+      "requests_per_minute": 30,
+      "tokens_per_minute": null
+    },
+    "retry_policy": {
+      "base_delay_seconds": 1.0,
+      "jitter_fraction": 0.25,
+      "max_delay_seconds": 60.0,
+      "max_retries": 2
+    },
+    "run_id": "gpt_5_6_luna_off_confirmatory_20260918",
+    "seed": 20260808,
+    "temperature": 1.0,
+    "temperature_override_authorized": false,
+    "top_up_enabled": true
+  },
+  "output_cap_override_authorized": false,
+  "pacing_rate_limit_policy": {
+    "max_concurrency": 1,
+    "minimum_interval_seconds": 2.0,
+    "requests_per_minute": 30,
+    "tokens_per_minute": null
+  },
+  "prompt_hash": "17b5f31eaac9d9f2742d74a01fae17bc4a93a847d33f49d1016392035a8f175c",
+  "prompt_version": "promise_switch_v1",
+  "providers": [
+    "openai"
+  ],
+  "randomization_seed": 20260808,
+  "reasoning_modes": [
+    "off"
+  ],
+  "requested_completed_trials_per_final_condition": 100,
+  "response_qc_version": "promise_switch_response_qc_v3",
+  "retry_policy": {
+    "base_delay_seconds": 1.0,
+    "jitter_fraction": 0.25,
+    "max_delay_seconds": 60.0,
+    "max_retries": 2
+  },
+  "run_id": "gpt_5_6_luna_off_confirmatory_20260918",
+  "temperature": 1.0,
+  "temperature_override_authorized": false,
+  "token_limits": {
+    "final_decision": 256,
+    "message": 256
+  },
+  "top_up_enabled": true,
+  "working_tree_dirty": true
+}
