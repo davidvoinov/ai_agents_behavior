@@ -1,42 +1,3 @@
-#!/usr/bin/env python3
-"""
-run_crossmodel_pilot.py — REAL-AGENT pilot of CROSS-MODEL dyads: canonical
-skin, Investor and Trustee played by two different models/providers.
-
-This is a PILOT (exploratory): its job is to answer, cheaply, whether
-behavior (mean sent, return ratio, betrayal/reciprocity) shifts when the
-Investor and Trustee are different models, vs the same-model self-play
-baselines already collected.
-
-Every cell now runs the full original three-treatment series (project
-decision: no baseline-only runs), with trustee_chat_fn/trustee_mcfg passed
-through every run_treatment call so the Trustee stays the cell's own model:
-  1. <cellname>_no_history      — N_NO dyads, no history report.
-  2. <cellname>_social_history  — N_SOC dyads, history report built from that
-     SAME cell's own clean no_history records (canonical cfg).
-  3. <cellname>_communication   — N_COMM dyads, COMM_ROUNDS of pre-play cheap
-     talk, no history report.
-
-Safety: refuses to run if test_reskin.py OR test_crossmodel.py fail (never
-burn quota on a harness bug).
-
-Usage (locally, keys in .env):
-    python run_crossmodel_pilot.py
-Env knobs (all optional):
-    N_NO                      no_history dyads per cell            (default 6)
-    N_SOC                     social_history dyads per cell         (default 6)
-    N_COMM                    communication dyads per cell          (default 6)
-    COMM_ROUNDS               pre-play message rounds               (default 2)
-    LLM_TEMPERATURE           default 1.0
-    MAX_TOKENS                default 3000
-    MIN_CALL_INTERVAL_CEREBRAS  seconds between Cerebras calls    (default 2)
-    MIN_CALL_INTERVAL_GROQ      seconds between Groq calls        (default 25)
-    CELLS   comma list overriding the default two cells, e.g.
-            "cerebras:gpt-oss-120b>groq:qwen/qwen3-32b,groq:qwen/qwen3-32b>cerebras:gpt-oss-120b"
-            ('>' separates investor>trustee; each side is "provider:model")
-Outputs:
-    data/crossmodel_<ts>.jsonl   behavioral records (one file for all cells)
-"""
 import os
 import statistics
 import subprocess
@@ -57,34 +18,24 @@ except ImportError:
 import berg_trust_game as B
 from reskin import RESKINS
 
-# --------------------------------------------------------------------------- #
-# Provider map: base_url, key env var                                        #
-# --------------------------------------------------------------------------- #
 PROVIDER_MAP = {
     "cerebras":   ("https://api.cerebras.ai/v1",   "CEREBRAS_API_KEY"),
     "groq":       ("https://api.groq.com/openai/v1", "GROQ_API_KEY"),
     "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
 }
 
-# Default cross-model cells: (A) gpt-oss-120b/Cerebras invests, qwen3-32b/Groq
-# trustees; (B) the reverse.
 DEFAULT_CELLS = [
     "cerebras:gpt-oss-120b>groq:qwen/qwen3-32b",
     "groq:qwen/qwen3-32b>cerebras:gpt-oss-120b",
 ]
 
-# Same-day self-play reference lines, hardcoded for comparison in the summary.
-# These come from 2026-07-02 canonical n≈40 pilots (same-model dyads, no
-# history, no communication) — NOT recomputed here, just printed for context.
 SELFPLAY_GPT_OSS_120B_MEAN_SENT = 1.88
 SELFPLAY_GPT_OSS_120B_FULL_BETRAYAL = "13/17"
 SELFPLAY_QWEN3_32B_MEAN_SENT = 0.82
 SELFPLAY_QWEN3_32B_RECIPROCATED = "7/7"
 SELFPLAY_QWEN3_32B_RECIPROCATED_RATIO = 0.61
 
-
 def gate_on_tests() -> None:
-    """Abort unless BOTH offline harness test suites pass."""
     here = Path(__file__).resolve().parent
     for test_file in ("test_reskin.py", "test_crossmodel.py"):
         r = subprocess.run([sys.executable, str(here / test_file)],
@@ -95,9 +46,7 @@ def gate_on_tests() -> None:
             sys.exit(f"{test_file} FAILED — fix the harness before spending API quota.")
     print("Offline tests: OK (test_reskin.py + test_crossmodel.py)")
 
-
 def parse_side(spec: str) -> tuple[str, str]:
-    """'provider:model' -> (provider, model)."""
     if ":" not in spec:
         sys.exit(f"Bad cell side {spec!r}: expected 'provider:model'.")
     provider, model = spec.split(":", 1)
@@ -108,9 +57,7 @@ def parse_side(spec: str) -> tuple[str, str]:
                  f"Options: {', '.join(PROVIDER_MAP)}")
     return provider, model
 
-
 def parse_cells(raw: list[str]) -> list[tuple[tuple[str, str], tuple[str, str]]]:
-    """['prov:model>prov:model', ...] -> [((inv_provider, inv_model), (tru_provider, tru_model)), ...]"""
     cells = []
     for spec in raw:
         if ">" not in spec:
@@ -118,7 +65,6 @@ def parse_cells(raw: list[str]) -> list[tuple[tuple[str, str], tuple[str, str]]]
         inv_spec, tru_spec = spec.split(">", 1)
         cells.append((parse_side(inv_spec), parse_side(tru_spec)))
     return cells
-
 
 def check_key(provider: str) -> str:
     _, key_env = PROVIDER_MAP[provider]
@@ -128,12 +74,8 @@ def check_key(provider: str) -> str:
                  f"Put a real key in .env as {key_env}=..., re-run.")
     return key
 
-
 def sanitize_model(model: str) -> str:
-    """Model names can contain '/' (e.g. 'qwen/qwen3-32b') — sanitize for use
-    in filenames/treatment names."""
     return model.replace("/", "-")
-
 
 def build_mcfg(provider: str, model: str, temp: float, max_tokens: int,
               min_interval_cerebras: float, min_interval_groq: float) -> B.ModelConfig:
@@ -149,26 +91,11 @@ def build_mcfg(provider: str, model: str, temp: float, max_tokens: int,
         temperature=temp, max_tokens=max_tokens, min_call_interval=min_interval,
     )
 
-
 def run_full_series(inv_chat: B.ChatFn, inv_mcfg: B.ModelConfig,
                     tru_chat: B.ChatFn, tru_mcfg: B.ModelConfig,
                     cfg, cellname: str, n_no: int, n_soc: int, n_comm: int,
                     comm_rounds: int, out_path: Path,
                     sleep_between: float = 0.0) -> dict[str, list[dict]]:
-    """Run the full three-treatment series for ONE cross-model cell.
-
-    The Investor always uses inv_chat/inv_mcfg and the Trustee always uses
-    tru_chat/tru_mcfg (passed through every run_treatment call), so every
-    treatment in the series stays a genuine cross-model dyad.
-
-    1. <cellname>_no_history      — n_no dyads, no history report.
-    2. <cellname>_social_history  — n_soc dyads, history report built from
-       THIS call's own clean no_history records (canonical cfg/labels).
-    3. <cellname>_communication   — n_comm dyads, comm_rounds of pre-play
-       cheap talk, no history report.
-
-    Returns {treatment_name: records} (a treatment is omitted if its n is 0).
-    """
     out: dict[str, list[dict]] = {}
 
     if n_no > 0:
@@ -198,19 +125,13 @@ def run_full_series(inv_chat: B.ChatFn, inv_mcfg: B.ModelConfig,
 
     return out
 
-
 def smoke_test(chat_fn: B.ChatFn, label: str) -> None:
     print(f"Smoke test [{label}] ...", end=" ", flush=True)
-    # with_retry so a transient provider 429 (e.g. Cerebras queue_exceeded
-    # during high traffic) delays the launch instead of crashing it.
     out = B.with_retry(lambda: chat_fn(
         "You output only JSON.", 'Return {"ok": true} and nothing else.'))
     print("got:", out[:120].replace("\n", " "))
 
-
 def summarize_cell(records: list[dict], label: str) -> dict:
-    """n clean, mean sent, SD, zeros count; among sent>0: mean return ratio,
-    reciprocated count, full-betrayal count."""
     clean = [r for r in records
              if r["investor_parse_clean"] and r["trustee_parse_clean"]]
     n = len(clean)
@@ -251,7 +172,6 @@ def summarize_cell(records: list[dict], label: str) -> dict:
         print("  among sent>0: none (all investors sent 0)")
     return out
 
-
 def print_selfplay_reference() -> None:
     print("\n--- Same-day self-play reference (2026-07-02 canonical n≈40 pilots) ---")
     print(f"  gpt-oss-120b self-play : mean sent {SELFPLAY_GPT_OSS_120B_MEAN_SENT:.2f}, "
@@ -259,7 +179,6 @@ def print_selfplay_reference() -> None:
     print(f"  qwen3-32b self-play    : mean sent {SELFPLAY_QWEN3_32B_MEAN_SENT:.2f}, "
           f"trustees reciprocated {SELFPLAY_QWEN3_32B_RECIPROCATED} "
           f"(ratio {SELFPLAY_QWEN3_32B_RECIPROCATED_RATIO:.2f})")
-
 
 def main() -> None:
     gate_on_tests()
@@ -277,7 +196,6 @@ def main() -> None:
                  os.environ.get("CELLS", ",".join(DEFAULT_CELLS)).split(",") if c.strip()]
     cells = parse_cells(cell_specs)
 
-    # Verify keys up front for every provider referenced.
     providers_needed = set()
     for (inv_provider, _), (tru_provider, _) in cells:
         providers_needed.add(inv_provider)
@@ -285,17 +203,10 @@ def main() -> None:
     for provider in sorted(providers_needed):
         check_key(provider)
 
-    cfg = RESKINS["canonical"]  # canonical skin for every cell
+    cfg = RESKINS["canonical"]
 
-    # Estimate call count and pacing time before starting. no_history and
-    # social_history cost 2 calls/dyad each (1 investor + 1 trustee);
-    # communication costs (2 + 2*comm_rounds) calls/dyad (comm_rounds rounds
-    # of alternating investor/trustee messages, then 1 decision call each).
     calls_per_cell = (n_no + n_soc) * 2 + n_comm * (2 + 2 * comm_rounds)
     total_calls = calls_per_cell * len(cells)
-    # Rough pacing estimate: use the slower of the two per-cell intervals as a
-    # conservative floor (calls to each role are paced independently, but a
-    # cell's wall-clock is dominated by the slower provider).
     print(f"Plan per cell: no_history={n_no}, social_history={n_soc} "
           f"(self-generated), communication={n_comm} (comm_rounds={comm_rounds}).")
     print(f"Plan: {len(cells)} cell(s) x {calls_per_cell} calls "
@@ -316,7 +227,6 @@ def main() -> None:
     out_path = data_dir / f"crossmodel_{ts}.jsonl"
     print(f"\nOutput -> {out_path}\n")
 
-    # Smoke-test each distinct provider:model pair once before the cells.
     smoke_tested: set[tuple[str, str]] = set()
     chat_fn_cache: dict[tuple[str, str], B.ChatFn] = {}
     mcfg_cache: dict[tuple[str, str], B.ModelConfig] = {}
@@ -380,7 +290,6 @@ def main() -> None:
                  if n_trusted else " | sent>0: none"))
     print_selfplay_reference()
     print(f"\nDone. Raw -> {out_path}")
-
 
 if __name__ == "__main__":
     main()

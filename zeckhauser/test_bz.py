@@ -1,23 +1,13 @@
-#!/usr/bin/env python3
-"""
-test_bz.py — offline verification of the Bohnet & Zeckhauser harness.
-
-No API calls and no langchain needed (make_chat_fn is imported lazily). Run:
-    python test_bz.py
-Exits non-zero on any failure so a runner can gate on it.
-"""
 import json
 import sys
 from pathlib import Path
 
 import bz_game as BZ
 
-
 def check(name, cond):
     print(f"  {'OK  ' if cond else 'FAIL'} {name}")
     if not cond:
         raise AssertionError(name)
-
 
 def main():
     cfg = BZ.BZConfig()
@@ -50,9 +40,9 @@ def main():
     cases = [
         ('{"reasoning":"r","map":0.5}', 0.5, True),
         ('{"map":"40%"}', 0.40, True),
-        ('{"map":50}', 0.50, True),                 # >1 read as percent
-        ('I would need about 0.3 chance', 0.30, False),  # scrape, no json
-        ('{"map":150}', 1.0, False),                # out of range -> clamp
+        ('{"map":50}', 0.50, True),
+        ('I would need about 0.3 chance', 0.30, False),
+        ('{"map":150}', 1.0, False),
     ]
     for txt, exp, exp_clean in cases:
         v, _, clean = BZ.parse_map(txt)
@@ -79,11 +69,9 @@ def main():
             return '{"reasoning":"keep more","choice":"bad"}'
         return '{"reasoning":"r","map":0.5}'
 
-    # DP: only the Decision Maker acts
     rec = BZ.run_unit(stub, cfg, "DP", "u0", mcfg)
     check("DP unit: map=0.5, no trustee choice",
           rec["map"] == 0.5 and rec["trustee_choice"] is None)
-    # TG: Decision Maker states MAP and Trustee chooses
     rec = BZ.run_unit(stub, cfg, "TG", "u0", mcfg)
     check("TG unit: map=0.5 and trustee chose bad",
           rec["map"] == 0.5 and rec["trustee_choice"] == "bad")
@@ -142,7 +130,6 @@ def main():
           len(rec["grid_choices"]) == len(g) and rec["trustee_choice"] == "bad")
 
     print("\nALL BZ CHECKS PASSED")
-
 
 if __name__ == "__main__":
     try:

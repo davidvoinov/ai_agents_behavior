@@ -1,16 +1,3 @@
-#!/usr/bin/env python3
-"""
-run_pilot.py — small pilot of the Berg replication against a free API.
-
-Usage:
-    1. pip install -r requirements.txt
-    2. Put your key in .env  (GROQ_API_KEY=...)
-    3. python run_pilot.py
-
-Reads provider + key + knobs from .env. Runs a 1-call smoke test, then
-PILOT_N dyads per treatment (no-history + social-history) and prints a summary
-against the Berg benchmarks. Output -> data/pilot_<provider>.jsonl
-"""
 import os
 import sys
 from pathlib import Path
@@ -24,17 +11,15 @@ try:
     else:
         load_dotenv()
 except ImportError:
-    pass  # .env optional if env vars are already exported
+    pass
 
 import berg_trust_game as B
 
-# provider -> (model id, OpenAI-compatible base url, key env var, key signup url)
 PROVIDERS = {
     "groq":       ("openai/gpt-oss-20b",      "https://api.groq.com/openai/v1", "GROQ_API_KEY",       "https://console.groq.com/keys"),
     "openrouter": ("openai/gpt-oss-20b:free", "https://openrouter.ai/api/v1",   "OPENROUTER_API_KEY", "https://openrouter.ai/keys"),
     "cerebras":   ("gpt-oss-120b",            "https://api.cerebras.ai/v1",     "CEREBRAS_API_KEY",   "https://cloud.cerebras.ai"),
 }
-
 
 def main() -> None:
     provider = os.environ.get("LLM_PROVIDER", "groq").strip().lower()
@@ -70,12 +55,10 @@ def main() -> None:
     out_path = Path(__file__).resolve().parent / "data" / f"pilot_{provider}_{ts}.jsonl"
     print(f"\nRunning pilot: {n} dyads/treatment  ->  {out_path}\n")
 
-    # Faithful Berg (no communication): no-history + social-history
     B.run_berg_replication(chat, game, mcfg, out_path,
                            n_no_history=n, n_social_history=n,
                            sleep_between=0.5)
 
-    # Communication treatment (no history) — pre-play cheap talk, then play.
     print(f"\n--- communication treatment (comm_rounds={comm_rounds}) ---")
     comm = B.run_treatment(chat, game, mcfg, "communication", n, out_path,
                            history_report=None, sleep_between=0.5,
@@ -83,7 +66,6 @@ def main() -> None:
     B.summarize(comm, "COMMUNICATION")
 
     print(f"\nDone. Raw records: {out_path}")
-
 
 if __name__ == "__main__":
     main()
