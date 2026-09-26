@@ -170,7 +170,7 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
             if field not in fields:
                 fields.append(field)
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 
@@ -244,9 +244,7 @@ def load_trials() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str,
     all_trials: list[dict[str, Any]] = []
     run_metadata: list[dict[str, Any]] = []
     for order, (run_name, label, family, display_reasoning, display_provider) in enumerate(RUN_SPECS):
-        run_dir = Path(run_name)
-        if not run_dir.is_absolute():
-            run_dir = RUN_ROOT / run_dir
+        run_dir = run_directory(run_name)
         manifest = validate_run_integrity(
             run_dir, required_dataset_role="confirmatory", require_completed=True,
         )
@@ -998,14 +996,28 @@ def activation_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def repository_path(value: str) -> Path:
+    """Resolve portable activation paths relative to the repository root."""
+    path = Path(value)
+    return path.resolve() if path.is_absolute() else (ROOT / path).resolve()
+
+
+def run_directory(value: str) -> Path:
+    """Resolve either a legacy run name or a repository-relative run path."""
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    return (ROOT / path) if path.parts[:2] == ("runs", "promise_switch") else (RUN_ROOT / path)
+
+
 def activate_semantic_v2(path: Path, active_specs: tuple[tuple[Any, ...], ...]) -> None:
     """Activate a finalized v2 corpus only when it matches the activated future runs."""
     global ANNOTATION_PATH, SEMANTIC_KEY_PATH, SEMANTIC_EXPECTED_COUNT, SEMANTIC_V2_ACTIVE
     payload = json.loads(path.read_text(encoding="utf-8"))
     if payload.get("corpus_version") != "promise_switch_semantic_corpus_v2":
         raise ValueError("semantic-v2 activation has an incompatible version")
-    annotations = Path(str(payload.get("annotations_path", ""))).resolve()
-    key = Path(str(payload.get("private_key_path", ""))).resolve()
+    annotations = repository_path(str(payload.get("annotations_path", "")))
+    key = repository_path(str(payload.get("private_key_path", "")))
     if not annotations.is_file() or sha256(annotations) != payload.get("annotations_sha256"):
         raise ValueError("semantic-v2 annotation artifact hash mismatch")
     if not key.is_file() or sha256(key) != payload.get("private_key_sha256"):
@@ -1015,10 +1027,10 @@ def activate_semantic_v2(path: Path, active_specs: tuple[tuple[Any, ...], ...]) 
     count = payload.get("combined_count")
     if not isinstance(count, int) or count <= 2738:
         raise ValueError("semantic-v2 activation has no validated new records")
-    activated_paths = {str(Path(spec[0]).resolve()) for spec in active_specs}
+    activated_paths = {str(repository_path(str(spec[0]))) for spec in active_specs}
     source_rows = payload.get("source_runs")
     source_paths = {
-        str(Path(str(row.get("run_path", ""))).resolve())
+        str(repository_path(str(row.get("run_path", ""))))
         for row in source_rows if isinstance(row, dict)
     } if isinstance(source_rows, list) else set()
     if not source_paths or source_paths != activated_paths:
@@ -1047,7 +1059,7 @@ def activated_specs(path: Path) -> tuple[tuple[Any, ...], ...]:
         if not isinstance(row.get("run_path"), str) or not row["run_path"].strip():
             raise ValueError("activated run requires an explicit nonempty run_path")
         template = allowed[label]
-        run_dir = Path(row["run_path"]).resolve()
+        run_dir = repository_path(row["run_path"])
         manifest = validate_run_integrity(
             run_dir, required_dataset_role="confirmatory", require_completed=True,
         )
@@ -1073,7 +1085,9 @@ def activated_specs(path: Path) -> tuple[tuple[Any, ...], ...]:
         }
         if observed != expected:
             raise ValueError(f"activated run model/reasoning identity mismatch: {run_dir}")
-        output.append((str(run_dir), template[1], template[2], template[3], template[4]))
+        configured_run_path = Path(row["run_path"])
+        portable_run_path = str(run_dir) if configured_run_path.is_absolute() else configured_run_path.as_posix()
+        output.append((portable_run_path, template[1], template[2], template[3], template[4]))
     order = {spec[1]: index for index, spec in enumerate(FUTURE_RUN_SPECS)}
     if [order[spec[1]] for spec in output] != sorted(order[spec[1]] for spec in output):
         raise ValueError("future activation order must match the registered append order")
@@ -1213,7 +1227,7 @@ def main(argv: list[str] | None = None) -> int:
     ] + sorted(
         path
         for run_name in [spec[0] for spec in RUN_SPECS] + [EXCLUDED_RUN]
-        for path in (RUN_ROOT / run_name).iterdir()
+        for path in run_directory(run_name).iterdir()
         if path.is_file() and path.name != ".writer.lock"
     )
     generated_files = (

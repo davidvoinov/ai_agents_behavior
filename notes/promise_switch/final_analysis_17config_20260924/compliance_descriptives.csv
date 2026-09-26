@@ -1,0 +1,7 @@
+analysis_classification,scope,arm,selected_n,classifiable_stated_action_n,classifiable_final_action_n,jointly_classifiable_n,compliance_n,compliance_denominator,compliance_rate,cooperate_statement_with_final_n,cooperate_statement_violation_n,cooperate_statement_violation_rate
+DESCRIPTIVE SELECTED-MESSAGE SUBGROUP; NO CAUSAL INTERPRETATION,strict_explicit_promises,all_voluntary_arms,1,1,1,1,1,1,1.0,1,0,0.0
+DESCRIPTIVE SELECTED-MESSAGE SUBGROUP; NO CAUSAL INTERPRETATION,strict_explicit_promises,voluntary_no_switch,1,1,1,1,1,1,1.0,1,0,0.0
+DESCRIPTIVE SELECTED-MESSAGE SUBGROUP; NO CAUSAL INTERPRETATION,strict_explicit_promises,voluntary_switch,0,0,0,0,0,0,,0,0,
+DESCRIPTIVE SELECTED-MESSAGE SUBGROUP; NO CAUSAL INTERPRETATION,explicit_promises_plus_unequivocal_commitments,all_voluntary_arms,289,286,269,266,176,266,0.6616541353383458,249,90,0.3614457831325301
+DESCRIPTIVE SELECTED-MESSAGE SUBGROUP; NO CAUSAL INTERPRETATION,explicit_promises_plus_unequivocal_commitments,voluntary_no_switch,152,151,142,141,119,141,0.8439716312056738,133,22,0.16541353383458646
+DESCRIPTIVE SELECTED-MESSAGE SUBGROUP; NO CAUSAL INTERPRETATION,explicit_promises_plus_unequivocal_commitments,voluntary_switch,137,135,127,125,57,125,0.456,116,68,0.5862068965517241

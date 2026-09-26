@@ -56,6 +56,7 @@ from scripts.finalize_promise_switch_semantic_v2 import main as finalize_semanti
 from scripts.prepare_promise_switch_validation_supplement import main as prepare_validation
 from scripts.analyze_promise_switch_final import (
     BASE_RUN_SPECS, RUN_SPECS, activated_specs, publication_confirmatory_forest,
+    repository_path,
 )
 from scripts.run_promise_switch_message_judge import main as semantic_judge_main
 
@@ -92,6 +93,15 @@ class FinalFigureTests(unittest.TestCase):
 
         self.assertEqual(captured["titles"], ["H7", "H8", "H9"])
         self.assertEqual(captured["filename"], "fig_PS_confirmatory_forest")
+
+    def test_analysis_activation_paths_are_repository_relative(self):
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "scripts.analyze_promise_switch_final.ROOT", Path(directory),
+        ):
+            self.assertEqual(
+                repository_path("runs/promise_switch/example"),
+                (Path(directory) / "runs/promise_switch/example").resolve(),
+            )
 
 
 class FakeProvider:

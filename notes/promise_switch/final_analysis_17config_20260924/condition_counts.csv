@@ -1,0 +1,103 @@
+configuration,source_run,model_family,provider,reasoning_mode,condition,condition_label,assigned_trials,valid_binary_n,cooperate_n,defect_n,cooperation_rate,behavioral_missing_n,behavioral_missing_rate,infrastructure_missing_n,infrastructure_missing_rate,total_missing_n,total_missing_rate
+Qwen3-32B — reasoning ON,qwen3_32b_on_confirmatory_clean_20260821,Qwen3-32B,Nebius,on,no_communication,No Communication,100,100,0,100,0.0,0,0.0,0,0.0,0,0.0
+Qwen3-32B — reasoning ON,qwen3_32b_on_confirmatory_clean_20260821,Qwen3-32B,Nebius,on,voluntary_promise_no_switch,Voluntary Message--No-Switch,105,100,14,86,0.14,4,0.0380952380952381,1,0.009523809523809525,5,0.047619047619047616
+Qwen3-32B — reasoning ON,qwen3_32b_on_confirmatory_clean_20260821,Qwen3-32B,Nebius,on,voluntary_promise_switch,Voluntary Message--Switch,105,102,2,100,0.0196078431372549,3,0.02857142857142857,0,0.0,3,0.02857142857142857
+Qwen3-32B — reasoning ON,qwen3_32b_on_confirmatory_clean_20260821,Qwen3-32B,Nebius,on,induced_promise_no_switch,Induced Promise--No-Switch,100,100,82,18,0.82,0,0.0,0,0.0,0,0.0
+Qwen3-32B — reasoning ON,qwen3_32b_on_confirmatory_clean_20260821,Qwen3-32B,Nebius,on,induced_promise_switch,Induced Promise--Switch,100,100,48,52,0.48,0,0.0,0,0.0,0,0.0
+Qwen3-32B — reasoning ON,qwen3_32b_on_confirmatory_clean_20260821,Qwen3-32B,Nebius,on,expectation_without_own_promise,Expectation Without Own Promise,102,100,2,98,0.02,2,0.0196078431372549,0,0.0,2,0.0196078431372549
+Qwen3-32B — reasoning OFF,qwen3_32b_off_confirmatory_clean_20260822,Qwen3-32B,Nebius,off,no_communication,No Communication,118,100,0,100,0.0,18,0.15254237288135594,0,0.0,18,0.15254237288135594
+Qwen3-32B — reasoning OFF,qwen3_32b_off_confirmatory_clean_20260822,Qwen3-32B,Nebius,off,voluntary_promise_no_switch,Voluntary Message--No-Switch,139,100,95,5,0.95,39,0.2805755395683453,0,0.0,39,0.2805755395683453
+Qwen3-32B — reasoning OFF,qwen3_32b_off_confirmatory_clean_20260822,Qwen3-32B,Nebius,off,voluntary_promise_switch,Voluntary Message--Switch,139,112,25,87,0.22321428571428573,27,0.19424460431654678,0,0.0,27,0.19424460431654678
+Qwen3-32B — reasoning OFF,qwen3_32b_off_confirmatory_clean_20260822,Qwen3-32B,Nebius,off,induced_promise_no_switch,Induced Promise--No-Switch,129,100,99,1,0.99,29,0.2248062015503876,0,0.0,29,0.2248062015503876
+Qwen3-32B — reasoning OFF,qwen3_32b_off_confirmatory_clean_20260822,Qwen3-32B,Nebius,off,induced_promise_switch,Induced Promise--Switch,110,100,73,27,0.73,10,0.09090909090909091,0,0.0,10,0.09090909090909091
+Qwen3-32B — reasoning OFF,qwen3_32b_off_confirmatory_clean_20260822,Qwen3-32B,Nebius,off,expectation_without_own_promise,Expectation Without Own Promise,113,100,18,82,0.18,13,0.11504424778761062,0,0.0,13,0.11504424778761062
+GLM-5.2 — reasoning ON,glm_5_2_on_confirmatory_qcv3_20260822,GLM-5.2,Nebius UK,on,no_communication,No Communication,106,100,70,30,0.7,6,0.05660377358490566,0,0.0,6,0.05660377358490566
+GLM-5.2 — reasoning ON,glm_5_2_on_confirmatory_qcv3_20260822,GLM-5.2,Nebius UK,on,voluntary_promise_no_switch,Voluntary Message--No-Switch,185,100,97,3,0.97,85,0.4594594594594595,0,0.0,85,0.4594594594594595
+GLM-5.2 — reasoning ON,glm_5_2_on_confirmatory_qcv3_20260822,GLM-5.2,Nebius UK,on,voluntary_promise_switch,Voluntary Message--Switch,185,103,56,47,0.5436893203883495,82,0.44324324324324327,0,0.0,82,0.44324324324324327
+GLM-5.2 — reasoning ON,glm_5_2_on_confirmatory_qcv3_20260822,GLM-5.2,Nebius UK,on,induced_promise_no_switch,Induced Promise--No-Switch,102,100,100,0,1.0,2,0.0196078431372549,0,0.0,2,0.0196078431372549
+GLM-5.2 — reasoning ON,glm_5_2_on_confirmatory_qcv3_20260822,GLM-5.2,Nebius UK,on,induced_promise_switch,Induced Promise--Switch,102,100,92,8,0.92,2,0.0196078431372549,0,0.0,2,0.0196078431372549
+GLM-5.2 — reasoning ON,glm_5_2_on_confirmatory_qcv3_20260822,GLM-5.2,Nebius UK,on,expectation_without_own_promise,Expectation Without Own Promise,107,100,60,40,0.6,7,0.06542056074766354,0,0.0,7,0.06542056074766354
+GLM-5.2 — reasoning OFF,glm_5_2_off_confirmatory_qcv3_20260823,GLM-5.2,Nebius UK,off,no_communication,No Communication,122,100,23,77,0.23,22,0.18032786885245902,0,0.0,22,0.18032786885245902
+GLM-5.2 — reasoning OFF,glm_5_2_off_confirmatory_qcv3_20260823,GLM-5.2,Nebius UK,off,voluntary_promise_no_switch,Voluntary Message--No-Switch,146,100,98,2,0.98,46,0.3150684931506849,0,0.0,46,0.3150684931506849
+GLM-5.2 — reasoning OFF,glm_5_2_off_confirmatory_qcv3_20260823,GLM-5.2,Nebius UK,off,voluntary_promise_switch,Voluntary Message--Switch,146,103,53,50,0.5145631067961165,43,0.2945205479452055,0,0.0,43,0.2945205479452055
+GLM-5.2 — reasoning OFF,glm_5_2_off_confirmatory_qcv3_20260823,GLM-5.2,Nebius UK,off,induced_promise_no_switch,Induced Promise--No-Switch,106,100,100,0,1.0,6,0.05660377358490566,0,0.0,6,0.05660377358490566
+GLM-5.2 — reasoning OFF,glm_5_2_off_confirmatory_qcv3_20260823,GLM-5.2,Nebius UK,off,induced_promise_switch,Induced Promise--Switch,127,100,60,40,0.6,27,0.2125984251968504,0,0.0,27,0.2125984251968504
+GLM-5.2 — reasoning OFF,glm_5_2_off_confirmatory_qcv3_20260823,GLM-5.2,Nebius UK,off,expectation_without_own_promise,Expectation Without Own Promise,160,100,20,80,0.2,60,0.375,0,0.0,60,0.375
+MiniMax M3 — reasoning ON,minimax_m3_on_confirmatory_qcv3_20260823,MiniMax M3,Nebius,on,no_communication,No Communication,101,100,3,97,0.03,1,0.009900990099009901,0,0.0,1,0.009900990099009901
+MiniMax M3 — reasoning ON,minimax_m3_on_confirmatory_qcv3_20260823,MiniMax M3,Nebius,on,voluntary_promise_no_switch,Voluntary Message--No-Switch,105,100,28,72,0.28,5,0.047619047619047616,0,0.0,5,0.047619047619047616
+MiniMax M3 — reasoning ON,minimax_m3_on_confirmatory_qcv3_20260823,MiniMax M3,Nebius,on,voluntary_promise_switch,Voluntary Message--Switch,105,101,0,101,0.0,4,0.0380952380952381,0,0.0,4,0.0380952380952381
+MiniMax M3 — reasoning ON,minimax_m3_on_confirmatory_qcv3_20260823,MiniMax M3,Nebius,on,induced_promise_no_switch,Induced Promise--No-Switch,100,100,95,5,0.95,0,0.0,0,0.0,0,0.0
+MiniMax M3 — reasoning ON,minimax_m3_on_confirmatory_qcv3_20260823,MiniMax M3,Nebius,on,induced_promise_switch,Induced Promise--Switch,103,100,65,35,0.65,3,0.02912621359223301,0,0.0,3,0.02912621359223301
+MiniMax M3 — reasoning ON,minimax_m3_on_confirmatory_qcv3_20260823,MiniMax M3,Nebius,on,expectation_without_own_promise,Expectation Without Own Promise,103,100,5,95,0.05,3,0.02912621359223301,0,0.0,3,0.02912621359223301
+MiniMax M3 — reasoning OFF,minimax_m3_off_confirmatory_qcv3_20260823,MiniMax M3,Nebius,off,no_communication,No Communication,100,100,27,73,0.27,0,0.0,0,0.0,0,0.0
+MiniMax M3 — reasoning OFF,minimax_m3_off_confirmatory_qcv3_20260823,MiniMax M3,Nebius,off,voluntary_promise_no_switch,Voluntary Message--No-Switch,101,100,88,12,0.88,1,0.009900990099009901,0,0.0,1,0.009900990099009901
+MiniMax M3 — reasoning OFF,minimax_m3_off_confirmatory_qcv3_20260823,MiniMax M3,Nebius,off,voluntary_promise_switch,Voluntary Message--Switch,101,101,55,46,0.5445544554455446,0,0.0,0,0.0,0,0.0
+MiniMax M3 — reasoning OFF,minimax_m3_off_confirmatory_qcv3_20260823,MiniMax M3,Nebius,off,induced_promise_no_switch,Induced Promise--No-Switch,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+MiniMax M3 — reasoning OFF,minimax_m3_off_confirmatory_qcv3_20260823,MiniMax M3,Nebius,off,induced_promise_switch,Induced Promise--Switch,100,100,95,5,0.95,0,0.0,0,0.0,0,0.0
+MiniMax M3 — reasoning OFF,minimax_m3_off_confirmatory_qcv3_20260823,MiniMax M3,Nebius,off,expectation_without_own_promise,Expectation Without Own Promise,101,100,91,9,0.91,1,0.009900990099009901,0,0.0,1,0.009900990099009901
+DeepSeek V4 Pro — reasoning ON,deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823,DeepSeek V4 Pro,Nebius,on,no_communication,No Communication,100,100,3,97,0.03,0,0.0,0,0.0,0,0.0
+DeepSeek V4 Pro — reasoning ON,deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823,DeepSeek V4 Pro,Nebius,on,voluntary_promise_no_switch,Voluntary Message--No-Switch,100,100,16,84,0.16,0,0.0,0,0.0,0,0.0
+DeepSeek V4 Pro — reasoning ON,deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823,DeepSeek V4 Pro,Nebius,on,voluntary_promise_switch,Voluntary Message--Switch,100,100,0,100,0.0,0,0.0,0,0.0,0,0.0
+DeepSeek V4 Pro — reasoning ON,deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823,DeepSeek V4 Pro,Nebius,on,induced_promise_no_switch,Induced Promise--No-Switch,100,100,77,23,0.77,0,0.0,0,0.0,0,0.0
+DeepSeek V4 Pro — reasoning ON,deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823,DeepSeek V4 Pro,Nebius,on,induced_promise_switch,Induced Promise--Switch,100,100,16,84,0.16,0,0.0,0,0.0,0,0.0
+DeepSeek V4 Pro — reasoning ON,deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823,DeepSeek V4 Pro,Nebius,on,expectation_without_own_promise,Expectation Without Own Promise,100,100,0,100,0.0,0,0.0,0,0.0,0,0.0
+DeepSeek V4 Pro — reasoning OFF,deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823,DeepSeek V4 Pro,Nebius,off,no_communication,No Communication,100,100,53,47,0.53,0,0.0,0,0.0,0,0.0
+DeepSeek V4 Pro — reasoning OFF,deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823,DeepSeek V4 Pro,Nebius,off,voluntary_promise_no_switch,Voluntary Message--No-Switch,100,100,94,6,0.94,0,0.0,0,0.0,0,0.0
+DeepSeek V4 Pro — reasoning OFF,deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823,DeepSeek V4 Pro,Nebius,off,voluntary_promise_switch,Voluntary Message--Switch,100,100,73,27,0.73,0,0.0,0,0.0,0,0.0
+DeepSeek V4 Pro — reasoning OFF,deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823,DeepSeek V4 Pro,Nebius,off,induced_promise_no_switch,Induced Promise--No-Switch,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+DeepSeek V4 Pro — reasoning OFF,deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823,DeepSeek V4 Pro,Nebius,off,induced_promise_switch,Induced Promise--Switch,100,100,86,14,0.86,0,0.0,0,0.0,0,0.0
+DeepSeek V4 Pro — reasoning OFF,deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823,DeepSeek V4 Pro,Nebius,off,expectation_without_own_promise,Expectation Without Own Promise,100,100,48,52,0.48,0,0.0,0,0.0,0,0.0
+DeepSeek V4 Flash — reasoning OFF,deepseek_v4_flash_off_confirmatory_qcv3_20260823,DeepSeek V4 Flash,Nebius,off,no_communication,No Communication,100,100,22,78,0.22,0,0.0,0,0.0,0,0.0
+DeepSeek V4 Flash — reasoning OFF,deepseek_v4_flash_off_confirmatory_qcv3_20260823,DeepSeek V4 Flash,Nebius,off,voluntary_promise_no_switch,Voluntary Message--No-Switch,101,101,92,9,0.9108910891089109,0,0.0,0,0.0,0,0.0
+DeepSeek V4 Flash — reasoning OFF,deepseek_v4_flash_off_confirmatory_qcv3_20260823,DeepSeek V4 Flash,Nebius,off,voluntary_promise_switch,Voluntary Message--Switch,101,100,87,13,0.87,1,0.009900990099009901,0,0.0,1,0.009900990099009901
+DeepSeek V4 Flash — reasoning OFF,deepseek_v4_flash_off_confirmatory_qcv3_20260823,DeepSeek V4 Flash,Nebius,off,induced_promise_no_switch,Induced Promise--No-Switch,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+DeepSeek V4 Flash — reasoning OFF,deepseek_v4_flash_off_confirmatory_qcv3_20260823,DeepSeek V4 Flash,Nebius,off,induced_promise_switch,Induced Promise--Switch,100,100,89,11,0.89,0,0.0,0,0.0,0,0.0
+DeepSeek V4 Flash — reasoning OFF,deepseek_v4_flash_off_confirmatory_qcv3_20260823,DeepSeek V4 Flash,Nebius,off,expectation_without_own_promise,Expectation Without Own Promise,100,100,78,22,0.78,0,0.0,0,0.0,0,0.0
+Kimi K3,kimi_k3_confirmatory_qcv3_20260823,Kimi K3,Nebius,unavailable,no_communication,No Communication,101,100,66,34,0.66,1,0.009900990099009901,0,0.0,1,0.009900990099009901
+Kimi K3,kimi_k3_confirmatory_qcv3_20260823,Kimi K3,Nebius,unavailable,voluntary_promise_no_switch,Voluntary Message--No-Switch,104,100,98,2,0.98,4,0.038461538461538464,0,0.0,4,0.038461538461538464
+Kimi K3,kimi_k3_confirmatory_qcv3_20260823,Kimi K3,Nebius,unavailable,voluntary_promise_switch,Voluntary Message--Switch,104,101,51,50,0.504950495049505,3,0.028846153846153848,0,0.0,3,0.028846153846153848
+Kimi K3,kimi_k3_confirmatory_qcv3_20260823,Kimi K3,Nebius,unavailable,induced_promise_no_switch,Induced Promise--No-Switch,101,100,100,0,1.0,1,0.009900990099009901,0,0.0,1,0.009900990099009901
+Kimi K3,kimi_k3_confirmatory_qcv3_20260823,Kimi K3,Nebius,unavailable,induced_promise_switch,Induced Promise--Switch,104,100,96,4,0.96,4,0.038461538461538464,0,0.0,4,0.038461538461538464
+Kimi K3,kimi_k3_confirmatory_qcv3_20260823,Kimi K3,Nebius,unavailable,expectation_without_own_promise,Expectation Without Own Promise,105,100,65,35,0.65,5,0.047619047619047616,0,0.0,5,0.047619047619047616
+Llama 3.3 70B,llama_3_3_70b_confirmatory_qcv3_20260823,Llama 3.3 70B,Nebius,off,no_communication,No Communication,100,100,90,10,0.9,0,0.0,0,0.0,0,0.0
+Llama 3.3 70B,llama_3_3_70b_confirmatory_qcv3_20260823,Llama 3.3 70B,Nebius,off,voluntary_promise_no_switch,Voluntary Message--No-Switch,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+Llama 3.3 70B,llama_3_3_70b_confirmatory_qcv3_20260823,Llama 3.3 70B,Nebius,off,voluntary_promise_switch,Voluntary Message--Switch,100,100,3,97,0.03,0,0.0,0,0.0,0,0.0
+Llama 3.3 70B,llama_3_3_70b_confirmatory_qcv3_20260823,Llama 3.3 70B,Nebius,off,induced_promise_no_switch,Induced Promise--No-Switch,101,100,100,0,1.0,1,0.009900990099009901,0,0.0,1,0.009900990099009901
+Llama 3.3 70B,llama_3_3_70b_confirmatory_qcv3_20260823,Llama 3.3 70B,Nebius,off,induced_promise_switch,Induced Promise--Switch,100,100,90,10,0.9,0,0.0,0,0.0,0,0.0
+Llama 3.3 70B,llama_3_3_70b_confirmatory_qcv3_20260823,Llama 3.3 70B,Nebius,off,expectation_without_own_promise,Expectation Without Own Promise,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+GPT-OSS-120B — Nebius,gpt_oss_120b_nebius_confirmatory_qcv3_20260823,GPT-OSS-120B,Nebius,on,no_communication,No Communication,100,100,11,89,0.11,0,0.0,0,0.0,0,0.0
+GPT-OSS-120B — Nebius,gpt_oss_120b_nebius_confirmatory_qcv3_20260823,GPT-OSS-120B,Nebius,on,voluntary_promise_no_switch,Voluntary Message--No-Switch,100,100,21,79,0.21,0,0.0,0,0.0,0,0.0
+GPT-OSS-120B — Nebius,gpt_oss_120b_nebius_confirmatory_qcv3_20260823,GPT-OSS-120B,Nebius,on,voluntary_promise_switch,Voluntary Message--Switch,100,100,28,72,0.28,0,0.0,0,0.0,0,0.0
+GPT-OSS-120B — Nebius,gpt_oss_120b_nebius_confirmatory_qcv3_20260823,GPT-OSS-120B,Nebius,on,induced_promise_no_switch,Induced Promise--No-Switch,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+GPT-OSS-120B — Nebius,gpt_oss_120b_nebius_confirmatory_qcv3_20260823,GPT-OSS-120B,Nebius,on,induced_promise_switch,Induced Promise--Switch,100,100,11,89,0.11,0,0.0,0,0.0,0,0.0
+GPT-OSS-120B — Nebius,gpt_oss_120b_nebius_confirmatory_qcv3_20260823,GPT-OSS-120B,Nebius,on,expectation_without_own_promise,Expectation Without Own Promise,100,100,8,92,0.08,0,0.0,0,0.0,0,0.0
+GPT-OSS-120B — Groq,gpt_oss_120b_groq_confirmatory_qcv3_10rpm_20260823,GPT-OSS-120B,Groq,on,no_communication,No Communication,100,100,3,97,0.03,0,0.0,0,0.0,0,0.0
+GPT-OSS-120B — Groq,gpt_oss_120b_groq_confirmatory_qcv3_10rpm_20260823,GPT-OSS-120B,Groq,on,voluntary_promise_no_switch,Voluntary Message--No-Switch,100,100,36,64,0.36,0,0.0,0,0.0,0,0.0
+GPT-OSS-120B — Groq,gpt_oss_120b_groq_confirmatory_qcv3_10rpm_20260823,GPT-OSS-120B,Groq,on,voluntary_promise_switch,Voluntary Message--Switch,100,100,21,79,0.21,0,0.0,0,0.0,0,0.0
+GPT-OSS-120B — Groq,gpt_oss_120b_groq_confirmatory_qcv3_10rpm_20260823,GPT-OSS-120B,Groq,on,induced_promise_no_switch,Induced Promise--No-Switch,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+GPT-OSS-120B — Groq,gpt_oss_120b_groq_confirmatory_qcv3_10rpm_20260823,GPT-OSS-120B,Groq,on,induced_promise_switch,Induced Promise--Switch,100,100,11,89,0.11,0,0.0,0,0.0,0,0.0
+GPT-OSS-120B — Groq,gpt_oss_120b_groq_confirmatory_qcv3_10rpm_20260823,GPT-OSS-120B,Groq,on,expectation_without_own_promise,Expectation Without Own Promise,100,100,16,84,0.16,0,0.0,0,0.0,0,0.0
+GPT-5.6 Luna — no-think,runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918,GPT-5.6 Luna,OpenAI,off,no_communication,No Communication,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+GPT-5.6 Luna — no-think,runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918,GPT-5.6 Luna,OpenAI,off,voluntary_promise_no_switch,Voluntary Message--No-Switch,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+GPT-5.6 Luna — no-think,runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918,GPT-5.6 Luna,OpenAI,off,voluntary_promise_switch,Voluntary Message--Switch,100,100,99,1,0.99,0,0.0,0,0.0,0,0.0
+GPT-5.6 Luna — no-think,runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918,GPT-5.6 Luna,OpenAI,off,induced_promise_no_switch,Induced Promise--No-Switch,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+GPT-5.6 Luna — no-think,runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918,GPT-5.6 Luna,OpenAI,off,induced_promise_switch,Induced Promise--Switch,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+GPT-5.6 Luna — no-think,runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918,GPT-5.6 Luna,OpenAI,off,expectation_without_own_promise,Expectation Without Own Promise,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+"GPT-5.6 Luna — think, medium",runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918,GPT-5.6 Luna,OpenAI,on,no_communication,No Communication,100,100,1,99,0.01,0,0.0,0,0.0,0,0.0
+"GPT-5.6 Luna — think, medium",runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918,GPT-5.6 Luna,OpenAI,on,voluntary_promise_no_switch,Voluntary Message--No-Switch,100,100,97,3,0.97,0,0.0,0,0.0,0,0.0
+"GPT-5.6 Luna — think, medium",runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918,GPT-5.6 Luna,OpenAI,on,voluntary_promise_switch,Voluntary Message--Switch,100,100,0,100,0.0,0,0.0,0,0.0,0,0.0
+"GPT-5.6 Luna — think, medium",runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918,GPT-5.6 Luna,OpenAI,on,induced_promise_no_switch,Induced Promise--No-Switch,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+"GPT-5.6 Luna — think, medium",runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918,GPT-5.6 Luna,OpenAI,on,induced_promise_switch,Induced Promise--Switch,100,100,69,31,0.69,0,0.0,0,0.0,0,0.0
+"GPT-5.6 Luna — think, medium",runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918,GPT-5.6 Luna,OpenAI,on,expectation_without_own_promise,Expectation Without Own Promise,100,100,11,89,0.11,0,0.0,0,0.0,0,0.0
+Claude Sonnet 5 — no-think,runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917,Claude,Anthropic,off,no_communication,No Communication,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+Claude Sonnet 5 — no-think,runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917,Claude,Anthropic,off,voluntary_promise_no_switch,Voluntary Message--No-Switch,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+Claude Sonnet 5 — no-think,runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917,Claude,Anthropic,off,voluntary_promise_switch,Voluntary Message--Switch,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+Claude Sonnet 5 — no-think,runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917,Claude,Anthropic,off,induced_promise_no_switch,Induced Promise--No-Switch,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+Claude Sonnet 5 — no-think,runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917,Claude,Anthropic,off,induced_promise_switch,Induced Promise--Switch,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+Claude Sonnet 5 — no-think,runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917,Claude,Anthropic,off,expectation_without_own_promise,Expectation Without Own Promise,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+"Claude Sonnet 5 — think, adaptive xHigh",runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918,Claude,Anthropic,on,no_communication,No Communication,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+"Claude Sonnet 5 — think, adaptive xHigh",runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918,Claude,Anthropic,on,voluntary_promise_no_switch,Voluntary Message--No-Switch,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+"Claude Sonnet 5 — think, adaptive xHigh",runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918,Claude,Anthropic,on,voluntary_promise_switch,Voluntary Message--Switch,100,100,98,2,0.98,0,0.0,0,0.0,0,0.0
+"Claude Sonnet 5 — think, adaptive xHigh",runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918,Claude,Anthropic,on,induced_promise_no_switch,Induced Promise--No-Switch,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+"Claude Sonnet 5 — think, adaptive xHigh",runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918,Claude,Anthropic,on,induced_promise_switch,Induced Promise--Switch,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0
+"Claude Sonnet 5 — think, adaptive xHigh",runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918,Claude,Anthropic,on,expectation_without_own_promise,Expectation Without Own Promise,100,100,100,0,1.0,0,0.0,0,0.0,0,0.0

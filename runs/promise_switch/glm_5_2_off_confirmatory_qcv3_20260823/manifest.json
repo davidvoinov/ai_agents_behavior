@@ -1,0 +1,207 @@
+{
+  "cli_invocation": [
+    "scripts/run_promise_switch.py",
+    "--run-id",
+    "glm_5_2_off_confirmatory_qcv3_20260823",
+    "--provider",
+    "nebius_uk",
+    "--model",
+    "glm_5_2_nebius_thinking_off",
+    "--reasoning-mode",
+    "off",
+    "--dataset-role",
+    "confirmatory",
+    "--n-per-condition",
+    "100",
+    "--seed",
+    "20260808",
+    "--output-dir",
+    "runs/promise_switch",
+    "--initialize-only"
+  ],
+  "completion_policy": {
+    "minimum_completed_binary_per_condition": 100,
+    "prohibited_stopping_inputs": [
+      "action_value",
+      "cooperation_rate",
+      "effect",
+      "p_value",
+      "confidence_interval",
+      "message_content"
+    ],
+    "stopping_inputs": [
+      "completed",
+      "behavioral_missing",
+      "infrastructure_attrition",
+      "pending",
+      "retryable",
+      "paused"
+    ],
+    "top_up_enabled": true,
+    "version": "minimum_completed_binary_v1",
+    "voluntary_top_up_unit": "randomized_balanced_block_of_2"
+  },
+  "config_hash": "874897dfdf7a036cea2fe677e36655fe7b55b299223ff9f5e41c08f208241a3b",
+  "config_snapshot": {
+    "experiment_version": "promise_switch_v1",
+    "parameters": {
+      "dataset_role": "confirmatory",
+      "decision_max_tokens": 2048,
+      "dry_run": false,
+      "message_max_tokens": 2048,
+      "model_configurations": [
+        {
+          "api_key_env": "NEBIUS_API_KEY",
+          "base_url": "https://api.tokenfactory.uk-south1.nebius.com/v1/",
+          "model_alias": "glm_5_2_nebius_thinking_off",
+          "model_id": "zai-org/GLM-5.2",
+          "production_max_output_tokens": 2048,
+          "provider": "nebius_uk",
+          "provider_request_kwargs": {
+            "chat_template_kwargs": {
+              "enable_thinking": false
+            }
+          },
+          "rate_limit_metadata": {
+            "requests_per_minute": null,
+            "source": "confirm in provider console before confirmatory collection",
+            "tokens_per_minute": null
+          },
+          "reasoning_capability": "fixed_off",
+          "reasoning_mode": "off"
+        }
+      ],
+      "n_per_condition": 100,
+      "output_cap_override_authorized": false,
+      "rate_limit_policy": {
+        "max_concurrency": 1,
+        "minimum_interval_seconds": 2.0,
+        "requests_per_minute": 30,
+        "tokens_per_minute": null
+      },
+      "retry_policy": {
+        "base_delay_seconds": 1.0,
+        "jitter_fraction": 0.25,
+        "max_delay_seconds": 60.0,
+        "max_retries": 2
+      },
+      "run_id": "glm_5_2_off_confirmatory_qcv3_20260823",
+      "seed": 20260808,
+      "temperature": 1.0,
+      "temperature_override_authorized": false,
+      "top_up_enabled": true
+    },
+    "prompt_hash": "17b5f31eaac9d9f2742d74a01fae17bc4a93a847d33f49d1016392035a8f175c",
+    "prompt_version": "promise_switch_v1",
+    "response_qc_version": "promise_switch_response_qc_v3"
+  },
+  "created_at": "2026-08-23T06:51:56.292924+00:00",
+  "dataset_role": "confirmatory",
+  "dry_run": false,
+  "execution_schema_version": "promise_switch_execution_v3",
+  "experiment_version": "promise_switch_v1",
+  "git_commit": "2efa574d11b5e406541821e78dee7ba495dbf799",
+  "max_output_tokens": 2048,
+  "model_configurations": [
+    {
+      "api_key_env": "NEBIUS_API_KEY",
+      "base_url": "https://api.tokenfactory.uk-south1.nebius.com/v1/",
+      "model_alias": "glm_5_2_nebius_thinking_off",
+      "model_id": "zai-org/GLM-5.2",
+      "production_max_output_tokens": 2048,
+      "provider": "nebius_uk",
+      "provider_request_kwargs": {
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        }
+      },
+      "rate_limit_metadata": {
+        "requests_per_minute": null,
+        "source": "confirm in provider console before confirmatory collection",
+        "tokens_per_minute": null
+      },
+      "reasoning_capability": "fixed_off",
+      "reasoning_mode": "off"
+    }
+  ],
+  "normalized_execution_parameters": {
+    "dataset_role": "confirmatory",
+    "decision_max_tokens": 2048,
+    "dry_run": false,
+    "message_max_tokens": 2048,
+    "model_configurations": [
+      {
+        "api_key_env": "NEBIUS_API_KEY",
+        "base_url": "https://api.tokenfactory.uk-south1.nebius.com/v1/",
+        "model_alias": "glm_5_2_nebius_thinking_off",
+        "model_id": "zai-org/GLM-5.2",
+        "production_max_output_tokens": 2048,
+        "provider": "nebius_uk",
+        "provider_request_kwargs": {
+          "chat_template_kwargs": {
+            "enable_thinking": false
+          }
+        },
+        "rate_limit_metadata": {
+          "requests_per_minute": null,
+          "source": "confirm in provider console before confirmatory collection",
+          "tokens_per_minute": null
+        },
+        "reasoning_capability": "fixed_off",
+        "reasoning_mode": "off"
+      }
+    ],
+    "n_per_condition": 100,
+    "output_cap_override_authorized": false,
+    "rate_limit_policy": {
+      "max_concurrency": 1,
+      "minimum_interval_seconds": 2.0,
+      "requests_per_minute": 30,
+      "tokens_per_minute": null
+    },
+    "retry_policy": {
+      "base_delay_seconds": 1.0,
+      "jitter_fraction": 0.25,
+      "max_delay_seconds": 60.0,
+      "max_retries": 2
+    },
+    "run_id": "glm_5_2_off_confirmatory_qcv3_20260823",
+    "seed": 20260808,
+    "temperature": 1.0,
+    "temperature_override_authorized": false,
+    "top_up_enabled": true
+  },
+  "output_cap_override_authorized": false,
+  "pacing_rate_limit_policy": {
+    "max_concurrency": 1,
+    "minimum_interval_seconds": 2.0,
+    "requests_per_minute": 30,
+    "tokens_per_minute": null
+  },
+  "prompt_hash": "17b5f31eaac9d9f2742d74a01fae17bc4a93a847d33f49d1016392035a8f175c",
+  "prompt_version": "promise_switch_v1",
+  "providers": [
+    "nebius_uk"
+  ],
+  "randomization_seed": 20260808,
+  "reasoning_modes": [
+    "off"
+  ],
+  "requested_completed_trials_per_final_condition": 100,
+  "response_qc_version": "promise_switch_response_qc_v3",
+  "retry_policy": {
+    "base_delay_seconds": 1.0,
+    "jitter_fraction": 0.25,
+    "max_delay_seconds": 60.0,
+    "max_retries": 2
+  },
+  "run_id": "glm_5_2_off_confirmatory_qcv3_20260823",
+  "temperature": 1.0,
+  "temperature_override_authorized": false,
+  "token_limits": {
+    "final_decision": 2048,
+    "message": 2048
+  },
+  "top_up_enabled": true,
+  "working_tree_dirty": false
+}
