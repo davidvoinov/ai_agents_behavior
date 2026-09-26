@@ -685,20 +685,20 @@ def save_publication_figure(figure: Any, filename: str) -> None:
 
 def publication_confirmatory_forest(rows: list[dict[str, Any]]) -> None:
     hypotheses = (
-        ("H8", "Induced Promise--No-Switch\nminus No Communication"),
-        ("H9", "Induced Promise--No-Switch\nminus Induced Promise--Switch"),
-        ("H10", "Induced Promise--No-Switch\nminus Expectation Without\nOwn Promise"),
+        ("H8", "H7", "Induced Promise--No-Switch\nminus No Communication"),
+        ("H9", "H8", "Induced Promise--No-Switch\nminus Induced Promise--Switch"),
+        ("H10", "H9", "Induced Promise--No-Switch\nminus Expectation Without\nOwn Promise"),
     )
     selected = {
         hypothesis: sorted(
             (row for row in rows if row["hypothesis"] == hypothesis),
             key=lambda row: row["configuration_order"],
         )
-        for hypothesis, _ in hypotheses
+        for hypothesis, _, _ in hypotheses
     }
     limits = [
         100 * row[field]
-        for hypothesis, _ in hypotheses
+        for hypothesis, _, _ in hypotheses
         for row in selected[hypothesis]
         for field in ("ci_95_low", "ci_95_high")
     ] + [0.0]
@@ -712,7 +712,9 @@ def publication_confirmatory_forest(rows: list[dict[str, Any]]) -> None:
         1, 3, figsize=(9.2, max(5.8, 0.34 * len(labels) + 1.4)), sharex=True, sharey=True,
         gridspec_kw={"wspace": 0.12},
     )
-    for axis, (hypothesis, comparison) in zip(axes, hypotheses, strict=True):
+    for axis, (hypothesis, manuscript_hypothesis, comparison) in zip(
+        axes, hypotheses, strict=True,
+    ):
         for position, row in zip(positions, selected[hypothesis], strict=True):
             estimate = 100 * row["risk_difference"]
             error = [[estimate - 100 * row["ci_95_low"]],
@@ -729,7 +731,9 @@ def publication_confirmatory_forest(rows: list[dict[str, Any]]) -> None:
         axis.xaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
         axis.grid(axis="x", color="#d9d9d9", linewidth=0.6)
         axis.set_axisbelow(True)
-        axis.set_title(f"{hypothesis}\n{comparison}", fontsize=10.5, pad=8)
+        axis.set_title(
+            f"{manuscript_hypothesis}\n{comparison}", fontsize=10.5, pad=8,
+        )
         axis.tick_params(axis="both", labelsize=10.5)
         axis.spines[["top", "right"]].set_visible(False)
     axes[0].set_yticks(positions, labels)

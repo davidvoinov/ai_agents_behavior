@@ -55,7 +55,7 @@ from scripts.run_promise_switch_batch import main as batch_cli_main
 from scripts.finalize_promise_switch_semantic_v2 import main as finalize_semantic_v2
 from scripts.prepare_promise_switch_validation_supplement import main as prepare_validation
 from scripts.analyze_promise_switch_final import (
-    BASE_RUN_SPECS, RUN_SPECS, activated_specs,
+    BASE_RUN_SPECS, RUN_SPECS, activated_specs, publication_confirmatory_forest,
 )
 from scripts.run_promise_switch_message_judge import main as semantic_judge_main
 
@@ -65,6 +65,33 @@ def configured(provider: str, alias: str, mode: str, cap: int = 128):
         create_model_config(provider=provider, model_alias=alias, reasoning_mode=mode),
         production_max_output_tokens=cap,
     )
+
+
+class FinalFigureTests(unittest.TestCase):
+    def test_confirmatory_forest_uses_manuscript_hypothesis_numbers(self):
+        rows = [
+            {
+                "configuration": "Test configuration",
+                "configuration_order": 0,
+                "hypothesis": hypothesis,
+                "risk_difference": 0.5,
+                "ci_95_low": 0.4,
+                "ci_95_high": 0.6,
+                "holm_significant_alpha_0_05": True,
+            }
+            for hypothesis in ("H8", "H9", "H10")
+        ]
+        captured = {}
+
+        def capture(figure, filename):
+            captured["titles"] = [axis.get_title().splitlines()[0] for axis in figure.axes]
+            captured["filename"] = filename
+
+        with patch("scripts.analyze_promise_switch_final.save_publication_figure", capture):
+            publication_confirmatory_forest(rows)
+
+        self.assertEqual(captured["titles"], ["H7", "H8", "H9"])
+        self.assertEqual(captured["filename"], "fig_PS_confirmatory_forest")
 
 
 class FakeProvider:
