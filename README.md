@@ -1,15 +1,6 @@
-# Reaction, Recollection, or Script? Trust and Promise Keeping in Language Model Agents
+# Reaction, Recollection, or Script? Investment game
 
-David Voinov, Arina Ravilova, P. P. Lukianchenko. HSE University.
-
-The paper reports two designs run on the same fifteen model configurations, and the repository keeps one branch per design.
-
-| Branch | Design |
-|---|---|
-| `investment-game` | the investment game of Berg et al. (1995) across seven surfaces at fixed payoffs, with a payoff axis, a positive control that moves the optimum, a recognition probe, social history and communication treatments, and the coding of communication transcripts |
-| `promise-switch` | the Promise Switch design, which varies an attributed promise, its recipient and the partner's expectation independently, with its trial records, semantic coding and analysis |
-
-This branch holds the investment game. The Promise Switch data, code and instructions are on `promise-switch`.
+Data and code for the investment game design of *Reaction, Recollection, or Script? Trust and Promise Keeping in Language Model Agents*. The Promise Switch design is on the branch `promise-switch`.
 
 ## Layout
 
@@ -42,7 +33,7 @@ pip install -r requirements.txt
 
 API keys go in `.env` at the repository root: `NEBIUS_API_KEY` for the open-weight configurations, `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` for the closed ones.
 
-## Reproducing the results
+## Reproduce
 
 From `berg/`, on the stored records, with no API calls:
 
@@ -56,17 +47,3 @@ python3 -m pytest -q test_reskin.py
 ```
 
 `figures.py` writes to `paper/figures/`.
-
-## Rerunning the experiments
-
-These commands send new requests to the model APIs and are billed by the providers. They are needed only to collect the data again. From `berg/`, after `set -a && source ../.env && set +a`:
-
-```
-MODELS=glm-5.2-think N=100 python3 run_full_cycle.py
-./run_batch.sh gpt-5.6-nothink
-MODELS=kimi-k3 N=100 K_LEVELS="0,0.3333,0.6667" MAX_TOKENS=4000 python3 run_incentive_control.py
-python3 run_probe.py
-./run_kappa.sh judge
-```
-
-Configuration keys are listed in `PACK` in `berg/providers.py`. Every runner resumes from its stored records.
