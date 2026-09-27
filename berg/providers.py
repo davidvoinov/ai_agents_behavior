@@ -11,6 +11,7 @@ PROVIDERS: dict[str, tuple[str, str, str]] = {
     "nebius-us":  ("https://api.tokenfactory.us-central1.nebius.com/v1/", "NEBIUS_API_KEY",    "https://tokenfactory.nebius.com"),
     "nebius-eu":  ("https://api.tokenfactory.eu-central1.nebius.com/v1/", "NEBIUS_API_KEY", "https://tokenfactory.nebius.com"),
     "nebius-uk":  ("https://api.tokenfactory.uk-south1.nebius.com/v1/", "NEBIUS_API_KEY", "https://tokenfactory.nebius.com"),
+    "nebius-euw": ("https://api.tokenfactory.eu-west2.nebius.com/v1/", "NEBIUS_API_KEY", "https://tokenfactory.nebius.com"),
     "deepseek":   ("https://api.deepseek.com",          "DEEPSEEK_API_KEY",   "https://platform.deepseek.com"),
     "moonshot":   ("https://api.moonshot.ai/v1",        "MOONSHOT_API_KEY",   "https://platform.moonshot.ai"),
     "minimax":    ("https://api.minimax.io/v1",         "MINIMAX_API_KEY",    "https://www.minimax.io"),
@@ -123,6 +124,9 @@ PACK: dict[str, ModelSpec] = {
                                    note="provider control against llama-3.3-70b on Nebius"),
     "gpt-oss-120b@groq": ModelSpec("gpt-oss-120b@groq", "groq", "openai/gpt-oss-120b", True, 0.15, 0.75,
                                    note="provider control against gpt-oss-120b on Nebius"),
+    "kimi-k3@euw":       ModelSpec("kimi-k3@euw",       "nebius-euw", "moonshotai/Kimi-K3", True, 0.60, 2.50,
+                                   extra_body=KIMI_LOW_EFFORT,
+                                   note="kimi-k3 served from the eu-west2 region"),
 }
 
 TOGGLE_PAIRS = [("qwen3-think", "qwen3-nothink"),
