@@ -1,1 +1,0 @@
-crossmodel_20260704_112132.jsonl: cell A communication, 12 dyads, EXCLUDED 2026-07-04 — pre-fix engine leaked <think> reasoning into shared transcripts (isolation violation, see notes/DECISIONS.md). Keep only as methods anecdote.
