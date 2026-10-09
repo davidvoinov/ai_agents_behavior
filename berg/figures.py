@@ -104,6 +104,8 @@ def fig_B(data):
         yy = np.arange(len(models)) + (k - 1) * 0.24
         ax.errorbar(d, yy, xerr=e, fmt=marks[k], ms=3.6, lw=0, elinewidth=0.8,
                     capsize=1.5, color=cols[k], mec=cols[k], label=lab)
+    lo, hi = ax.get_xlim()
+    ax.set_xlim(lo, hi + 0.04)
     ax.axvline(0, color="black", lw=0.8)
     for i in range(len(models)):
         if i % 2 == 0:
@@ -120,7 +122,7 @@ def fig_B(data):
 
 def fig_C():
     fams = ["DeepSeek-V4-Pro", "MiniMax-M3", "GLM-5.2", "GPT-5.6", "Sonnet-5"]
-    short = ["DeepSeek", "MiniMax", "GLM-5.2", "GPT-5.6", "Sonnet-5"]
+    short = fams
     text = [0.841, 0.733, 0.687, 0.704, 0.626]
     dec = [0.640, 0.722, 0.596, 0.704, 0.638]
     plac = [0.512, 0.506, 0.477, 0.470, 0.474]
@@ -144,7 +146,8 @@ def fig_C():
     ax.set_ylabel("AUC, telling the two arms apart")
     ax.set_ylim(0.45, 0.92)
     ax.set_xlim(-0.55, len(fams) - 0.45)
-    ax.tick_params(axis="x", labelrotation=18)
+    ax.tick_params(axis="x", labelrotation=28)
+    plt.setp(ax.get_xticklabels(), ha="right", rotation_mode="anchor")
     from matplotlib.lines import Line2D
     h, l = ax.get_legend_handles_labels()
     h.append(Line2D([0], [0], color="black", lw=0.9, ls=(0, (3, 2))))
@@ -169,7 +172,8 @@ def fig_C():
     ax.set_ylabel("share of dyads transferring nothing")
     ax.set_ylim(0, 0.63)
     ax.set_xlim(-0.55, len(fams) - 0.45)
-    ax.tick_params(axis="x", labelrotation=18)
+    ax.tick_params(axis="x", labelrotation=28)
+    plt.setp(ax.get_xticklabels(), ha="right", rotation_mode="anchor")
     ax.legend(frameon=False, loc="lower left", bbox_to_anchor=(-0.02, 1.0),
               ncol=2, handlelength=1.1, columnspacing=1.0)
 
@@ -230,7 +234,6 @@ def fig_E(data):
         f = np.array([A.frac(r) for r in data[m]])
         rows.append((m, (f == 0).mean(), ((f > 0) & (f < 0.999)).mean(),
                      (f >= 0.999).mean(), f.mean()))
-    rows.sort(key=lambda r: -r[1])
     y = np.arange(len(rows))
     fig, ax = plt.subplots(figsize=(4.6, 3.6))
     z = np.array([r[1] for r in rows])
@@ -298,8 +301,8 @@ def fig_F():
 
 def fig_G():
     v = [("agreement present", 0.784, 0.578), ("agreement type", 0.807, 0.598),
-         ("equality framing", 0.961, 0.681), ("promise, first mover", 0.929, 0.315),
-         ("promise, second mover", 0.874, 0.559)]
+         ("equality framing", 0.961, 0.681), ("commitment, first mover", 0.929, 0.315),
+         ("commitment, second mover", 0.874, 0.559)]
     fig, ax = plt.subplots(figsize=(4.4, 3.6))
     lo, hi = 0.74, 1.00
     ax.plot([lo, hi], [lo, hi], color="#bbbbbb", lw=0.8, ls=(0, (4, 3)), zorder=1)
@@ -307,7 +310,7 @@ def fig_G():
             rotation=38, rotation_mode="anchor")
     ax.axhline(0.70, color="#999999", lw=0.7, ls=(0, (1, 2)), zorder=1)
     ax.text(lo + 0.005, 0.715, "conventional threshold", fontsize=6, color="#777777")
-    WITHDRAWN = {"promise, first mover", "promise, second mover"}
+    WITHDRAWN = {"commitment, first mover", "commitment, second mover"}
     cols = [((VERM if name in WITHDRAWN else BLUE) if COLOR else GREY[0])
             for name, _, _ in v]
     for (name, mm, mh), c in zip(v, cols):
@@ -337,8 +340,6 @@ def main() -> None:
     if "G" in want: made.append(fig_G())
     for f in made:
         print(f"  {OUT / f}")
-    print("\nEach figure carries one claim. Pick the claim the paper should make\n"
-          "visually, since the supervisor asked for a figure and not for four.")
 
 if __name__ == "__main__":
     main()
