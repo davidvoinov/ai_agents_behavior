@@ -32,10 +32,10 @@ LABEL = {"gpt-oss-120b": "gpt-oss-120b", "qwen3-nothink": "Qwen3-32B",
          "llama-3.3-70b": "Llama-3.3-70B",
          "gpt-5.6-think": "GPT-5.6 (r)", "gpt-5.6-nothink": "GPT-5.6",
          "sonnet-5-think": "Sonnet-5 (r)", "sonnet-5-nothink": "Sonnet-5"}
-ORDER = ["gpt-oss-120b", "deepseek-v4-flash", "deepseek-v4-pro-think", "kimi-k3",
-         "gpt-5.6-think", "deepseek-v4-pro", "minimax-m3-think", "sonnet-5-nothink",
-         "sonnet-5-think", "qwen3-nothink", "gpt-5.6-nothink",
-         "minimax-m3-nothink", "glm-5.2-nothink", "glm-5.2-think", "llama-3.3-70b"]
+ORDER = ["gpt-oss-120b", "qwen3-nothink", "deepseek-v4-flash", "deepseek-v4-pro",
+         "deepseek-v4-pro-think", "kimi-k3", "minimax-m3-nothink", "minimax-m3-think",
+         "glm-5.2-nothink", "glm-5.2-think", "llama-3.3-70b", "gpt-5.6-nothink",
+         "gpt-5.6-think", "sonnet-5-nothink", "sonnet-5-think"]
 HUMAN = 0.516
 GREY = ["#1a1a1a", "#5a5a5a", "#9a9a9a", "#c8c8c8"]
 
@@ -75,9 +75,6 @@ def fig_A(data):
         ax.barh(y + (k - 1.5) * h, v, height=h, label=lab,
                 color=(TREAT_COLOR[c] if COLOR else GREY[k]),
                 edgecolor="white", linewidth=0.3)
-    ax.axvline(HUMAN, color="black", ls=(0, (4, 2)), lw=0.9)
-    ax.annotate("human benchmark", xy=(HUMAN, -0.85), xytext=(HUMAN + 0.02, -0.85),
-                fontsize=6.5, va="center", annotation_clip=False)
     ax.set_yticks(y, [LABEL[m] for m in models])
     ax.set_xlabel("mean transfer, fraction of the endowment")
     ax.set_xlim(0, 1.0)
@@ -113,7 +110,7 @@ def fig_B(data):
             ax.axhspan(i - 0.5, i + 0.5, color="#000000", alpha=0.035, lw=0,
                        zorder=0)
     ax.set_yticks(np.arange(len(models)), [LABEL[m] for m in models])
-    ax.set_xlabel("recognizable $-$ de-recognized wording,\nfraction of the endowment")
+    ax.set_xlabel("original $-$ reworded wording,\nfraction of the endowment")
     ax.invert_yaxis()
     ax.legend(loc="lower left", bbox_to_anchor=(-0.02, 1.01), frameon=False,
               ncol=1, handletextpad=0.4)
@@ -122,20 +119,20 @@ def fig_B(data):
     return "fig_B_surface_gradient.pdf"
 
 def fig_C():
-    fams = ["DeepSeek-V4-Pro", "MiniMax-M3", "GPT-5.6", "Sonnet-5", "GLM-5.2"]
-    short = ["DeepSeek", "MiniMax", "GPT-5.6", "Sonnet-5", "GLM-5.2"]
-    text = [0.841, 0.733, 0.704, 0.626, 0.687]
-    dec = [0.640, 0.722, 0.704, 0.638, 0.596]
-    plac = [0.512, 0.506, 0.470, 0.474, 0.477]
-    zero_r = [0.538, 0.361, 0.359, 0.145, 0.219]
-    zero_p = [0.319, 0.103, 0.146, 0.005, 0.211]
+    fams = ["DeepSeek-V4-Pro", "MiniMax-M3", "GLM-5.2", "GPT-5.6", "Sonnet-5"]
+    short = ["DeepSeek", "MiniMax", "GLM-5.2", "GPT-5.6", "Sonnet-5"]
+    text = [0.841, 0.733, 0.687, 0.704, 0.626]
+    dec = [0.640, 0.722, 0.596, 0.704, 0.638]
+    plac = [0.512, 0.506, 0.477, 0.470, 0.474]
+    zero_r = [0.538, 0.361, 0.219, 0.359, 0.145]
+    zero_p = [0.319, 0.103, 0.211, 0.146, 0.005]
 
     x = np.arange(len(fams))
     fig, axes = plt.subplots(1, 2, figsize=(7.0, 2.8),
                              gridspec_kw={"width_ratios": [1.0, 1.0]})
     ax = axes[0]
     c_text, c_dec = (BLUE, GREEN) if COLOR else (GREY[0], GREY[2])
-    ax.bar(x - 0.19, text, 0.36, label="stated reasoning", color=c_text,
+    ax.bar(x - 0.19, text, 0.36, label="written rationale", color=c_text,
            edgecolor="white", linewidth=0.4)
     ax.bar(x + 0.19, dec, 0.36, label="the two decisions", color=c_dec,
            edgecolor="white", linewidth=0.4)
@@ -300,9 +297,9 @@ def fig_F():
     return "fig_F_agree_vs_comply.pdf"
 
 def fig_G():
-    v = [("agreement present", 0.783, 0.578), ("agreement type", 0.805, 0.598),
-         ("equality framing", 0.959, 0.681), ("promise, first mover", 0.929, 0.315),
-         ("promise, second mover", 0.875, 0.559)]
+    v = [("agreement present", 0.784, 0.578), ("agreement type", 0.807, 0.598),
+         ("equality framing", 0.961, 0.681), ("promise, first mover", 0.929, 0.315),
+         ("promise, second mover", 0.874, 0.559)]
     fig, ax = plt.subplots(figsize=(4.4, 3.6))
     lo, hi = 0.74, 1.00
     ax.plot([lo, hi], [lo, hi], color="#bbbbbb", lw=0.8, ls=(0, (4, 3)), zorder=1)
