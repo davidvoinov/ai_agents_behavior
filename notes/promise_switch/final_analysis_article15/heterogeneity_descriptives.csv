@@ -1,0 +1,13 @@
+comparison_type,group,hypothesis,configuration_a,risk_difference_a,configuration_b,risk_difference_b,descriptive_difference_a_minus_b,formal_interaction_test
+matched_reasoning_mode_descriptive,GLM-5.2,H7,GLM-5.2 (r),0.30000000000000004,GLM-5.2,0.77,-0.47,False
+matched_reasoning_mode_descriptive,GLM-5.2,H8,GLM-5.2 (r),0.07999999999999996,GLM-5.2,0.4,-0.32000000000000006,False
+matched_reasoning_mode_descriptive,GLM-5.2,H9,GLM-5.2 (r),0.4,GLM-5.2,0.8,-0.4,False
+matched_reasoning_mode_descriptive,GLM-5.2,Voluntary ITT,GLM-5.2 (r),0.4263106796116505,GLM-5.2,0.4654368932038835,-0.039126213592233006,False
+matched_reasoning_mode_descriptive,MiniMax M3,H7,MiniMax-M3 (r),0.9199999999999999,MiniMax-M3,0.73,0.18999999999999995,False
+matched_reasoning_mode_descriptive,MiniMax M3,H8,MiniMax-M3 (r),0.29999999999999993,MiniMax-M3,0.050000000000000044,0.2499999999999999,False
+matched_reasoning_mode_descriptive,MiniMax M3,H9,MiniMax-M3 (r),0.8999999999999999,MiniMax-M3,0.08999999999999997,0.8099999999999999,False
+matched_reasoning_mode_descriptive,MiniMax M3,Voluntary ITT,MiniMax-M3 (r),0.28,MiniMax-M3,0.3354455445544554,-0.055445544554455384,False
+matched_reasoning_mode_descriptive,DeepSeek V4 Pro,H7,DeepSeek-V4-Pro (r),0.74,DeepSeek-V4-Pro,0.47,0.27,False
+matched_reasoning_mode_descriptive,DeepSeek V4 Pro,H8,DeepSeek-V4-Pro (r),0.61,DeepSeek-V4-Pro,0.14,0.47,False
+matched_reasoning_mode_descriptive,DeepSeek V4 Pro,H9,DeepSeek-V4-Pro (r),0.77,DeepSeek-V4-Pro,0.52,0.25,False
+matched_reasoning_mode_descriptive,DeepSeek V4 Pro,Voluntary ITT,DeepSeek-V4-Pro (r),0.16,DeepSeek-V4-Pro,0.20999999999999996,-0.04999999999999996,False

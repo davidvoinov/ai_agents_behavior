@@ -1,0 +1,16 @@
+configuration,source_run,pre_randomization_terminal_failures_n,behavioral_failures_n,infrastructure_failures_n
+gpt-oss-120b,gpt_oss_120b_nebius_confirmatory_qcv3_20260823,0,0,0
+Qwen3-32B,qwen3_32b_off_confirmatory_clean_20260822,0,0,0
+DeepSeek-V4-Flash,deepseek_v4_flash_off_confirmatory_qcv3_20260823,0,0,0
+DeepSeek-V4-Pro,deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823,0,0,0
+DeepSeek-V4-Pro (r),deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823,0,0,0
+Kimi-K3,kimi_k3_confirmatory_qcv3_20260823,1,0,1
+MiniMax-M3,minimax_m3_off_confirmatory_qcv3_20260823,0,0,0
+MiniMax-M3 (r),minimax_m3_on_confirmatory_qcv3_20260823,1,0,1
+GLM-5.2,glm_5_2_off_confirmatory_qcv3_20260823,2,0,2
+GLM-5.2 (r),glm_5_2_on_confirmatory_qcv3_20260822,2,0,2
+Llama-3.3-70B,llama_3_3_70b_confirmatory_qcv3_20260823,0,0,0
+GPT-5.6,runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918,0,0,0
+GPT-5.6 (r),runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918,0,0,0
+Sonnet-5,runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917,0,0,0
+Sonnet-5 (r),runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918,0,0,0

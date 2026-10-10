@@ -6,8 +6,10 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import importlib.metadata
 import json
 import os
+import platform
 import subprocess
 import sys
 from collections import Counter
@@ -26,10 +28,14 @@ os.environ.setdefault("MPLCONFIGDIR", str(PLOT_CACHE / "matplotlib"))
 os.environ.setdefault("XDG_CACHE_HOME", str(PLOT_CACHE))
 
 import matplotlib.pyplot as plt
+import pandas as pd
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
 from matplotlib.lines import Line2D
 from matplotlib.ticker import MaxNLocator
 from jsonschema import Draft202012Validator
 from scipy.stats import chi2_contingency, fisher_exact
+from statsmodels.stats.anova import anova_lm
 from statsmodels.stats.proportion import confint_proportions_2indep
 
 from promise_switch.artifacts import read_jsonl, validate_run_integrity
@@ -38,7 +44,6 @@ from promise_switch.codebook import (
     MessageCode,
     derived_outcomes,
     eligible_explicit_promiser,
-    validate_annotation_record,
 )
 from promise_switch.design import Condition, scientific_condition_label
 from promise_switch.version import prompt_templates_hash
@@ -47,23 +52,34 @@ from promise_switch.version import prompt_templates_hash
 plt.rcParams.update({"pdf.fonttype": 42, "ps.fonttype": 42})
 
 
-ANALYSIS_VERSION = "promise_switch_final_analysis_v1"
+ANALYSIS_VERSION = "promise_switch_final_analysis_v2"
 ALPHA = 0.05
-REQUIRED_COMMITS = ("9e8f59e", "45e8285", "2f8ed70")
 RUN_ROOT = ROOT / "runs" / "promise_switch"
-SEMANTIC_DIR = (
-    ROOT / "notes" / "promise_switch" / "semantic_coding" / CODEBOOK_VERSION
+PUBLIC_SEMANTIC_DIR = (
+    ROOT / "notes" / "promise_switch" / "semantic_coding"
+    / "public_semantic_input_v1"
 )
-ANNOTATION_PATH = SEMANTIC_DIR / "final_full_semantic_annotations_n2738.jsonl"
-SEMANTIC_KEY_PATH = SEMANTIC_DIR / "private_full_semantic_key_n2738.json"
-SEMANTIC_EXPECTED_COUNT = 2738
-SEMANTIC_V2_ACTIVE = False
-SCHEMA_PATH = ROOT / "promise_switch" / "coding" / "annotation_schema_v1.json"
+PUBLIC_SEMANTIC_MANIFEST_PATH = PUBLIC_SEMANTIC_DIR / "manifest.json"
+PUBLIC_SEMANTIC_EXPECTED_COUNT = 3538
+PUBLIC_SEMANTIC_FIELDS = (
+    "source_run", "trial_id", "message_sha256", "codebook_version",
+    "explicit_promise", "commitment_present", "statement_type",
+    "promised_action", "conditionality", "refusal_present",
+    "ambiguous_response",
+)
+PUBLIC_SEMANTIC_SCHEMA_PATH = (
+    ROOT / "promise_switch" / "coding" / "public_semantic_input_schema_v1.json"
+)
 CODEBOOK_PATH = ROOT / "promise_switch" / "coding" / "codebook_v1.md"
 PROMPT_PATH = ROOT / "promise_switch" / "coding" / "judge_prompt_v1.txt"
 PYTHON_VALIDATOR_PATH = ROOT / "promise_switch" / "codebook.py"
 OUTPUT_DIR = ROOT / "notes" / "promise_switch" / "final_analysis"
+ANALYSIS_PROFILE = "unconfigured"
 EXCLUDED_RUN = "deepseek_v4_flash_on_confirmatory_qcv3_20260823"
+DEFAULT_RUN_ACTIVATION = (
+    ROOT / "configs" / "promise_switch" / "publication_run_specs.json"
+)
+GENERATE_SUPPLEMENTARY_FIGURES = False
 
 BASE_RUN_SPECS = (
     ("qwen3_32b_on_confirmatory_clean_20260821", "Qwen3-32B — reasoning ON", "Qwen3-32B", "on", "Nebius"),
@@ -81,6 +97,7 @@ BASE_RUN_SPECS = (
     ("gpt_oss_120b_groq_confirmatory_qcv3_10rpm_20260823", "GPT-OSS-120B — Groq", "GPT-OSS-120B", "on", "Groq"),
 )
 RUN_SPECS = BASE_RUN_SPECS
+SEMANTIC_SOURCE_SPECS = BASE_RUN_SPECS
 
 # Registered future order only. These are deliberately excluded from RUN_SPECS
 # until each run is complete, audited, and the versioned semantic-v2 corpus exists.
@@ -97,10 +114,53 @@ FUTURE_MODEL_IDS = {
     "Claude Sonnet 5 — think, adaptive xHigh": "claude-sonnet-5",
 }
 
+ARTICLE_15_RUN_SPECS = (
+    ("gpt_oss_120b_nebius_confirmatory_qcv3_20260823", "gpt-oss-120b", "GPT-OSS-120B", "built-in", "Nebius"),
+    ("qwen3_32b_off_confirmatory_clean_20260822", "Qwen3-32B", "Qwen3-32B", "off", "Nebius"),
+    ("deepseek_v4_flash_off_confirmatory_qcv3_20260823", "DeepSeek-V4-Flash", "DeepSeek V4 Flash", "off", "Nebius"),
+    ("deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823", "DeepSeek-V4-Pro", "DeepSeek V4 Pro", "off", "Nebius"),
+    ("deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823", "DeepSeek-V4-Pro (r)", "DeepSeek V4 Pro", "on, high", "Nebius"),
+    ("kimi_k3_confirmatory_qcv3_20260823", "Kimi-K3", "Kimi K3", "built-in", "Nebius"),
+    ("minimax_m3_off_confirmatory_qcv3_20260823", "MiniMax-M3", "MiniMax M3", "off", "Nebius"),
+    ("minimax_m3_on_confirmatory_qcv3_20260823", "MiniMax-M3 (r)", "MiniMax M3", "on", "Nebius"),
+    ("glm_5_2_off_confirmatory_qcv3_20260823", "GLM-5.2", "GLM-5.2", "off", "Nebius"),
+    ("glm_5_2_on_confirmatory_qcv3_20260822", "GLM-5.2 (r)", "GLM-5.2", "on", "Nebius"),
+    ("llama_3_3_70b_confirmatory_qcv3_20260823", "Llama-3.3-70B", "Llama 3.3 70B", "unavailable", "Nebius"),
+    ("runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918", "GPT-5.6", "GPT-5.6 Luna", "off, effort none", "OpenAI"),
+    ("runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918", "GPT-5.6 (r)", "GPT-5.6 Luna", "on, effort medium", "OpenAI"),
+    ("runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917", "Sonnet-5", "Claude Sonnet 5", "thinking disabled", "Anthropic"),
+    ("runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918", "Sonnet-5 (r)", "Claude Sonnet 5", "adaptive, xhigh", "Anthropic"),
+)
+ARTICLE_15_EXPECTED_IDENTITIES = {
+    "gpt-oss-120b": ("openai/gpt-oss-120b", "nebius", "on"),
+    "Qwen3-32B": ("Qwen/Qwen3-32B", "nebius", "off"),
+    "DeepSeek-V4-Flash": ("deepseek-ai/DeepSeek-V4-Flash", "nebius", "off"),
+    "DeepSeek-V4-Pro": ("deepseek-ai/DeepSeek-V4-Pro", "nebius", "off"),
+    "DeepSeek-V4-Pro (r)": ("deepseek-ai/DeepSeek-V4-Pro", "nebius", "on"),
+    "Kimi-K3": ("moonshotai/Kimi-K3", "nebius", "unavailable"),
+    "MiniMax-M3": ("MiniMaxAI/MiniMax-M3", "nebius", "off"),
+    "MiniMax-M3 (r)": ("MiniMaxAI/MiniMax-M3", "nebius", "on"),
+    "GLM-5.2": ("zai-org/GLM-5.2", "nebius_uk", "off"),
+    "GLM-5.2 (r)": ("zai-org/GLM-5.2", "nebius_uk", "on"),
+    "Llama-3.3-70B": ("meta-llama/Llama-3.3-70B-Instruct", "nebius", "off"),
+    "GPT-5.6": ("gpt-5.6-luna", "openai", "off"),
+    "GPT-5.6 (r)": ("gpt-5.6-luna", "openai", "on"),
+    "Sonnet-5": ("claude-sonnet-5", "anthropic", "off"),
+    "Sonnet-5 (r)": ("claude-sonnet-5", "anthropic", "on"),
+}
+ARTICLE_15_EXPECTED_COUNTS = {
+    "configuration_count": 15,
+    "condition_count": 6,
+    "cell_count": 90,
+    "assigned_trials": 9584,
+    "valid_outcomes": 9022,
+    "missing_outcomes": 562,
+}
+
 CONTRASTS = {
-    "H8": (Condition.INDUCED_PROMISE_NO_SWITCH, Condition.NO_COMMUNICATION),
-    "H9": (Condition.INDUCED_PROMISE_NO_SWITCH, Condition.INDUCED_PROMISE_SWITCH),
-    "H10": (
+    "H7": (Condition.INDUCED_PROMISE_NO_SWITCH, Condition.NO_COMMUNICATION),
+    "H8": (Condition.INDUCED_PROMISE_NO_SWITCH, Condition.INDUCED_PROMISE_SWITCH),
+    "H9": (
         Condition.INDUCED_PROMISE_NO_SWITCH,
         Condition.EXPECTATION_WITHOUT_OWN_PROMISE,
     ),
@@ -156,9 +216,14 @@ def sha256(path: Path) -> str:
 
 
 def git(*args: str) -> str:
-    return subprocess.run(
-        ["git", *args], cwd=ROOT, check=True, text=True, capture_output=True,
-    ).stdout.strip()
+    """Return optional Git provenance without making Git a runtime requirement."""
+    try:
+        result = subprocess.run(
+            ["git", *args], cwd=ROOT, check=False, text=True, capture_output=True,
+        )
+    except OSError:
+        return ""
+    return result.stdout.strip() if result.returncode == 0 else ""
 
 
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -220,27 +285,49 @@ def holm_adjust(p_values: Iterable[float]) -> list[float]:
     return adjusted
 
 
-def load_trials() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-    key = json.loads(SEMANTIC_KEY_PATH.read_text(encoding="utf-8"))
-    for commit in REQUIRED_COMMITS:
-        subprocess.run(
-            ["git", "merge-base", "--is-ancestor", commit, "HEAD"],
-            cwd=ROOT, check=True, capture_output=True,
-        )
-    frozen_hashes = {
-        "annotation_schema_sha256": sha256(SCHEMA_PATH),
-        "codebook_markdown_sha256": sha256(CODEBOOK_PATH),
-        "judge_prompt_sha256": sha256(PROMPT_PATH),
-        "python_validator_sha256": sha256(PYTHON_VALIDATOR_PATH),
-    }
-    for name, observed in frozen_hashes.items():
-        if key["file_hashes"].get(name) != observed:
-            raise ValueError(f"frozen scientific artifact hash mismatch: {name}")
-    expected_runs = [Path(spec[0]).name for spec in (
-        RUN_SPECS if SEMANTIC_V2_ACTIVE else BASE_RUN_SPECS
-    )]
-    if key.get("source_runs") != expected_runs:
-        raise ValueError("semantic source runs do not match the active completed configuration set")
+def load_public_semantic_input() -> list[dict[str, Any]]:
+    """Load the portable semantic-label table and validate its schema and hash."""
+    manifest = json.loads(PUBLIC_SEMANTIC_MANIFEST_PATH.read_text(encoding="utf-8"))
+    if manifest.get("artifact_version") != "promise_switch_public_semantic_input_v1":
+        raise ValueError("public semantic input has an incompatible version")
+    csv_path = repository_path(str(manifest.get("csv_path", "")))
+    schema_path = repository_path(str(manifest.get("schema_path", "")))
+    if csv_path != PUBLIC_SEMANTIC_DIR / "semantic_labels.csv":
+        raise ValueError("public semantic input uses an unexpected CSV path")
+    if schema_path != PUBLIC_SEMANTIC_SCHEMA_PATH:
+        raise ValueError("public semantic input uses an unexpected schema path")
+    if sha256(csv_path) != manifest.get("csv_sha256"):
+        raise ValueError("public semantic input CSV hash mismatch")
+    if sha256(schema_path) != manifest.get("schema_sha256"):
+        raise ValueError("public semantic input schema hash mismatch")
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        if tuple(reader.fieldnames or ()) != PUBLIC_SEMANTIC_FIELDS:
+            raise ValueError("public semantic input columns differ from the frozen schema")
+        rows = list(reader)
+    if len(rows) != PUBLIC_SEMANTIC_EXPECTED_COUNT or manifest.get("row_count") != len(rows):
+        raise ValueError("public semantic input row count mismatch")
+    schema = Draft202012Validator(json.loads(schema_path.read_text(encoding="utf-8")))
+    identities: list[tuple[str, str]] = []
+    for row in rows:
+        errors = sorted(schema.iter_errors(row), key=lambda error: list(error.path))
+        if errors:
+            raise ValueError(f"invalid public semantic row: {errors[0].message}")
+        identities.append((row["source_run"], row["trial_id"]))
+    if len(identities) != len(set(identities)):
+        raise ValueError("duplicate source_run/trial_id in public semantic input")
+    expected_runs = {Path(spec[0]).name for spec in SEMANTIC_SOURCE_SPECS}
+    observed_runs = {row["source_run"] for row in rows}
+    if observed_runs != expected_runs:
+        raise ValueError("public semantic source runs do not match the active corpus")
+    observed_counts = dict(sorted(Counter(row["source_run"] for row in rows).items()))
+    if observed_counts != manifest.get("source_run_counts"):
+        raise ValueError("public semantic source-run counts differ from the manifest")
+    return rows
+
+
+def load_trials() -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    semantic_rows = load_public_semantic_input()
     all_trials: list[dict[str, Any]] = []
     run_metadata: list[dict[str, Any]] = []
     for order, (run_name, label, family, display_reasoning, display_provider) in enumerate(RUN_SPECS):
@@ -251,6 +338,7 @@ def load_trials() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str,
         config = manifest["model_configurations"][0]
         trials = read_jsonl(run_dir / "trials.jsonl")
         assignments = {row["trial_id"]: row for row in read_jsonl(run_dir / "assignments.jsonl")}
+        messages = {row["trial_id"]: row for row in read_jsonl(run_dir / "message_events.jsonl")}
         attempts = read_jsonl(run_dir / "api_attempts.jsonl")
         attempt_ids = [row["attempt_id"] for row in attempts]
         if len(attempt_ids) != len(set(attempt_ids)):
@@ -269,6 +357,11 @@ def load_trials() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str,
                 "source_run_name": Path(run_name).name,
             })
             assignment = assignments.get(row["trial_id"])
+            message = messages.get(row["trial_id"])
+            trial["semantic_message_sha256"] = (
+                hashlib.sha256(str(message["raw_message"]).encode("utf-8")).hexdigest()
+                if message is not None else None
+            )
             trial["post_message_randomized"] = bool(
                 assignment and row.get("message_regime") == "voluntary"
             )
@@ -288,7 +381,7 @@ def load_trials() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str,
     trial_ids = [(row["source_run"], row["trial_id"]) for row in all_trials]
     if len(trial_ids) != len(set(trial_ids)):
         raise ValueError("duplicate trial identity across included runs")
-    return all_trials, run_metadata, key
+    return all_trials, run_metadata, semantic_rows
 
 
 def status_row(rows: list[dict[str, Any]], spec: tuple[str, str, str, str, str], condition: Condition) -> dict[str, Any]:
@@ -406,42 +499,30 @@ def missingness_bound(contrast: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def semantic_records(key: dict[str, Any], trials: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    annotations = read_jsonl(ANNOTATION_PATH)
-    if len(annotations) != SEMANTIC_EXPECTED_COUNT:
-        raise ValueError(
-            f"expected {SEMANTIC_EXPECTED_COUNT} semantic annotations, found {len(annotations)}"
-        )
-    annotation_ids = [row.get("item_id") for row in annotations]
-    if len(annotation_ids) != len(set(annotation_ids)):
-        raise ValueError("duplicate semantic annotation item_id")
-    key_items = key.get("items", [])
-    if len(key_items) != SEMANTIC_EXPECTED_COUNT or {
-        row["item_id"] for row in key_items
-    } != set(annotation_ids):
-        raise ValueError("semantic annotation/key coverage mismatch")
-    schema = Draft202012Validator(json.loads(SCHEMA_PATH.read_text(encoding="utf-8")))
-    by_id = {row["item_id"]: row for row in annotations}
+def semantic_records(
+    semantic_rows: list[dict[str, Any]], trials: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Join public semantic labels to raw trials using scientific identifiers."""
     trial_by_key = {(row["source_run_name"], row["trial_id"]): row for row in trials}
     joined: list[dict[str, Any]] = []
-    for item in key_items:
-        annotation = by_id[item["item_id"]]
-        errors = sorted(schema.iter_errors(annotation), key=lambda error: list(error.path))
-        if errors:
-            raise ValueError(f"JSON Schema invalid annotation {item['item_id']}: {errors[0].message}")
-        validate_annotation_record(annotation)
-        if annotation["codebook_version"] != CODEBOOK_VERSION:
+    for semantic in semantic_rows:
+        if semantic["codebook_version"] != CODEBOOK_VERSION:
             raise ValueError("semantic codebook version mismatch")
-        if hashlib.sha256(annotation["message"].encode("utf-8")).hexdigest() != item["message_sha256"]:
-            raise ValueError(f"semantic message hash mismatch: {item['item_id']}")
-        trial = trial_by_key.get((item["source_run_name"], item["source_trial_id"]))
+        trial = trial_by_key.get((semantic["source_run"], semantic["trial_id"]))
         if trial is None:
-            raise ValueError(f"semantic source trial absent from included runs: {item['item_id']}")
-        if trial.get("message_event_id") != item["source_message_event_id"]:
-            raise ValueError(f"semantic source message-event mismatch: {item['item_id']}")
-        joined.append({**annotation, **{
-            "source_run": item["source_run_name"],
-            "source_trial_id": item["source_trial_id"],
+            # A public corpus can support profiles that omit configurations.
+            continue
+        if trial.get("semantic_message_sha256") != semantic["message_sha256"]:
+            raise ValueError(
+                f"semantic message hash mismatch: {semantic['source_run']}/{semantic['trial_id']}"
+            )
+        joined.append({**semantic, **{
+            # Free-text coding notes are not used by any article statistic;
+            # this neutral placeholder preserves codebook structural validation.
+            "condition_text": (
+                "condition recorded" if semantic["conditionality"] == "conditional" else ""
+            ),
+            "source_trial_id": semantic["trial_id"],
             "condition": trial.get("condition"),
             "final_action": trial.get("final_action"),
             "completion_status": trial.get("completion_status"),
@@ -450,22 +531,18 @@ def semantic_records(key: dict[str, Any], trials: list[dict[str, Any]]) -> tuple
     prevalence: list[dict[str, Any]] = []
     observed_nested: dict[str, dict[str, int]] = {}
     for field, categories in SEMANTIC_CATEGORIES.items():
-        counts = Counter(row[field] for row in annotations)
+        counts = Counter(row[field] for row in joined)
         observed_nested[field] = {category: counts[category] for category in categories}
         prevalence.extend(
             {"field": field, "category": category, "count": counts[category],
-             "proportion": counts[category] / SEMANTIC_EXPECTED_COUNT}
+             "proportion": counts[category] / len(joined)}
             for category in categories
         )
-    if not SEMANTIC_V2_ACTIVE and observed_nested != EXPECTED_SEMANTIC_COUNTS:
-        raise ValueError("semantic prevalence counts do not match the frozen expected counts")
     return joined, prevalence
 
 
 def analyze_subgroup(joined: list[dict[str, Any]]) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
     explicit = [row for row in joined if eligible_explicit_promiser(MessageCode.from_mapping(row))]
-    if not SEMANTIC_V2_ACTIVE and len(explicit) != 1:
-        raise ValueError(f"expected one promise-conditioned record, found {len(explicit)}")
     promise_status = {
         "definition": "explicit_promise=yes AND promised_action=COOPERATE AND conditionality=unconditional AND ambiguous_response=no",
         "n": len(explicit),
@@ -474,9 +551,9 @@ def analyze_subgroup(joined: list[dict[str, Any]]) -> tuple[dict[str, Any], list
         "status": (
             "The pre-specified promise-conditioned behavioral comparison is not meaningfully "
             "estimable because only one qualifying voluntary explicit promise occurred."
-            if not SEMANTIC_V2_ACTIVE else
-            f"Explicit semantic-v2 activation contains {len(explicit)} qualifying voluntary "
-            "explicit promise records; this remains a separately identified descriptive subset."
+            if len(explicit) == 1 else
+            f"The public semantic corpus contains {len(explicit)} qualifying voluntary "
+            "explicit-promise records; this is a separately identified descriptive subset."
         ),
     }
     undertakings = [
@@ -619,10 +696,18 @@ def make_heterogeneity(confirmatory: list[dict[str, Any]], voluntary: list[dict[
     all_effects = confirmatory + voluntary
     lookup = {(row["configuration"], row["hypothesis"]): row for row in all_effects}
     rows: list[dict[str, Any]] = []
-    for family in ("Qwen3-32B", "GLM-5.2", "MiniMax M3", "DeepSeek V4 Pro"):
-        on = f"{family} — reasoning ON"
-        off = f"{family} — reasoning OFF"
-        for hypothesis in ("H8", "H9", "H10", "Voluntary ITT"):
+    configured_pairs = (
+        ("Qwen3-32B", (("Qwen3-32B — reasoning ON", "Qwen3-32B — reasoning OFF"),)),
+        ("GLM-5.2", (("GLM-5.2 (r)", "GLM-5.2"), ("GLM-5.2 — reasoning ON", "GLM-5.2 — reasoning OFF"))),
+        ("MiniMax M3", (("MiniMax-M3 (r)", "MiniMax-M3"), ("MiniMax M3 — reasoning ON", "MiniMax M3 — reasoning OFF"))),
+        ("DeepSeek V4 Pro", (("DeepSeek-V4-Pro (r)", "DeepSeek-V4-Pro"), ("DeepSeek V4 Pro — reasoning ON", "DeepSeek V4 Pro — reasoning OFF"))),
+    )
+    for family, candidates in configured_pairs:
+        pair = next((candidate for candidate in candidates if all((label, "H7") in lookup for label in candidate)), None)
+        if pair is None:
+            continue
+        on, off = pair
+        for hypothesis in ("H7", "H8", "H9", "Voluntary ITT"):
             a, b = lookup[(on, hypothesis)], lookup[(off, hypothesis)]
             rows.append({
                 "comparison_type": "matched_reasoning_mode_descriptive",
@@ -635,16 +720,19 @@ def make_heterogeneity(confirmatory: list[dict[str, Any]], voluntary: list[dict[
                 "descriptive_difference_a_minus_b": a["risk_difference"] - b["risk_difference"],
                 "formal_interaction_test": False,
             })
-    for hypothesis in ("H8", "H9", "H10", "Voluntary ITT"):
-        a = lookup[("GPT-OSS-120B — Nebius", hypothesis)]
-        b = lookup[("GPT-OSS-120B — Groq", hypothesis)]
+    provider_labels = ("GPT-OSS-120B — Nebius", "GPT-OSS-120B — Groq")
+    for hypothesis in ("H7", "H8", "H9", "Voluntary ITT"):
+        if not all((label, hypothesis) in lookup for label in provider_labels):
+            continue
+        a = lookup[(provider_labels[0], hypothesis)]
+        b = lookup[(provider_labels[1], hypothesis)]
         rows.append({
             "comparison_type": "matched_provider_control_descriptive",
             "group": "GPT-OSS-120B",
             "hypothesis": hypothesis,
-            "configuration_a": "GPT-OSS-120B — Nebius",
+            "configuration_a": provider_labels[0],
             "risk_difference_a": a["risk_difference"],
-            "configuration_b": "GPT-OSS-120B — Groq",
+            "configuration_b": provider_labels[1],
             "risk_difference_b": b["risk_difference"],
             "descriptive_difference_a_minus_b": a["risk_difference"] - b["risk_difference"],
             "formal_interaction_test": False,
@@ -683,34 +771,34 @@ def save_publication_figure(figure: Any, filename: str) -> None:
 
 def publication_confirmatory_forest(rows: list[dict[str, Any]]) -> None:
     hypotheses = (
-        ("H8", "H7", "Induced Promise--No-Switch\nminus No Communication"),
-        ("H9", "H8", "Induced Promise--No-Switch\nminus Induced Promise--Switch"),
-        ("H10", "H9", "Induced Promise--No-Switch\nminus Expectation Without\nOwn Promise"),
+        ("H7", "Induced Promise--No-Switch\nminus No Communication"),
+        ("H8", "Induced Promise--No-Switch\nminus Induced Promise--Switch"),
+        ("H9", "Induced Promise--No-Switch\nminus Expectation Without\nOwn Promise"),
     )
     selected = {
         hypothesis: sorted(
             (row for row in rows if row["hypothesis"] == hypothesis),
             key=lambda row: row["configuration_order"],
         )
-        for hypothesis, _, _ in hypotheses
+        for hypothesis, _ in hypotheses
     }
     limits = [
         100 * row[field]
-        for hypothesis, _, _ in hypotheses
+        for hypothesis, _ in hypotheses
         for row in selected[hypothesis]
         for field in ("ci_95_low", "ci_95_high")
     ] + [0.0]
     span = max(limits) - min(limits)
     padding = max(4.0, 0.04 * span)
     x_limits = (min(limits) - padding, max(limits) + padding)
-    labels = [row["configuration"] for row in selected["H8"]]
+    labels = [row["configuration"] for row in selected["H7"]]
     positions = list(range(len(labels)))
     significant_color = "#1f4e79"
     figure, axes = plt.subplots(
         1, 3, figsize=(9.2, max(5.8, 0.34 * len(labels) + 1.4)), sharex=True, sharey=True,
         gridspec_kw={"wspace": 0.12},
     )
-    for axis, (hypothesis, manuscript_hypothesis, comparison) in zip(
+    for axis, (hypothesis, comparison) in zip(
         axes, hypotheses, strict=True,
     ):
         for position, row in zip(positions, selected[hypothesis], strict=True):
@@ -730,7 +818,7 @@ def publication_confirmatory_forest(rows: list[dict[str, Any]]) -> None:
         axis.grid(axis="x", color="#d9d9d9", linewidth=0.6)
         axis.set_axisbelow(True)
         axis.set_title(
-            f"{manuscript_hypothesis}\n{comparison}", fontsize=10.5, pad=8,
+            f"{hypothesis}\n{comparison}", fontsize=10.5, pad=8,
         )
         axis.tick_params(axis="both", labelsize=10.5)
         axis.spines[["top", "right"]].set_visible(False)
@@ -869,7 +957,8 @@ def build_report(
     voluntary: list[dict[str, Any]], bounds: list[dict[str, Any]],
     promise_status: dict[str, Any], undertaking: list[dict[str, Any]],
     compliance: list[dict[str, Any]], excluded: dict[str, Any],
-    pre_randomization: list[dict[str, Any]],
+    pre_randomization: list[dict[str, Any]], profile_validation: dict[str, Any],
+    variance_summary: dict[str, float], semantic_n: int,
 ) -> str:
     contrast_fields = [
         ("configuration", "Configuration"), ("treatment_cooperate_n", "T coop"),
@@ -881,7 +970,7 @@ def build_report(
         ("holm_adjusted_p_value", "Holm p"),
     ]
     lines = [
-        "# Final Promise Switch statistical analysis",
+        f"# Final Promise Switch statistical analysis — {ANALYSIS_PROFILE}",
         "",
         "All inferential estimates are model-configuration-specific. No pooled confirmatory test was calculated.",
         "",
@@ -890,7 +979,7 @@ def build_report(
         *[f"- {spec[1]} (`{spec[0]}`)" for spec in RUN_SPECS],
         "",
     ]
-    for hypothesis in ("H8", "H9", "H10"):
+    for hypothesis in ("H7", "H8", "H9"):
         lines.extend([
             f"## {hypothesis}", "",
             markdown_table([row for row in confirmatory if row["hypothesis"] == hypothesis], contrast_fields),
@@ -901,7 +990,7 @@ def build_report(
         markdown_table(voluntary, contrast_fields), "",
         "## Hypothesis-support summary", "",
     ])
-    for hypothesis in ("H8", "H9", "H10"):
+    for hypothesis in ("H7", "H8", "H9"):
         selected = [row for row in confirmatory if row["hypothesis"] == hypothesis]
         positive = sum(row["risk_difference"] > 0 for row in selected)
         significant = sum(row["support_classification"] == "directionally supported and Holm-significant" for row in selected)
@@ -915,21 +1004,28 @@ def build_report(
         f"Across assigned condition-level trials, {aggregate_missing}/{aggregate_assigned} final outcomes were missing. Detailed model-by-condition and contrast-level diagnostics are in the CSV outputs.",
         f"Separately, {pre_randomization_missing} voluntary-message trials failed before receiving a Switch/No-Switch assignment.",
         "",
-        *[f"- {hypothesis}: worst-case RD remained positive for {worst_positive[hypothesis]}/{len(RUN_SPECS)} configurations." for hypothesis in ("H8", "H9", "H10", "Voluntary ITT")],
+        *[f"- {hypothesis}: worst-case RD remained positive for {worst_positive[hypothesis]}/{len(RUN_SPECS)} configurations." for hypothesis in ("H7", "H8", "H9", "Voluntary ITT")],
         "", "## Semantic analyses", "",
-        f"The frozen semantic prevalence counts matched all expected counts across 2,738 annotations. Promise-conditioned subset n={promise_status['n']}.",
+        f"The profile-specific semantic analysis contains {semantic_n:,} annotations. Promise-conditioned subset n={promise_status['n']}.",
         "",
         promise_status["status"],
         "",
         f"The secondary undertaking-to-cooperate subset contained {undertaking[0]['subset_n']} observations; No-Switch minus Switch RD={fmt(undertaking[0]['risk_difference_no_switch_minus_switch'])}, 95% Newcombe CI [{fmt(undertaking[0]['ci_95_low'])}, {fmt(undertaking[0]['ci_95_high'])}], raw p={fmt(undertaking[0]['raw_p_value'])}. This is a selected post-message subgroup, not ITT.",
         "", "Compliance and violation numerators and denominators are reported in `compliance_descriptives.csv`.",
+        "", "## Article-profile validation", "",
+        f"Configuration count: {profile_validation['configuration_count']}; conditions: {profile_validation['condition_count']}; configuration-condition cells: {profile_validation['cell_count']}.",
+        f"Assigned trials: {profile_validation['assigned_trials']:,}; valid final decisions: {profile_validation['valid_outcomes']:,}; missing outcomes: {profile_validation['missing_outcomes']:,}.",
+        f"Duplicate trial IDs: {profile_validation['duplicate_trial_id_count']}; duplicate trial-level rows: {profile_validation['duplicate_exact_row_count']}.",
+        "", "## Variance decomposition", "",
+        f"LPM total-variance shares: configuration={variance_summary['lpm_configuration_share']:.6f}, condition={variance_summary['lpm_condition_share']:.6f}, interaction={variance_summary['lpm_interaction_share']:.6f}, residual={variance_summary['lpm_residual_share']:.6f}; R²={variance_summary['lpm_r_squared']:.6f}.",
+        f"Logit explained-deviance shares: configuration={variance_summary['logit_configuration_share']:.6f}, condition={variance_summary['logit_condition_share']:.6f}, interaction={variance_summary['logit_interaction_share']:.6f}; McFadden pseudo-R²={variance_summary['logit_mcfadden_r_squared']:.6f}.",
         "", "## Excluded configuration", "",
         f"DeepSeek V4 Flash reasoning ON is EXCLUDED FROM CONFIRMATORY INFERENCE. The run stopped with status `{excluded['run_status']}` after {excluded['terminal_trials']} terminal trials; {excluded['valid_binary_outcomes']} had valid binary outcomes, {excluded['behavioral_failures']} were behavioral failures, and {excluded['infrastructure_failures']} were infrastructure failures.",
         "", "The diagnostic describes only this specific model/provider/reasoning configuration.",
         "", "## Statistical definitions", "",
         "- Confidence intervals: 95% Newcombe-Wilson intervals for independent-proportion differences.",
         "- Tests: two-sided Fisher exact if any expected cell count was below 5; otherwise two-sided Pearson chi-square without Yates correction.",
-        "- Confirmatory multiplicity: Holm correction within each configuration across H8, H9, and H10.",
+        "- Confirmatory multiplicity: Holm correction within each configuration across H7, H8, and H9.",
         f"- Secondary multiplicity: Holm correction across the {len(RUN_SPECS)} Voluntary Message ITT comparisons.",
         "- Extreme-case missing-outcome bounds are deterministic bounds, not confidence intervals.",
         "",
@@ -986,14 +1082,190 @@ def internal_checks(confirmatory: list[dict[str, Any]], voluntary: list[dict[str
 def activation_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--profile", required=True, choices=("article_15", "extended_17"),
+        help="explicit reproducible analysis profile",
+    )
+    parser.add_argument(
+        "--output-dir", type=Path,
+        help="optional output directory; defaults to a profile-specific directory",
+    )
+    parser.add_argument(
         "--activate-run-specs", type=Path,
         help="JSON activation file containing only completed, audited future runs",
     )
     parser.add_argument(
-        "--activate-semantic-v2", type=Path,
-        help="explicit finalized semantic-v2 activation manifest",
+        "--supplementary-figures", action="store_true",
+        help="also generate the four detailed forest-plot pairs",
     )
     return parser
+
+
+def configure_profile(args: argparse.Namespace) -> None:
+    """Select a complete profile; never silently fall back to the legacy 13-run set."""
+    global RUN_SPECS, SEMANTIC_SOURCE_SPECS, OUTPUT_DIR, ANALYSIS_PROFILE
+    global GENERATE_SUPPLEMENTARY_FIGURES
+    activation_path = args.activate_run_specs or DEFAULT_RUN_ACTIVATION
+    future_specs = activated_specs(activation_path)
+    if len(future_specs) != len(FUTURE_RUN_SPECS):
+        raise ValueError("profile activation must contain all four completed future configurations")
+    extended_specs = (*BASE_RUN_SPECS, *future_specs)
+    SEMANTIC_SOURCE_SPECS = extended_specs
+    ANALYSIS_PROFILE = args.profile
+    GENERATE_SUPPLEMENTARY_FIGURES = args.supplementary_figures
+    if args.profile == "article_15":
+        RUN_SPECS = ARTICLE_15_RUN_SPECS
+        default_output = ROOT / "notes" / "promise_switch" / "final_analysis_article15"
+    else:
+        RUN_SPECS = extended_specs
+        default_output = ROOT / "notes" / "promise_switch" / "final_analysis_extended17"
+    OUTPUT_DIR = (args.output_dir.resolve() if args.output_dir else default_output)
+
+
+def validate_article_profile(
+    trials: list[dict[str, Any]], run_metadata: list[dict[str, Any]],
+    condition_rows: list[dict[str, Any]], trial_level: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Fail closed if the publication sample differs from its documented definition."""
+    labels = [row["configuration"] for row in run_metadata]
+    expected_labels = [spec[1] for spec in ARTICLE_15_RUN_SPECS]
+    if labels != expected_labels:
+        raise ValueError(f"article_15 configuration order mismatch: {labels!r}")
+    if len({row["source_run"] for row in trials}) != len(ARTICLE_15_RUN_SPECS):
+        raise ValueError("article_15 must use exactly one source run per configuration")
+    for metadata in run_metadata:
+        observed = (metadata["model_id"], metadata["provider"], metadata["reasoning_mode"])
+        expected = ARTICLE_15_EXPECTED_IDENTITIES[metadata["configuration"]]
+        if observed != expected:
+            raise ValueError(
+                f"article_15 identity mismatch for {metadata['configuration']}: "
+                f"expected {expected!r}, observed {observed!r}"
+            )
+    expected_kwargs = {
+        "gpt-oss-120b": {"reasoning_effort": "low"},
+        "Qwen3-32B": {"chat_template_kwargs": {"enable_thinking": False}},
+        "DeepSeek-V4-Flash": {"chat_template_kwargs": {"thinking": False}},
+        "DeepSeek-V4-Pro": {"chat_template_kwargs": {"thinking": False}},
+        "DeepSeek-V4-Pro (r)": {"chat_template_kwargs": {"reasoning_effort": "high", "thinking": True}},
+        "Kimi-K3": {},
+        "MiniMax-M3": {"chat_template_kwargs": {"thinking_mode": "disabled"}},
+        "MiniMax-M3 (r)": {"chat_template_kwargs": {"thinking_mode": "enabled"}},
+        "GLM-5.2": {"chat_template_kwargs": {"enable_thinking": False}},
+        "GLM-5.2 (r)": {"chat_template_kwargs": {"enable_thinking": True}},
+        "Llama-3.3-70B": {},
+        "GPT-5.6": {"reasoning_effort": "none"},
+        "GPT-5.6 (r)": {"reasoning_effort": "medium"},
+        "Sonnet-5": {"thinking": {"type": "disabled"}},
+        "Sonnet-5 (r)": {"thinking": {"type": "adaptive", "display": "omitted"}, "output_config": {"effort": "xhigh"}},
+    }
+    for metadata in run_metadata:
+        manifest = json.loads((run_directory(metadata["run_name"]) / "manifest.json").read_text(encoding="utf-8"))
+        kwargs = manifest["model_configurations"][0].get("provider_request_kwargs", {})
+        if kwargs != expected_kwargs[metadata["configuration"]]:
+            raise ValueError(f"article_15 reasoning settings mismatch for {metadata['configuration']}")
+    assigned = [row for row in trials if row.get("condition") in {condition.value for condition in Condition}]
+    valid = [row for row in assigned if row.get("completion_status") == "completed" and row.get("final_action") in {"COOPERATE", "DEFECT"}]
+    trial_ids = [row["trial_id"] for row in assigned]
+    source_trial_ids = [(row["source_run"], row["trial_id"]) for row in assigned]
+    exact_rows = [tuple(sorted((key, json.dumps(value, sort_keys=True)) for key, value in row.items())) for row in trial_level if row.get("condition")]
+    observed = {
+        "configuration_count": len(run_metadata),
+        "condition_count": len({row["condition"] for row in condition_rows}),
+        "cell_count": len(condition_rows),
+        "assigned_trials": len(assigned),
+        "valid_outcomes": len(valid),
+        "missing_outcomes": len(assigned) - len(valid),
+        "pre_randomization_failures": len(trials) - len(assigned),
+        "source_run_count": len({row["source_run"] for row in trials}),
+        "duplicate_trial_id_count": len(trial_ids) - len(set(trial_ids)),
+        "duplicate_source_run_trial_id_count": len(source_trial_ids) - len(set(source_trial_ids)),
+        "duplicate_exact_row_count": len(exact_rows) - len(set(exact_rows)),
+        "configuration_order": labels,
+        "reasoning_settings_validated_for_all_configurations": True,
+        "qwen_reasoning_on_present": any(row["configuration"] == "Qwen3-32B" and row["reasoning_mode"] == "on" for row in trials),
+        "gpt_oss_groq_present": any(row["model_id"] == "openai/gpt-oss-120b" and row["provider"] == "groq" for row in trials),
+    }
+    for field, expected in ARTICLE_15_EXPECTED_COUNTS.items():
+        if observed[field] != expected:
+            raise ValueError(f"article_15 {field}: expected {expected}, observed {observed[field]}")
+    for field in ("duplicate_trial_id_count", "duplicate_source_run_trial_id_count", "duplicate_exact_row_count"):
+        if observed[field] != 0:
+            raise ValueError(f"article_15 {field} must be zero")
+    if observed["pre_randomization_failures"] != 6:
+        raise ValueError("article_15 expected six pre-randomization terminal failures")
+    if observed["qwen_reasoning_on_present"] or observed["gpt_oss_groq_present"]:
+        raise ValueError("article_15 contains an explicitly excluded configuration")
+    return observed
+
+
+def variance_decomposition(trials: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, float]]:
+    assigned = [row for row in trials if row.get("condition") in {condition.value for condition in Condition}]
+    valid = [row for row in assigned if row.get("completion_status") == "completed" and row.get("final_action") in {"COOPERATE", "DEFECT"}]
+    frame = pd.DataFrame({
+        "cooperate": [int(row["final_action"] == "COOPERATE") for row in valid],
+        "configuration": [row["configuration"] for row in valid],
+        "condition": [row["condition"] for row in valid],
+    })
+    frame["configuration"] = pd.Categorical(frame["configuration"], categories=[spec[1] for spec in RUN_SPECS], ordered=True)
+    frame["condition"] = pd.Categorical(frame["condition"], categories=[condition.value for condition in Condition], ordered=True)
+    full_formula = "cooperate ~ C(configuration, Sum) * C(condition, Sum)"
+    lpm = smf.ols(full_formula, data=frame).fit()
+    table = anova_lm(lpm, typ=3)
+    total_ss = float(((frame["cooperate"] - frame["cooperate"].mean()) ** 2).sum())
+    terms = {
+        "configuration": "C(configuration, Sum)",
+        "condition": "C(condition, Sum)",
+        "configuration_x_condition": "C(configuration, Sum):C(condition, Sum)",
+        "residual": "Residual",
+    }
+    lpm_ss = {component: float(table.loc[term, "sum_sq"]) for component, term in terms.items()}
+    glm = lambda formula: smf.glm(formula, data=frame, family=sm.families.Binomial()).fit(maxiter=200, disp=0)
+    null, config, condition = glm("cooperate ~ 1"), glm("cooperate ~ C(configuration, Sum)"), glm("cooperate ~ C(condition, Sum)")
+    additive, full = glm("cooperate ~ C(configuration, Sum) + C(condition, Sum)"), glm(full_formula)
+    config_contribution = 0.5 * ((null.deviance - config.deviance) + (condition.deviance - additive.deviance))
+    condition_contribution = 0.5 * ((null.deviance - condition.deviance) + (config.deviance - additive.deviance))
+    interaction_contribution = additive.deviance - full.deviance
+    explained_deviance = null.deviance - full.deviance
+    logit_contributions = {
+        "configuration": config_contribution,
+        "condition": condition_contribution,
+        "configuration_x_condition": interaction_contribution,
+    }
+    common = {
+        "analysis_sample": "manuscript_primary_promise_switch_15_configurations" if ANALYSIS_PROFILE == "article_15" else ANALYSIS_PROFILE,
+        "n_assigned": len(assigned), "n_valid": len(valid), "n_missing": len(assigned) - len(valid),
+    }
+    rows: list[dict[str, Any]] = []
+    for component, value in lpm_ss.items():
+        rows.append({**common, "model_type": "linear_probability_model", "component": component,
+                     "metric": "share_total_variance", "value": value / total_ss,
+                     "notes": "Type III sums of squares; sum-to-zero contrasts"})
+    rows.append({**common, "model_type": "linear_probability_model", "component": "model",
+                 "metric": "r_squared", "value": float(lpm.rsquared),
+                 "notes": "OLS linear probability model"})
+    for component, value in logit_contributions.items():
+        rows.append({**common, "model_type": "logistic_regression", "component": component,
+                     "metric": "share_explained_deviance", "value": value / explained_deviance,
+                     "notes": "Shapley average over both main-effect orders; interaction after both"})
+    rows.append({**common, "model_type": "logistic_regression", "component": "model",
+                 "metric": "mcfadden_pseudo_r_squared", "value": 1 - full.llf / null.llf,
+                 "notes": "1 - full-model log-likelihood / null-model log-likelihood"})
+    summary = {
+        "lpm_configuration_share": lpm_ss["configuration"] / total_ss,
+        "lpm_condition_share": lpm_ss["condition"] / total_ss,
+        "lpm_interaction_share": lpm_ss["configuration_x_condition"] / total_ss,
+        "lpm_residual_share": lpm_ss["residual"] / total_ss,
+        "lpm_r_squared": float(lpm.rsquared),
+        "logit_configuration_share": config_contribution / explained_deviance,
+        "logit_condition_share": condition_contribution / explained_deviance,
+        "logit_interaction_share": interaction_contribution / explained_deviance,
+        "logit_mcfadden_r_squared": 1 - full.llf / null.llf,
+    }
+    if ANALYSIS_PROFILE == "article_15":
+        expected = (0.289, 0.173, 0.163, 0.374, 0.626, 0.518, 0.339, 0.143, 0.591)
+        observed = tuple(round(summary[key], 3) for key in summary)
+        if observed != expected:
+            raise ValueError(f"article_15 variance controls differ: expected {expected}, observed {observed}")
+    return rows, summary
 
 
 def repository_path(value: str) -> Path:
@@ -1008,37 +1280,6 @@ def run_directory(value: str) -> Path:
     if path.is_absolute():
         return path
     return (ROOT / path) if path.parts[:2] == ("runs", "promise_switch") else (RUN_ROOT / path)
-
-
-def activate_semantic_v2(path: Path, active_specs: tuple[tuple[Any, ...], ...]) -> None:
-    """Activate a finalized v2 corpus only when it matches the activated future runs."""
-    global ANNOTATION_PATH, SEMANTIC_KEY_PATH, SEMANTIC_EXPECTED_COUNT, SEMANTIC_V2_ACTIVE
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if payload.get("corpus_version") != "promise_switch_semantic_corpus_v2":
-        raise ValueError("semantic-v2 activation has an incompatible version")
-    annotations = repository_path(str(payload.get("annotations_path", "")))
-    key = repository_path(str(payload.get("private_key_path", "")))
-    if not annotations.is_file() or sha256(annotations) != payload.get("annotations_sha256"):
-        raise ValueError("semantic-v2 annotation artifact hash mismatch")
-    if not key.is_file() or sha256(key) != payload.get("private_key_sha256"):
-        raise ValueError("semantic-v2 private-key artifact hash mismatch")
-    if sha256(ANNOTATION_PATH) != payload.get("frozen_base_sha256"):
-        raise ValueError("semantic-v2 activation does not reference the frozen v1 corpus")
-    count = payload.get("combined_count")
-    if not isinstance(count, int) or count <= 2738:
-        raise ValueError("semantic-v2 activation has no validated new records")
-    activated_paths = {str(repository_path(str(spec[0]))) for spec in active_specs}
-    source_rows = payload.get("source_runs")
-    source_paths = {
-        str(repository_path(str(row.get("run_path", ""))))
-        for row in source_rows if isinstance(row, dict)
-    } if isinstance(source_rows, list) else set()
-    if not source_paths or source_paths != activated_paths:
-        raise ValueError("semantic-v2 sources do not match explicitly activated future runs")
-    ANNOTATION_PATH = annotations
-    SEMANTIC_KEY_PATH = key
-    SEMANTIC_EXPECTED_COUNT = count
-    SEMANTIC_V2_ACTIVE = True
 
 
 def activated_specs(path: Path) -> tuple[tuple[Any, ...], ...]:
@@ -1096,17 +1337,9 @@ def activated_specs(path: Path) -> tuple[tuple[Any, ...], ...]:
 
 def main(argv: list[str] | None = None) -> int:
     args = activation_parser().parse_args(argv)
-    global RUN_SPECS
-    future_specs: tuple[tuple[Any, ...], ...] = ()
-    if args.activate_run_specs:
-        future_specs = activated_specs(args.activate_run_specs)
-        RUN_SPECS = (*BASE_RUN_SPECS, *future_specs)
-    if args.activate_semantic_v2:
-        if not future_specs:
-            raise ValueError("semantic-v2 activation requires explicit future run activation")
-        activate_semantic_v2(args.activate_semantic_v2, future_specs)
+    configure_profile(args)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    trials, run_metadata, semantic_key = load_trials()
+    trials, run_metadata, semantic_rows = load_trials()
     condition_rows = [
         status_row(trials, spec, condition)
         for spec in RUN_SPECS for condition in Condition
@@ -1122,7 +1355,7 @@ def main(argv: list[str] | None = None) -> int:
         family = [row for row in confirmatory if row["configuration"] == spec[1]]
         adjusted = holm_adjust(row["raw_p_value"] for row in family)
         for row, adjusted_p in zip(family, adjusted):
-            row["holm_family"] = f"{spec[1]}: H8/H9/H10"
+            row["holm_family"] = f"{spec[1]}: H7/H8/H9"
             row["holm_family_size"] = 3
             row["holm_adjusted_p_value"] = adjusted_p
             row["holm_significant_alpha_0_05"] = adjusted_p < ALPHA
@@ -1152,7 +1385,7 @@ def main(argv: list[str] | None = None) -> int:
         row["holm_adjusted_p_value"] = adjusted_p
         row["holm_significant_alpha_0_05"] = adjusted_p < ALPHA
     bounds = [missingness_bound(row) for row in confirmatory + voluntary]
-    joined, prevalence = semantic_records(semantic_key, trials)
+    joined, prevalence = semantic_records(semantic_rows, trials)
     promise_status, undertaking, compliance = analyze_subgroup(joined)
     heterogeneity = make_heterogeneity(confirmatory, voluntary)
     excluded_rows, excluded_summary = excluded_diagnostic()
@@ -1179,6 +1412,26 @@ def main(argv: list[str] | None = None) -> int:
         "plan_phase": row.get("plan_phase"),
         "top_up_sequence": row.get("top_up_sequence"),
     } for row in trials]
+    profile_validation = (
+        validate_article_profile(trials, run_metadata, condition_rows, trial_level)
+        if ANALYSIS_PROFILE == "article_15" else {
+            "configuration_count": len(RUN_SPECS),
+            "condition_count": len(Condition),
+            "cell_count": len(condition_rows),
+            "assigned_trials": sum(row["assigned_trials"] for row in condition_rows),
+            "valid_outcomes": sum(row["valid_binary_n"] for row in condition_rows),
+            "missing_outcomes": sum(row["total_missing_n"] for row in condition_rows),
+            "duplicate_trial_id_count": 0,
+            "duplicate_exact_row_count": 0,
+        }
+    )
+    variance_rows, variance_summary = variance_decomposition(trials)
+    if ANALYSIS_PROFILE == "article_15":
+        if promise_status["n"] != 1 or undertaking[0]["subset_n"] != 159:
+            raise ValueError(
+                "article_15 semantic subset controls differ: "
+                f"strict={promise_status['n']}, undertaking={undertaking[0]['subset_n']}"
+            )
     pre_randomization = []
     for spec in RUN_SPECS:
         rows = [
@@ -1195,8 +1448,8 @@ def main(argv: list[str] | None = None) -> int:
 
     write_csv(OUTPUT_DIR / "trial_level_analysis_dataset.csv", trial_level)
     write_csv(OUTPUT_DIR / "condition_counts.csv", condition_rows)
-    write_csv(OUTPUT_DIR / "confirmatory_h8_h10.csv", confirmatory)
-    write_json(OUTPUT_DIR / "confirmatory_h8_h10.json", confirmatory)
+    write_csv(OUTPUT_DIR / "confirmatory_h7_h9.csv", confirmatory)
+    write_json(OUTPUT_DIR / "confirmatory_h7_h9.json", confirmatory)
     write_csv(OUTPUT_DIR / "voluntary_itt.csv", voluntary)
     write_csv(OUTPUT_DIR / "attrition_by_condition.csv", condition_rows)
     write_csv(OUTPUT_DIR / "pre_randomization_attrition.csv", pre_randomization)
@@ -1204,25 +1457,30 @@ def main(argv: list[str] | None = None) -> int:
     write_csv(OUTPUT_DIR / "semantic_prevalence.csv", prevalence)
     write_json(OUTPUT_DIR / "promise_conditioned_status.json", promise_status)
     write_csv(OUTPUT_DIR / "undertaking_robustness.csv", undertaking)
+    write_csv(OUTPUT_DIR / "promise_switch_variance_decomposition.csv", variance_rows)
     write_csv(OUTPUT_DIR / "compliance_descriptives.csv", compliance)
     write_csv(OUTPUT_DIR / "heterogeneity_descriptives.csv", heterogeneity)
     write_csv(OUTPUT_DIR / "deepseek_flash_on_excluded_diagnostic.csv", excluded_rows)
-    for hypothesis, filename in (
-        ("H8", "forest_h8"), ("H9", "forest_h9"), ("H10", "forest_h10"),
-        ("Voluntary ITT", "forest_voluntary_itt"),
-    ):
-        forest_plot(confirmatory + voluntary, hypothesis, filename)
+    if GENERATE_SUPPLEMENTARY_FIGURES:
+        for hypothesis, filename in (
+            ("H7", "forest_h7"), ("H8", "forest_h8"), ("H9", "forest_h9"),
+            ("Voluntary ITT", "forest_voluntary_itt"),
+        ):
+            forest_plot(confirmatory + voluntary, hypothesis, filename)
     publication_confirmatory_forest(confirmatory)
     publication_condition_heatmap(condition_rows)
     publication_voluntary_dumbbell(voluntary)
     report = build_report(
         condition_rows, confirmatory, voluntary, bounds, promise_status,
         undertaking, compliance, excluded_summary, pre_randomization,
+        profile_validation, variance_summary, len(joined),
     )
     (OUTPUT_DIR / "final_analysis_report.md").write_text(report, encoding="utf-8")
 
     input_paths = [
-        ANNOTATION_PATH, SEMANTIC_KEY_PATH, SCHEMA_PATH, CODEBOOK_PATH,
+        PUBLIC_SEMANTIC_MANIFEST_PATH,
+        PUBLIC_SEMANTIC_DIR / "semantic_labels.csv",
+        PUBLIC_SEMANTIC_SCHEMA_PATH, CODEBOOK_PATH,
         PROMPT_PATH, PYTHON_VALIDATOR_PATH,
     ] + sorted(
         path
@@ -1230,45 +1488,62 @@ def main(argv: list[str] | None = None) -> int:
         for path in run_directory(run_name).iterdir()
         if path.is_file() and path.name != ".writer.lock"
     )
-    generated_files = (
+    generated_files = [
         "analysis_manifest.json", "attrition_by_condition.csv",
         "compliance_descriptives.csv", "condition_counts.csv",
-        "confirmatory_h8_h10.csv", "confirmatory_h8_h10.json",
+        "confirmatory_h7_h9.csv", "confirmatory_h7_h9.json",
         "deepseek_flash_on_excluded_diagnostic.csv", "final_analysis_report.md",
-        "forest_h10.pdf", "forest_h10.png", "forest_h8.pdf", "forest_h8.png",
-        "forest_h9.pdf", "forest_h9.png", "forest_voluntary_itt.pdf",
-        "forest_voluntary_itt.png", "fig_PS_condition_heatmap.pdf",
+        "fig_PS_condition_heatmap.pdf",
         "fig_PS_condition_heatmap.png", "fig_PS_confirmatory_forest.pdf",
         "fig_PS_confirmatory_forest.png", "fig_PS_voluntary_itt.pdf",
         "fig_PS_voluntary_itt.png", "heterogeneity_descriptives.csv",
         "missingness_bounds.csv", "pre_randomization_attrition.csv",
         "promise_conditioned_status.json", "semantic_prevalence.csv",
+        "promise_switch_variance_decomposition.csv",
         "trial_level_analysis_dataset.csv", "undertaking_robustness.csv",
         "voluntary_itt.csv",
-    )
+    ]
+    if GENERATE_SUPPLEMENTARY_FIGURES:
+        generated_files.extend([
+            "forest_h7.pdf", "forest_h7.png", "forest_h8.pdf", "forest_h8.png",
+            "forest_h9.pdf", "forest_h9.png", "forest_voluntary_itt.pdf",
+            "forest_voluntary_itt.png",
+        ])
     manifest = {
         "analysis_version": ANALYSIS_VERSION,
+        "analysis_profile": ANALYSIS_PROFILE,
         "analysis_timestamp_utc": datetime.now(timezone.utc).isoformat(),
-        "git_head": git("rev-parse", "HEAD"),
+        "git_head_optional": git("rev-parse", "HEAD") or None,
         "alpha": ALPHA,
         "semantic_codebook_version": CODEBOOK_VERSION,
-        "required_ancestor_commits": list(REQUIRED_COMMITS),
         "analysis_script": {
             "path": str(Path(__file__).resolve().relative_to(ROOT)),
             "sha256": sha256(Path(__file__).resolve()),
         },
+        "software_versions": {
+            "python": platform.python_version(),
+            **{
+                package: importlib.metadata.version(package)
+                for package in ("jsonschema", "matplotlib", "pandas", "scipy", "statsmodels")
+            },
+        },
         "included_configurations": run_metadata,
+        "public_semantic_input": {
+            "manifest_path": str(PUBLIC_SEMANTIC_MANIFEST_PATH.relative_to(ROOT)),
+            "row_count": len(semantic_rows),
+            "private_linkage_required": False,
+        },
         "excluded_configuration": {"source_run": EXCLUDED_RUN, **excluded_summary},
         "hypothesis_definitions": {
-            "H8": "Induced Promise--No-Switch minus No Communication",
-            "H9": "Induced Promise--No-Switch minus Induced Promise--Switch",
-            "H10": "Induced Promise--No-Switch minus Expectation Without Own Promise",
+            "H7": "Induced Promise--No-Switch minus No Communication",
+            "H8": "Induced Promise--No-Switch minus Induced Promise--Switch",
+            "H9": "Induced Promise--No-Switch minus Expectation Without Own Promise",
             "secondary_voluntary_itt": "Voluntary Message--No-Switch minus Voluntary Message--Switch",
         },
         "confidence_interval": "95% Newcombe-Wilson interval for the difference of two independent proportions",
         "test_selection": "Two-sided Fisher exact if any expected 2x2 cell is <5; otherwise Pearson chi-square without Yates correction",
         "holm_families": {
-            "confirmatory": f"{len(RUN_SPECS)} separate within-configuration families of H8/H9/H10 (size 3)",
+            "confirmatory": f"{len(RUN_SPECS)} separate within-configuration families of H7/H8/H9 (size 3)",
             "secondary": f"one family of {len(RUN_SPECS)} Voluntary Message ITT comparisons",
         },
         "analysis_unit": "randomized trial; API attempts are not analysis units",
@@ -1276,7 +1551,13 @@ def main(argv: list[str] | None = None) -> int:
             {"path": str(path.relative_to(ROOT)), "sha256": sha256(path)}
             for path in input_paths
         ],
-        "validation": validation,
+        "validation": {**validation, "profile": profile_validation},
+        "variance_decomposition": {
+            "sample": "all valid final decisions",
+            "lpm": "Type III sums of squares with sum-to-zero contrasts",
+            "logit": "Shapley explained-deviance decomposition",
+            "summary": variance_summary,
+        },
         "generated_files": list(generated_files),
     }
     write_json(OUTPUT_DIR / "analysis_manifest.json", manifest)

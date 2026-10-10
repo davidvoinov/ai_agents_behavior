@@ -59,6 +59,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--verify-reasoning", action="store_true")
     result.add_argument("--frozen-codebook-commit", default="9e8f59e")
     result.add_argument(
+        "--frozen-codebook-key", type=Path, default=DEFAULT_FROZEN_KEY,
+        help="local linkage artifact used only by the optional private coding workflow",
+    )
+    result.add_argument(
         "--semantic-v2-manifest", type=Path,
         help="Bind this run to the new-only judge inputs and routing policy in a v2 manifest",
     )
@@ -189,7 +193,7 @@ def main(argv: list[str] | None = None) -> int:
                 validator_path=ROOT / "promise_switch/codebook.py",
                 judge_prompt_path=args.judge_prompt,
                 annotation_schema_path=args.annotation_schema,
-                frozen_key_path=DEFAULT_FROZEN_KEY,
+                frozen_key_path=args.frozen_codebook_key,
             )
             recorded_hashes = dict(manifest.get("frozen_codebook", {}))
             recorded_hashes.pop("verified", None)

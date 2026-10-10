@@ -78,13 +78,46 @@ class ArchitectureTests(unittest.TestCase):
                 if isinstance(node, ast.Import):
                     self.assertTrue(all(alias.name.split(".")[0] != "berg" for alias in node.names), path)
 
-    def test_berg_tree_matches_origin_main(self):
+    def test_berg_primary_publication_data_matches_investment_game_branch(self):
+        publication_files = (
+            "berg/data/full/full_deepseek-v4-flash.jsonl",
+            "berg/data/full/full_deepseek-v4-pro.jsonl",
+            "berg/data/full/full_deepseek-v4-pro-think.jsonl",
+            "berg/data/full/full_glm-5.2-nothink.jsonl",
+            "berg/data/full/full_glm-5.2-think.jsonl",
+            "berg/data/full/full_gpt-oss-120b.jsonl",
+            "berg/data/full/full_kimi-k3.jsonl",
+            "berg/data/full/full_llama-3.3-70b.jsonl",
+            "berg/data/full/full_minimax-m3-nothink.jsonl",
+            "berg/data/full/full_minimax-m3-think.jsonl",
+            "berg/data/full/full_qwen3-nothink.jsonl",
+            "berg/data/batch/gpt-5.6-nothink/full_gpt-5.6-nothink.jsonl",
+            "berg/data/batch/gpt-5.6-think/full_gpt-5.6-think.jsonl",
+            "berg/data/batch/sonnet-5-nothink/full_sonnet-5-nothink.jsonl",
+            "berg/data/batch/sonnet-5-think/full_sonnet-5-think.jsonl",
+        )
+        publication_ref = "refs/remotes/origin/investment-game"
+        available = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", publication_ref],
+            cwd=ROOT, check=False, capture_output=True, text=True,
+        )
+        if available.returncode != 0:
+            self.skipTest(
+                "Berg publication comparison requires the locally available "
+                "origin/investment-game remote-tracking ref"
+            )
         result = subprocess.run(
-            ["git", "diff", "--quiet", "origin/main", "--", "berg/"],
+            ["git", "diff", "--quiet", publication_ref, "--", *publication_files],
             cwd=ROOT,
             check=False,
+            capture_output=True,
+            text=True,
         )
-        self.assertEqual(result.returncode, 0)
+        self.assertEqual(
+            result.returncode, 0,
+            "Berg's 15 primary publication datasets differ from "
+            "origin/investment-game",
+        )
 
     def test_semantic_versions_and_prompt_hash(self):
         self.assertEqual(EXPERIMENT_VERSION, "promise_switch_v1")
@@ -600,15 +633,15 @@ class ProviderClientSchemaTests(unittest.TestCase):
         foundation = json.loads(
             (ROOT / "configs/promise_switch/foundation.json").read_text(encoding="utf-8")
         )
-        readiness = (
-            ROOT / "docs/experiments/promise_switch_production_readiness.md"
+        publication_documentation = (
+            ROOT / "docs/experiments/promise_switch.md"
         ).read_text(encoding="utf-8")
         self.assertEqual(foundation["experiment"]["temperature"], 1.0)
-        self.assertIn("upstream behavior may ignore", readiness)
-        self.assertIn("model-controlled", readiness)
-        self.assertIn("global temperature policy", readiness)
-        self.assertIn("PENDING_NEBIUS_LIVE_TOGGLE_VALIDATION", readiness)
-        self.assertIn("LLAMA_GROQ_SKIPPED_PROVIDER_DEPRECATION", readiness)
+        self.assertIn("ignore an upstream", publication_documentation)
+        self.assertIn("model-controlled", publication_documentation)
+        self.assertIn("global experimental request policy", publication_documentation)
+        self.assertIn("Reasoning-toggle support is validated", publication_documentation)
+        self.assertIn("deprecated Groq Llama endpoint", publication_documentation)
 
     def test_serializable_records_have_no_api_secret_field_or_value(self):
         secret = "secret-value-that-must-not-serialize"

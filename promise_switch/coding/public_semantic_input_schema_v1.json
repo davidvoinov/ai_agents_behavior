@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "promise_switch_public_semantic_input_row_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_run",
+    "trial_id",
+    "message_sha256",
+    "codebook_version",
+    "explicit_promise",
+    "commitment_present",
+    "statement_type",
+    "promised_action",
+    "conditionality",
+    "refusal_present",
+    "ambiguous_response"
+  ],
+  "properties": {
+    "source_run": {"type": "string", "minLength": 1},
+    "trial_id": {"type": "string", "minLength": 1},
+    "message_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "codebook_version": {"const": "promise_switch_message_codebook_v1"},
+    "explicit_promise": {"enum": ["yes", "no", "unclear"]},
+    "commitment_present": {"enum": ["yes", "no", "unclear"]},
+    "statement_type": {
+      "enum": [
+        "proposal",
+        "no_substantive_statement",
+        "intention",
+        "commitment",
+        "explicit_promise",
+        "refusal",
+        "ambiguous"
+      ]
+    },
+    "promised_action": {
+      "enum": ["NOT_APPLICABLE", "COOPERATE", "DEFECT", "OTHER", "UNCLEAR"]
+    },
+    "conditionality": {
+      "enum": ["not_applicable", "unconditional", "conditional", "unclear"]
+    },
+    "refusal_present": {
+      "enum": [
+        "no_refusal",
+        "refusal_to_promise",
+        "refusal_to_cooperate",
+        "other_refusal",
+        "unclear"
+      ]
+    },
+    "ambiguous_response": {"enum": ["no", "yes"]}
+  }
+}

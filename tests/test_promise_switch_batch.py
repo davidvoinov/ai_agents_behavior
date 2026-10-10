@@ -14,6 +14,7 @@ from promise_switch.design import Condition
 from promise_switch.client import ProviderAgnosticClient, RequestSpec
 from promise_switch.artifacts import validate_run_integrity
 from promise_switch.coding.semantic_v2 import (
+    FROZEN_BASE_CORPUS_SIZE, FROZEN_CODEBOOK_HASHES,
     judge_family_allowed, model_family, verify_frozen_codebook,
 )
 from promise_switch.execution.anthropic_batch import (
@@ -55,8 +56,8 @@ from scripts.run_promise_switch_batch import main as batch_cli_main
 from scripts.finalize_promise_switch_semantic_v2 import main as finalize_semantic_v2
 from scripts.prepare_promise_switch_validation_supplement import main as prepare_validation
 from scripts.analyze_promise_switch_final import (
-    BASE_RUN_SPECS, RUN_SPECS, activated_specs, publication_confirmatory_forest,
-    repository_path,
+    ARTICLE_15_RUN_SPECS, BASE_RUN_SPECS, RUN_SPECS, activated_specs,
+    publication_confirmatory_forest, repository_path,
 )
 from scripts.run_promise_switch_message_judge import main as semantic_judge_main
 
@@ -66,6 +67,27 @@ def configured(provider: str, alias: str, mode: str, cap: int = 128):
         create_model_config(provider=provider, model_alias=alias, reasoning_mode=mode),
         production_max_output_tokens=cap,
     )
+
+
+def semantic_v1_fixture(directory: Path) -> tuple[Path, Path, list[str]]:
+    """Create a non-sensitive structural fixture for private workflow tests."""
+    base = directory / "base_annotations.jsonl"
+    key = directory / "base_key.json"
+    base.write_text("".join(
+        json.dumps({"item_id": f"fixture-{index:04d}"}) + "\n"
+        for index in range(FROZEN_BASE_CORPUS_SIZE)
+    ))
+    key.write_text(json.dumps({
+        "file_hashes": FROZEN_CODEBOOK_HASHES,
+        "items": [
+            {"item_id": f"fixture-{index:04d}"}
+            for index in range(FROZEN_BASE_CORPUS_SIZE)
+        ],
+        "source_runs": [],
+    }))
+    return base, key, [
+        "--base-annotations", str(base), "--base-key", str(key),
+    ]
 
 
 class FinalFigureTests(unittest.TestCase):
@@ -80,7 +102,7 @@ class FinalFigureTests(unittest.TestCase):
                 "ci_95_high": 0.6,
                 "holm_significant_alpha_0_05": True,
             }
-            for hypothesis in ("H8", "H9", "H10")
+            for hypothesis in ("H7", "H8", "H9")
         ]
         captured = {}
 
@@ -93,6 +115,20 @@ class FinalFigureTests(unittest.TestCase):
 
         self.assertEqual(captured["titles"], ["H7", "H8", "H9"])
         self.assertEqual(captured["filename"], "fig_PS_confirmatory_forest")
+
+    def test_article_profile_is_explicit_and_ordered(self):
+        self.assertEqual(len(BASE_RUN_SPECS), 13)
+        self.assertEqual(len(ARTICLE_15_RUN_SPECS), 15)
+        self.assertEqual(
+            [spec[1] for spec in ARTICLE_15_RUN_SPECS],
+            [
+                "gpt-oss-120b", "Qwen3-32B", "DeepSeek-V4-Flash",
+                "DeepSeek-V4-Pro", "DeepSeek-V4-Pro (r)", "Kimi-K3",
+                "MiniMax-M3", "MiniMax-M3 (r)", "GLM-5.2", "GLM-5.2 (r)",
+                "Llama-3.3-70B", "GPT-5.6", "GPT-5.6 (r)", "Sonnet-5",
+                "Sonnet-5 (r)",
+            ],
+        )
 
     def test_analysis_activation_paths_are_repository_relative(self):
         with tempfile.TemporaryDirectory() as directory, patch(
@@ -1438,6 +1474,7 @@ class PreflightAndSemanticTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
+            _, _, base_args = semantic_v1_fixture(work)
             run_dir = work / "future_run"
             run_dir.mkdir()
             (run_dir / "manifest.json").write_text("{}")
@@ -1448,6 +1485,7 @@ class PreflightAndSemanticTests(unittest.TestCase):
             ]))
             output = work / "semantic_v2"
             args = [
+                *base_args,
                 "--source-run", f"GPT-5.6 Luna — no-think={run_dir}",
                 "--gpt-luna-routing-policy", "narrow", "--output-dir", str(output),
             ]
@@ -1486,6 +1524,7 @@ class PreflightAndSemanticTests(unittest.TestCase):
                 )
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
+            _, fixture_key, base_args = semantic_v1_fixture(work)
             run_dir = work / "future-run"
             run_dir.mkdir()
             (run_dir / "manifest.json").write_text("{}")
@@ -1502,6 +1541,7 @@ class PreflightAndSemanticTests(unittest.TestCase):
             })
             with patch("scripts.prepare_promise_switch_semantic_v2.audit_future_run", return_value=audited):
                 prepare_semantic_v2([
+                    *base_args,
                     "--source-run", f"GPT-5.6 Luna — no-think={run_dir}",
                     "--gpt-luna-routing-policy", "narrow", "--output-dir", str(corpus),
                 ])
@@ -1518,6 +1558,7 @@ class PreflightAndSemanticTests(unittest.TestCase):
                     "--sample", str(corpus / "new_items_blinded.csv"),
                     "--private-sample-key", str(corpus / "private_new_items_key.json"),
                     "--semantic-v2-manifest", str(corpus / "corpus_manifest.json"),
+                    "--frozen-codebook-key", str(fixture_key),
                     "--provider", "nebius", "--model", "gpt_oss_120b_nebius",
                     "--reasoning-mode", "on", "--temperature", "0",
                     "--max-output-tokens", "256", "--judge-id", "judge-v2",
@@ -1538,12 +1579,14 @@ class PreflightAndSemanticTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
+            _, _, base_args = semantic_v1_fixture(work)
             altered = work / "codebook.md"
             altered.write_text("altered")
             source = work / "run"
             source.mkdir()
             with self.assertRaisesRegex(SystemExit, "hash mismatch"):
                 prepare_semantic_v2([
+                    *base_args,
                     "--source-run", f"GPT-5.6 Luna — no-think={source}",
                     "--gpt-luna-routing-policy", "conservative",
                     "--codebook", str(altered), "--output-dir", str(work / "out"),
@@ -1557,11 +1600,10 @@ class PreflightAndSemanticTests(unittest.TestCase):
                 prepare_semantic_v2(["--source-run", f"GPT-5.6 Luna — no-think={source}", "--output-dir", str(Path(directory) / "out")])
 
     def test_semantic_v2_finalize_requires_complete_unique_coding_and_preserves_v1(self):
-        root = Path(__file__).resolve().parents[1]
-        base = root / "notes/promise_switch/semantic_coding/promise_switch_message_codebook_v1/final_full_semantic_annotations_n2738.jsonl"
-        before = hashlib.sha256(base.read_bytes()).hexdigest()
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
+            base, _, base_args = semantic_v1_fixture(work)
+            before = hashlib.sha256(base.read_bytes()).hexdigest()
             run_dir = work / "future_run"
             run_dir.mkdir()
             (run_dir / "manifest.json").write_text("{}")
@@ -1577,6 +1619,7 @@ class PreflightAndSemanticTests(unittest.TestCase):
             ):
                 corpus = work / "prepared"
                 prepare_semantic_v2([
+                    *base_args,
                     "--source-run", f"GPT-5.6 Luna — no-think={run_dir}",
                     "--gpt-luna-routing-policy", "narrow", "--output-dir", str(corpus),
                 ])
@@ -1625,19 +1668,11 @@ class PreflightAndSemanticTests(unittest.TestCase):
             activation = json.loads((final / "semantic_v2_activation.json").read_text())
             self.assertEqual((activation["new_item_count"], activation["combined_count"]), (1, 2739))
             self.assertEqual(hashlib.sha256(base.read_bytes()).hexdigest(), before)
-            import scripts.analyze_promise_switch_final as analysis_script
-            with patch.object(analysis_script, "ANNOTATION_PATH", base), patch.object(
-                analysis_script, "SEMANTIC_KEY_PATH",
-                root / "notes/promise_switch/semantic_coding/promise_switch_message_codebook_v1/private_full_semantic_key_n2738.json",
-            ), patch.object(
-                analysis_script, "SEMANTIC_EXPECTED_COUNT", 2738,
-            ), patch.object(analysis_script, "SEMANTIC_V2_ACTIVE", False):
-                analysis_script.activate_semantic_v2(
-                    final / "semantic_v2_activation.json",
-                    ((str(run_dir), "label", "family", "off", "OpenAI"),),
-                )
-                self.assertTrue(analysis_script.SEMANTIC_V2_ACTIVE)
-                self.assertEqual(analysis_script.SEMANTIC_EXPECTED_COUNT, 2739)
+            self.assertEqual(activation["corpus_version"], "promise_switch_semantic_corpus_v2")
+            self.assertEqual(
+                Path(activation["source_runs"][0]["run_path"]).resolve(),
+                run_dir.resolve(),
+            )
 
     def test_validation_supplement_is_audited_blinded_separate_and_exact_10x4(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -2,7 +2,21 @@
 .env
 
 # Working notes and the manuscript, kept out of version control by decision
-notes/
+notes/*
+!notes/promise_switch/
+notes/promise_switch/*
+!notes/promise_switch/final_analysis_article15/
+!notes/promise_switch/final_analysis_article15/**
+!notes/promise_switch/semantic_coding/
+notes/promise_switch/semantic_coding/*
+!notes/promise_switch/semantic_coding/public_semantic_input_v1/
+!notes/promise_switch/semantic_coding/public_semantic_input_v1/**
+!notes/promise_switch/validation/
+notes/promise_switch/validation/*
+!notes/promise_switch/validation/promise_switch_message_codebook_v1/
+notes/promise_switch/validation/promise_switch_message_codebook_v1/*
+!notes/promise_switch/validation/promise_switch_message_codebook_v1/public/
+!notes/promise_switch/validation/promise_switch_message_codebook_v1/public/**
 paper/
 
 # Promise Switch local/runtime output
@@ -75,9 +89,11 @@ berg/data/incentive/*_attrition.jsonl
 submission.ipynb
 Literature_Review_5_Papers.md
 smeta_berg_experiment.xlsx
-AGENTS.md
 literature/
 NEBIUS_GUIDE.md
+
+# Private semantic linkage and local coding state
+notes/promise_switch/**/private_*
 
 # process id files left by background runs
 pid_*

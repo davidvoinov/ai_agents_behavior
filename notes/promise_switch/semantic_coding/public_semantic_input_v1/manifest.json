@@ -1,0 +1,45 @@
+{
+  "artifact_version": "promise_switch_public_semantic_input_v1",
+  "codebook_version": "promise_switch_message_codebook_v1",
+  "csv_path": "notes/promise_switch/semantic_coding/public_semantic_input_v1/semantic_labels.csv",
+  "csv_sha256": "efa4fbcddd80c397e323ab867a46f4f7e0c042cfe1df1b050b6e98f1116ed546",
+  "fields": [
+    "source_run",
+    "trial_id",
+    "message_sha256",
+    "codebook_version",
+    "explicit_promise",
+    "commitment_present",
+    "statement_type",
+    "promised_action",
+    "conditionality",
+    "refusal_present",
+    "ambiguous_response"
+  ],
+  "primary_key": [
+    "source_run",
+    "trial_id"
+  ],
+  "row_count": 3538,
+  "schema_path": "promise_switch/coding/public_semantic_input_schema_v1.json",
+  "schema_sha256": "538f20d66819c1d9362ddcef0d2b4c63c373e033dcb11dac8b9723811ff4365b",
+  "source_run_counts": {
+    "claude_sonnet_5_off_confirmatory_20260917": 200,
+    "claude_sonnet_5_on_xhigh_confirmatory_20260918": 200,
+    "deepseek_v4_flash_off_confirmatory_qcv3_20260823": 202,
+    "deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823": 200,
+    "deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823": 200,
+    "glm_5_2_off_confirmatory_qcv3_20260823": 260,
+    "glm_5_2_on_confirmatory_qcv3_20260822": 211,
+    "gpt_5_6_luna_off_confirmatory_20260918": 200,
+    "gpt_5_6_luna_on_medium_confirmatory_20260918": 200,
+    "gpt_oss_120b_groq_confirmatory_qcv3_10rpm_20260823": 200,
+    "gpt_oss_120b_nebius_confirmatory_qcv3_20260823": 200,
+    "kimi_k3_confirmatory_qcv3_20260823": 204,
+    "llama_3_3_70b_confirmatory_qcv3_20260823": 200,
+    "minimax_m3_off_confirmatory_qcv3_20260823": 201,
+    "minimax_m3_on_confirmatory_qcv3_20260823": 203,
+    "qwen3_32b_off_confirmatory_clean_20260822": 254,
+    "qwen3_32b_on_confirmatory_clean_20260821": 203
+  }
+}

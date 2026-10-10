@@ -20,7 +20,7 @@
     "reasoning_effort": "medium"
   },
   "provider_result_artifact_hash": "affe922cd4c94e77c5213d4b88fcb3039a05f030cebd625fa88a282db3c2c38c",
-  "provider_result_path": "/Users/davidvoinov/VS/AgentsCollude/runs/promise_switch_batch_preflight/gpt_5_6_luna_on_medium_minimal_preflight_20260918/batch_results/2b7810ebfdec03346084.jsonl",
+  "provider_result_path": "runs/promise_switch_batch_preflight/gpt_5_6_luna_on_medium_minimal_preflight_20260918/batch_results/2b7810ebfdec03346084.jsonl",
   "provider_status": "completed",
   "reasoning_configuration_source": "DURABLE_BATCH_INPUT",
   "reasoning_mode": "on",

@@ -1,6 +1,6 @@
 # GPT-5.6 Luna Promise Switch runs — provenance note
 
-Executed by: David Voinov (luk_star2@icloud.com), on request, on a local macOS machine.
+Executed by: study author, on a local macOS machine.
 Date: 2026-09-18 / 2026-09-19 UTC.
 Code state: `f5831fe17c7c7ad95ff1cddde5029f3127a415fe` (as specified).
 

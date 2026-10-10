@@ -41,7 +41,7 @@ conditions and payoffs. Condition labels are not exposed to evaluated models.
 
 ## Confirmatory prompt policy
 
-Primary H8-H10 confirmatory collection uses the single frozen Promise Switch v1
+Primary H7-H9 confirmatory collection uses the single frozen Promise Switch v1
 prompt set. No prompt-variant experiment is currently planned, and prompt
 variants are not part of the primary or secondary analysis plan. The frozen v1
 templates, prompt version, and prompt hash remain unchanged.
@@ -85,9 +85,8 @@ Studio, Nebius UK `uk-south1`, and Groq as separate immutable provider
 identities. Nebius identities use `NEBIUS_API_KEY`; Groq uses `GROQ_API_KEY`.
 No key value is serializable, and there is no automatic provider fallback.
 
-The current intended pre-GPT/Claude matrix is recorded authoritatively in
-`promise_switch_production_readiness.md`. All 14 active rows are executable
-offline. DeepSeek V4 Pro and Flash each have explicit ON/OFF configurations;
+The provider registry records the pre-GPT/Claude matrix. All active rows are
+executable offline. DeepSeek V4 Pro and Flash each have explicit ON/OFF configurations;
 Groq Llama is excluded from the active matrix because its endpoint is
 decommissioned for the available Free/Developer access.
 The explicit GLM arms use boolean `enable_thinking` on the Nebius UK endpoint;
@@ -100,6 +99,12 @@ validation after billing restoration.
 
 `ProviderAgnosticClient` builds safe request specifications and requires an
 explicit transport. With no transport it cannot make an API call.
+
+Temperature `1.0` is the global experimental request policy. Some provider
+endpoints may treat sampling as model-controlled or ignore an upstream
+temperature parameter; this is a provider-compatibility limitation rather than
+a change to the policy. Reasoning-toggle support is validated per retained run,
+and the deprecated Groq Llama endpoint is excluded from the active matrix.
 
 `scripts/preflight_promise_switch.py` performs the separate exact-final
 technical gate. It resolves one production registry configuration, constructs
@@ -174,7 +179,7 @@ messages and final decisions. A different runtime temperature requires explicit
 authorization, and the immutable manifest records the effective value and
 authorization. Historical temperature-0 probes/pilots remain unchanged and
 non-confirmatory. A later temperature-range robustness analysis is secondary,
-outside H8-H10 and the six-condition matrix, with exact values still undecided.
+outside H7-H9 and the six-condition matrix, with exact values still undecided.
 
 ## Minimum completed-cell stopping rule
 
@@ -234,9 +239,9 @@ runs that are complete, integrity-valid, and explicitly match one requested
 `--dataset-role pilot` or `--dataset-role confirmatory`. Technical, synthetic,
 legacy pre-role, mixed-role, and invalid runs cannot enter this loader. It
 reports primary results independently for
-each provider/model/reasoning configuration. The confirmatory family is H8
-(Induced No-Switch vs No Communication), H9 (Induced No-Switch vs Induced
-Switch), and H10 (Induced No-Switch vs Expectation Without Own Promise), with
+each provider/model/reasoning configuration. The confirmatory family is H7
+(Induced No-Switch vs No Communication), H8 (Induced No-Switch vs Induced
+Switch), and H9 (Induced No-Switch vs Expectation Without Own Promise), with
 Holm correction across those three tests. Voluntary Message--No-Switch versus
 Voluntary Message--Switch is a secondary randomized ITT analysis; the
 explicit-promiser subset is a further selected-subgroup secondary analysis,
@@ -250,7 +255,7 @@ assigned-arm provenance and are not replaced or inferred from ambiguous text.
 The output labels these independent analyses `PRIMARY MODEL-SPECIFIC RESULTS`.
 After them, `DESCRIPTIVE CROSS-MODEL SUMMARY` presents one row per
 provider/model/reasoning configuration, including actual cell sizes, condition
-rates, model-specific H8-H10 estimates and intervals, raw p-values, and the
+rates, model-specific H7-H9 estimates and intervals, raw p-values, and the
 within-configuration Holm values. Direction counts and ranges/medians of the
 model-specific risk differences are descriptive only. The summary contains no
 pooled observation-level estimate, new significance test, or claim about all
@@ -263,16 +268,17 @@ complete post-collection semantic rubric is now frozen as
 `promise_switch_message_codebook_v1` before any real-message semantic coding or
 promise-conditioned analysis. The human rubric, strict outcome-blind JSON
 Schema, empty CSV annotation template, and future judge prompt are under
-`promise_switch/coding/`. The judge model remains undecided, its intended
-temperature remains `0`, and no judging or real reliability analysis has been
-performed. `agreement_report` calculates field-wise Cohen's kappa and raw
-percentage agreement while excluding free-text `condition_text`. No real
-provider call is part of the offline test suite.
+`promise_switch/coding/`. The public validation release contains two independent
+label files for 130 blinded public IDs and a deterministic reliability summary.
+The validation script calculates field-wise Cohen's kappa and raw percentage
+agreement while excluding free-text `condition_text`. The published labels
+reproduce the agreement statistics without private sample mappings or provider
+calls.
 
 ## Offline power planning
 
 `scripts/power_promise_switch.py` emits a deterministic JSON grid for the
-equal-arm binary comparisons underlying H8-H10. It uses the large-sample,
+equal-arm binary comparisons underlying H7-H9. It uses the large-sample,
 two-sided z test for two independent proportions, with pooled variance under the
 null and unpooled variance under the alternative. It does not calculate Fisher
 exact power. The default grid covers reference rates 0.10-0.70, absolute MDEs
@@ -291,9 +297,7 @@ python3 -B scripts/power_promise_switch.py
 
 ## Minimal confirmatory runbook
 
-The operational one-model-at-a-time procedure, including zero-call durable
-initialization and manifest inspection before collection, is documented in
-`docs/experiments/promise_switch_sequential_runbook.md`.
+The minimal one-model-at-a-time procedure is summarized below.
 
 1. From a clean frozen revision, choose one validated model alias/mode and a
    unique run ID. Create it with `--dataset-role confirmatory`,
@@ -328,10 +332,3 @@ initialization and manifest inspection before collection, is documented in
    RUN_DIR`; the loader refuses any confirmatory cell below 100.
 10. Report actual analyzed n, all attrition counts, and worst-case sensitivity
     bounds. Never trim voluntary overshoot.
-
-## Production-readiness audit
-
-The Stage 6E stop/pause matrix, dataset-isolation rules, `n=100` offline plan
-validation, sampling audit, output-token evidence, nomenclature mapping, and
-deferred decisions are recorded in
-`docs/experiments/promise_switch_production_readiness.md`.

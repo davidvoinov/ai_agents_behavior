@@ -132,14 +132,14 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(summary["configuration_count"], 2)
         self.assertEqual(len(summary["configurations"]), 2)
         for configuration in summary["configurations"]:
-            self.assertEqual(set(configuration["confirmatory_contrasts"]), {"H8", "H9", "H10"})
+            self.assertEqual(set(configuration["confirmatory_contrasts"]), {"H7", "H8", "H9"})
             self.assertEqual(set(configuration["conditions"]), {item.value for item in Condition})
 
-    def test_confirmatory_h9_cannot_regress_to_voluntary_primary(self) -> None:
-        h9 = PRIMARY_CONFIRMATORY_CONTRASTS[1]
-        self.assertEqual(h9.name, "H9")
-        self.assertEqual(h9.treatment, Condition.INDUCED_PROMISE_NO_SWITCH)
-        self.assertEqual(h9.reference, Condition.INDUCED_PROMISE_SWITCH)
+    def test_confirmatory_h8_cannot_regress_to_voluntary_primary(self) -> None:
+        h8 = PRIMARY_CONFIRMATORY_CONTRASTS[1]
+        self.assertEqual(h8.name, "H8")
+        self.assertEqual(h8.treatment, Condition.INDUCED_PROMISE_NO_SWITCH)
+        self.assertEqual(h8.reference, Condition.INDUCED_PROMISE_SWITCH)
         output = analyze_by_model(complete_fixture())[("test", "model", "off")]
         self.assertEqual(
             output["secondary_analyses"]["voluntary_itt"]["classification"],

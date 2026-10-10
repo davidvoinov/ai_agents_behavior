@@ -1,9 +1,0 @@
-{
-  "counts_by_randomized_arm": {
-    "voluntary_promise_no_switch": 1
-  },
-  "definition": "explicit_promise=yes AND promised_action=COOPERATE AND conditionality=unconditional AND ambiguous_response=no",
-  "formal_between_arm_analysis_estimable": false,
-  "n": 1,
-  "status": "Explicit semantic-v2 activation contains 1 qualifying voluntary explicit promise records; this remains a separately identified descriptive subset."
-}

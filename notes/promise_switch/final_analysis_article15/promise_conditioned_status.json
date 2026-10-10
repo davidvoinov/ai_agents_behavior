@@ -1,0 +1,9 @@
+{
+  "counts_by_randomized_arm": {
+    "voluntary_promise_no_switch": 1
+  },
+  "definition": "explicit_promise=yes AND promised_action=COOPERATE AND conditionality=unconditional AND ambiguous_response=no",
+  "formal_between_arm_analysis_estimable": false,
+  "n": 1,
+  "status": "The pre-specified promise-conditioned behavioral comparison is not meaningfully estimable because only one qualifying voluntary explicit promise occurred."
+}

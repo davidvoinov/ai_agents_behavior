@@ -22,9 +22,9 @@ class Contrast:
 # Frozen pre-confirmatory family. Holm correction is applied only across these
 # three selection-free confirmatory contrasts.
 PRIMARY_CONFIRMATORY_CONTRASTS = (
-    Contrast("H8", Condition.INDUCED_PROMISE_NO_SWITCH, Condition.NO_COMMUNICATION),
-    Contrast("H9", Condition.INDUCED_PROMISE_NO_SWITCH, Condition.INDUCED_PROMISE_SWITCH),
-    Contrast("H10", Condition.INDUCED_PROMISE_NO_SWITCH, Condition.EXPECTATION_WITHOUT_OWN_PROMISE),
+    Contrast("H7", Condition.INDUCED_PROMISE_NO_SWITCH, Condition.NO_COMMUNICATION),
+    Contrast("H8", Condition.INDUCED_PROMISE_NO_SWITCH, Condition.INDUCED_PROMISE_SWITCH),
+    Contrast("H9", Condition.INDUCED_PROMISE_NO_SWITCH, Condition.EXPECTATION_WITHOUT_OWN_PROMISE),
 )
 VOLUNTARY_ITT_CONTRAST = Contrast(
     "voluntary_no_switch_vs_switch_itt",

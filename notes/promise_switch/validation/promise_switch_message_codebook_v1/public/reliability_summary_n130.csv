@@ -1,0 +1,8 @@
+variable,n,raw_agreement_count,raw_agreement_percent,cohens_kappa,kappa_status,explanation
+explicit_promise,130,130,100.0000000000,,undefined_expected_agreement_one,undefined because both coders used one identical category; expected agreement equals 1
+commitment_present,130,128,98.4615384615,0.900763358779,defined,
+statement_type,130,121,93.0769230769,0.899085734,defined,
+promised_action,130,128,98.4615384615,0.901515151515,defined,
+conditionality,130,123,94.6153846154,0.867346938776,defined,
+refusal_present,130,130,100.0000000000,,undefined_expected_agreement_one,undefined because both coders used one identical category; expected agreement equals 1
+ambiguous_response,130,128,98.4615384615,0,defined,human coder marked 2 messages ambiguous; judge marked 0

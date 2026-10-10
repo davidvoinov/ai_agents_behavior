@@ -1,0 +1,1101 @@
+{
+  "alpha": 0.05,
+  "analysis_profile": "article_15",
+  "analysis_script": {
+    "path": "scripts/analyze_promise_switch_final.py",
+    "sha256": "5b626466c55d840f8d6e6442abffa78842c7eed35885074d184fdb5b6d636dac"
+  },
+  "analysis_timestamp_utc": "2026-10-10T08:38:57.688269+00:00",
+  "analysis_unit": "randomized trial; API attempts are not analysis units",
+  "analysis_version": "promise_switch_final_analysis_v2",
+  "confidence_interval": "95% Newcombe-Wilson interval for the difference of two independent proportions",
+  "excluded_configuration": {
+    "analysis_status": "EXCLUDED FROM CONFIRMATORY INFERENCE",
+    "assignments_before_pause": 600,
+    "behavioral_failures": 22,
+    "infrastructure_failures": 23,
+    "interpretation": "Observed instability under this specific model/provider/reasoning configuration; no intrinsic model or provider claim.",
+    "pre_randomization_voluntary_failures": 10,
+    "run_status": "PAUSED_BEHAVIORAL_PARSER_REVIEW",
+    "source_run": "deepseek_v4_flash_on_confirmatory_qcv3_20260823",
+    "terminal_trials": 361,
+    "valid_binary_outcomes": 316
+  },
+  "generated_files": [
+    "analysis_manifest.json",
+    "attrition_by_condition.csv",
+    "compliance_descriptives.csv",
+    "condition_counts.csv",
+    "confirmatory_h7_h9.csv",
+    "confirmatory_h7_h9.json",
+    "deepseek_flash_on_excluded_diagnostic.csv",
+    "final_analysis_report.md",
+    "fig_PS_condition_heatmap.pdf",
+    "fig_PS_condition_heatmap.png",
+    "fig_PS_confirmatory_forest.pdf",
+    "fig_PS_confirmatory_forest.png",
+    "fig_PS_voluntary_itt.pdf",
+    "fig_PS_voluntary_itt.png",
+    "heterogeneity_descriptives.csv",
+    "missingness_bounds.csv",
+    "pre_randomization_attrition.csv",
+    "promise_conditioned_status.json",
+    "semantic_prevalence.csv",
+    "promise_switch_variance_decomposition.csv",
+    "trial_level_analysis_dataset.csv",
+    "undertaking_robustness.csv",
+    "voluntary_itt.csv"
+  ],
+  "git_head_optional": "59a302ec84d2f552deb044e5ff2375c29395c74a",
+  "holm_families": {
+    "confirmatory": "15 separate within-configuration families of H7/H8/H9 (size 3)",
+    "secondary": "one family of 15 Voluntary Message ITT comparisons"
+  },
+  "hypothesis_definitions": {
+    "H7": "Induced Promise--No-Switch minus No Communication",
+    "H8": "Induced Promise--No-Switch minus Induced Promise--Switch",
+    "H9": "Induced Promise--No-Switch minus Expectation Without Own Promise",
+    "secondary_voluntary_itt": "Voluntary Message--No-Switch minus Voluntary Message--Switch"
+  },
+  "included_configurations": [
+    {
+      "api_attempt_records": 800,
+      "configuration": "gpt-oss-120b",
+      "model_alias": "gpt_oss_120b_nebius",
+      "model_family": "GPT-OSS-120B",
+      "model_id": "openai/gpt-oss-120b",
+      "provider": "nebius",
+      "provider_display": "Nebius",
+      "reasoning_mode": "on",
+      "run_name": "gpt_oss_120b_nebius_confirmatory_qcv3_20260823",
+      "terminal_trials": 600
+    },
+    {
+      "api_attempt_records": 1002,
+      "configuration": "Qwen3-32B",
+      "model_alias": "qwen3_32b",
+      "model_family": "Qwen3-32B",
+      "model_id": "Qwen/Qwen3-32B",
+      "provider": "nebius",
+      "provider_display": "Nebius",
+      "reasoning_mode": "off",
+      "run_name": "qwen3_32b_off_confirmatory_clean_20260822",
+      "terminal_trials": 748
+    },
+    {
+      "api_attempt_records": 805,
+      "configuration": "DeepSeek-V4-Flash",
+      "model_alias": "deepseek_v4_flash_nebius_thinking_off",
+      "model_family": "DeepSeek V4 Flash",
+      "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+      "provider": "nebius",
+      "provider_display": "Nebius",
+      "reasoning_mode": "off",
+      "run_name": "deepseek_v4_flash_off_confirmatory_qcv3_20260823",
+      "terminal_trials": 602
+    },
+    {
+      "api_attempt_records": 800,
+      "configuration": "DeepSeek-V4-Pro",
+      "model_alias": "deepseek_v4_pro_nebius_thinking_off",
+      "model_family": "DeepSeek V4 Pro",
+      "model_id": "deepseek-ai/DeepSeek-V4-Pro",
+      "provider": "nebius",
+      "provider_display": "Nebius",
+      "reasoning_mode": "off",
+      "run_name": "deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823",
+      "terminal_trials": 600
+    },
+    {
+      "api_attempt_records": 827,
+      "configuration": "DeepSeek-V4-Pro (r)",
+      "model_alias": "deepseek_v4_pro_nebius_thinking_on",
+      "model_family": "DeepSeek V4 Pro",
+      "model_id": "deepseek-ai/DeepSeek-V4-Pro",
+      "provider": "nebius",
+      "provider_display": "Nebius",
+      "reasoning_mode": "on",
+      "run_name": "deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823",
+      "terminal_trials": 600
+    },
+    {
+      "api_attempt_records": 889,
+      "configuration": "Kimi-K3",
+      "model_alias": "kimi_k3_nebius",
+      "model_family": "Kimi K3",
+      "model_id": "moonshotai/Kimi-K3",
+      "provider": "nebius",
+      "provider_display": "Nebius",
+      "reasoning_mode": "unavailable",
+      "run_name": "kimi_k3_confirmatory_qcv3_20260823",
+      "terminal_trials": 620
+    },
+    {
+      "api_attempt_records": 804,
+      "configuration": "MiniMax-M3",
+      "model_alias": "minimax_m3_nebius_thinking_off",
+      "model_family": "MiniMax M3",
+      "model_id": "MiniMaxAI/MiniMax-M3",
+      "provider": "nebius",
+      "provider_display": "Nebius",
+      "reasoning_mode": "off",
+      "run_name": "minimax_m3_off_confirmatory_qcv3_20260823",
+      "terminal_trials": 603
+    },
+    {
+      "api_attempt_records": 854,
+      "configuration": "MiniMax-M3 (r)",
+      "model_alias": "minimax_m3_nebius_thinking_on",
+      "model_family": "MiniMax M3",
+      "model_id": "MiniMaxAI/MiniMax-M3",
+      "provider": "nebius",
+      "provider_display": "Nebius",
+      "reasoning_mode": "on",
+      "run_name": "minimax_m3_on_confirmatory_qcv3_20260823",
+      "terminal_trials": 618
+    },
+    {
+      "api_attempt_records": 1076,
+      "configuration": "GLM-5.2",
+      "model_alias": "glm_5_2_nebius_thinking_off",
+      "model_family": "GLM-5.2",
+      "model_id": "zai-org/GLM-5.2",
+      "provider": "nebius_uk",
+      "provider_display": "Nebius",
+      "reasoning_mode": "off",
+      "run_name": "glm_5_2_off_confirmatory_qcv3_20260823",
+      "terminal_trials": 809
+    },
+    {
+      "api_attempt_records": 1074,
+      "configuration": "GLM-5.2 (r)",
+      "model_alias": "glm_5_2_nebius_thinking_on",
+      "model_family": "GLM-5.2",
+      "model_id": "zai-org/GLM-5.2",
+      "provider": "nebius_uk",
+      "provider_display": "Nebius",
+      "reasoning_mode": "on",
+      "run_name": "glm_5_2_on_confirmatory_qcv3_20260822",
+      "terminal_trials": 789
+    },
+    {
+      "api_attempt_records": 801,
+      "configuration": "Llama-3.3-70B",
+      "model_alias": "llama_3_3_70b",
+      "model_family": "Llama 3.3 70B",
+      "model_id": "meta-llama/Llama-3.3-70B-Instruct",
+      "provider": "nebius",
+      "provider_display": "Nebius",
+      "reasoning_mode": "off",
+      "run_name": "llama_3_3_70b_confirmatory_qcv3_20260823",
+      "terminal_trials": 601
+    },
+    {
+      "api_attempt_records": 800,
+      "configuration": "GPT-5.6",
+      "model_alias": "gpt_5_6_luna_openai",
+      "model_family": "GPT-5.6 Luna",
+      "model_id": "gpt-5.6-luna",
+      "provider": "openai",
+      "provider_display": "OpenAI",
+      "reasoning_mode": "off",
+      "run_name": "runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918",
+      "terminal_trials": 600
+    },
+    {
+      "api_attempt_records": 800,
+      "configuration": "GPT-5.6 (r)",
+      "model_alias": "gpt_5_6_luna_openai",
+      "model_family": "GPT-5.6 Luna",
+      "model_id": "gpt-5.6-luna",
+      "provider": "openai",
+      "provider_display": "OpenAI",
+      "reasoning_mode": "on",
+      "run_name": "runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918",
+      "terminal_trials": 600
+    },
+    {
+      "api_attempt_records": 800,
+      "configuration": "Sonnet-5",
+      "model_alias": "claude_sonnet_5_anthropic",
+      "model_family": "Claude Sonnet 5",
+      "model_id": "claude-sonnet-5",
+      "provider": "anthropic",
+      "provider_display": "Anthropic",
+      "reasoning_mode": "off",
+      "run_name": "runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917",
+      "terminal_trials": 600
+    },
+    {
+      "api_attempt_records": 800,
+      "configuration": "Sonnet-5 (r)",
+      "model_alias": "claude_sonnet_5_anthropic",
+      "model_family": "Claude Sonnet 5",
+      "model_id": "claude-sonnet-5",
+      "provider": "anthropic",
+      "provider_display": "Anthropic",
+      "reasoning_mode": "on",
+      "run_name": "runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918",
+      "terminal_trials": 600
+    }
+  ],
+  "input_artifacts": [
+    {
+      "path": "notes/promise_switch/semantic_coding/public_semantic_input_v1/manifest.json",
+      "sha256": "a8f81586adc533bf66608ef7cc265107a8dc4d5f143ba2780e1f35dbc75abf0b"
+    },
+    {
+      "path": "notes/promise_switch/semantic_coding/public_semantic_input_v1/semantic_labels.csv",
+      "sha256": "efa4fbcddd80c397e323ab867a46f4f7e0c042cfe1df1b050b6e98f1116ed546"
+    },
+    {
+      "path": "promise_switch/coding/public_semantic_input_schema_v1.json",
+      "sha256": "538f20d66819c1d9362ddcef0d2b4c63c373e033dcb11dac8b9723811ff4365b"
+    },
+    {
+      "path": "promise_switch/coding/codebook_v1.md",
+      "sha256": "55824b137e669d63e2e475036429864ddf5f15f0d7c7916e3d6c9d06c3c87e42"
+    },
+    {
+      "path": "promise_switch/coding/judge_prompt_v1.txt",
+      "sha256": "27b0948801436fa6c52c6f5add1730220e83a4a4a6113bfb78cf6a34f00c5cb8"
+    },
+    {
+      "path": "promise_switch/codebook.py",
+      "sha256": "b3dde96140130f581dd9f71022f2607eec5fae44b9c9f40ef38ef03cddad9d6f"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917/api_attempts.jsonl",
+      "sha256": "476c027bd5ffdee30f77bca5505f70d88b542cd83b06aef25b0bec2d2d707418"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917/assignments.jsonl",
+      "sha256": "f9cf7afb26424b65753dba47724536ca7ae4d02024d718f2f35f78e8e7051dd9"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917/batch_jobs.jsonl",
+      "sha256": "145acba188a4756aa07c33015359760a28f90adff95bf86f1df9f67823817bc2"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917/batch_request_mappings.jsonl",
+      "sha256": "3ca340146ae3ae6942fc25e1ec156dfc2fe6fe5b8d1b2843afeecb16c2596277"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917/errors.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917/manifest.json",
+      "sha256": "70770039e4e974abb84072d37c4bf3bfe9837c92650497794850fb27011ebb14"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917/message_events.jsonl",
+      "sha256": "4fad71213dd2bb55f9fa60466bea2965c084dec7af29a64e8c8d07474a651142"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917/parser_review_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917/pause_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917/planned_trials.jsonl",
+      "sha256": "22665d86d0152bc07209b688c278af1b45a5137e70783beb7e2b395ca30c6b6c"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917/run_state.json",
+      "sha256": "5fee96c7a505d3bd49a805c7732d434f1c8d240eddaa299ae1db0d0981c0ab9a"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917/top_up_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_off_confirmatory_20260917/trials.jsonl",
+      "sha256": "6bcebe2df1bbf9fd7860eaa9117eaf3672abe7fe114bba192f5e230d50a92f81"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918/api_attempts.jsonl",
+      "sha256": "3f201076ce2706b7d6ad3cdc7241a9bece8e9133b4a344b8e27e9d859e3f7a1f"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918/assignments.jsonl",
+      "sha256": "b8369d0fcaaf6e5a30ecaeb597f5eb7e288555b5b67636a8e8b8530c0d23a70f"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918/batch_jobs.jsonl",
+      "sha256": "c4af0c12498a0bdf3822b7178e5615cd88c1a62a9e850983280f54b793a59a49"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918/batch_request_mappings.jsonl",
+      "sha256": "ae48ccff09ab800d36fe58dfe0bb20dc3de009e4d93a01df5db407aab568d046"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918/errors.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918/manifest.json",
+      "sha256": "c62587c2ca7cb7c8984e16456c60c0e6f1169eacf952871514f8b8d508752a61"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918/message_events.jsonl",
+      "sha256": "d9e9ce018fe76e6f05fc0064a404923e091c7e0639412057075cb7b944a0952d"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918/parser_review_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918/pause_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918/planned_trials.jsonl",
+      "sha256": "e471aad59c4066f8553a51cbc920b1e1d8f092431ce0bb067ef8e934f673252b"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918/run_state.json",
+      "sha256": "76aebea009acfa0b2907422d51475944acfd9b0b3051cd6c507a725ccfd34818"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918/top_up_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/claude_sonnet_5_on_xhigh_confirmatory_20260918/trials.jsonl",
+      "sha256": "32cb9b3902d9d0664de7c1883e6ed85dda273a6c63ba423dc540b918f7e63dc1"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_off_confirmatory_qcv3_20260823/api_attempts.jsonl",
+      "sha256": "300bdc19a10c61b9d042b283394b0fd0009573a1b90f79b2e4ea48a1a1aee5e3"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_off_confirmatory_qcv3_20260823/assignments.jsonl",
+      "sha256": "f2a1cbead03c783e870b9bf28d8f127217c6c11d62ae7b2392eb877b4910d393"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_off_confirmatory_qcv3_20260823/errors.jsonl",
+      "sha256": "e39889e5737a688423e7224e3cc8bfa3b9269901dd170a825dd0d7dd8e4a1ddd"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_off_confirmatory_qcv3_20260823/manifest.json",
+      "sha256": "df6d74dfcb664bc6a5364fad93fa2b7919aa41f0470b7b85c6e7600e3154a8af"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_off_confirmatory_qcv3_20260823/message_events.jsonl",
+      "sha256": "ec790f882052c940eba9506d225d555119defc5d8c9a3e5cef59df841b12a54f"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_off_confirmatory_qcv3_20260823/parser_review_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_off_confirmatory_qcv3_20260823/pause_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_off_confirmatory_qcv3_20260823/planned_trials.jsonl",
+      "sha256": "ea8066635112aa815f63a730ecf502d1c0ab75dbd5efc385da2186c39f6a502b"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_off_confirmatory_qcv3_20260823/run_state.json",
+      "sha256": "d6e26fad3098ea1b4425520f37f6635000e34b500d10ebb0c1cf2e9fad002d38"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_off_confirmatory_qcv3_20260823/top_up_events.jsonl",
+      "sha256": "f3a52c5d914defb517392dd1eedf5ae7f17a61bf3be4fef52856444d642ac992"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_off_confirmatory_qcv3_20260823/trials.jsonl",
+      "sha256": "abffd0d521b866dff81f75c6d53f6367e84a104307e00207a9f83b9da45fe2b9"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_on_confirmatory_qcv3_20260823/api_attempts.jsonl",
+      "sha256": "7801d73e293edbcb2d1aa1372454ed8c16fc02c2a3731a91ce141455c268562b"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_on_confirmatory_qcv3_20260823/assignments.jsonl",
+      "sha256": "7916a3cd3b10c579a7a8cb3a94141586d5278923ac13e66ca7525a89a2077b09"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_on_confirmatory_qcv3_20260823/errors.jsonl",
+      "sha256": "e703ba37a44ccaa43cd9a405d7cc62633d1bdac043998378d24a50e841a7eb66"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_on_confirmatory_qcv3_20260823/manifest.json",
+      "sha256": "33239858460d09a982ec1efcb8094eecc4206fed4c15b17fbb643e6bf25f2600"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_on_confirmatory_qcv3_20260823/message_events.jsonl",
+      "sha256": "7ab413eb407028170ad92261584b4f72f7c2a1691cefce5e802a16f81ef446f2"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_on_confirmatory_qcv3_20260823/parser_review_events.jsonl",
+      "sha256": "b10631943fb88a05acae13eba361b9c211238d2e2f18c021fbe98f099b17a3b0"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_on_confirmatory_qcv3_20260823/pause_events.jsonl",
+      "sha256": "74f4269640433d8781ae2ca518db29b7e78475a996cc47726e504f3f26117cfb"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_on_confirmatory_qcv3_20260823/planned_trials.jsonl",
+      "sha256": "805240ccd9de8a28585705551d64aa11ecfb0960b286d848ac1e38b09df2b76a"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_on_confirmatory_qcv3_20260823/run_state.json",
+      "sha256": "475507fefad60e8a719494ec55f5288c0f4179666a921014712c0be0997dfca7"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_on_confirmatory_qcv3_20260823/top_up_events.jsonl",
+      "sha256": "fe71ec262452cb4b540c85e6fb0e9dda22e9ae1e467884bd1b6e2fb85a0312bd"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_flash_on_confirmatory_qcv3_20260823/trials.jsonl",
+      "sha256": "b45595f63767dcf04f13f7e64be968e7d583cdb42ea5234e3b8efbc810184563"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823/api_attempts.jsonl",
+      "sha256": "dfde6c0381aa882b5bd0b091676575b6b3ddfa9bc5ee68bf4aaaaa137d462036"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823/assignments.jsonl",
+      "sha256": "7f4181a5e8343c7526357977ed0a5a6ab8950a1b6e1f7cb9a2de8009126e4697"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823/errors.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823/manifest.json",
+      "sha256": "4f87ee8ed69cf0dfdbc50601e8353eac906ff6e9944760b2982d41d7ce5782be"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823/message_events.jsonl",
+      "sha256": "07b25e1e2546a18a1f18d148fe1c8894564ee65be75ecb0e9b0c52d0ff966275"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823/parser_review_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823/pause_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823/planned_trials.jsonl",
+      "sha256": "7fda38dc14eebcd2bc622fd78416629bd45138ea0661595a83f20bb4788e01e2"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823/run_state.json",
+      "sha256": "d6143a23a8be41c13bb8c10edd46067a708e7a9c7a6efbe63b84c05cc22d590a"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823/top_up_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_off_confirmatory_qcv3_v2_20260823/trials.jsonl",
+      "sha256": "e6b67cc05ba9e14bcc359d69df538cec1d752983773e879887e1544f321eb6dd"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823/api_attempts.jsonl",
+      "sha256": "4a698dc38d9a772bb1fa51473c92d1200aabc11577fc636263f1511019b05104"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823/assignments.jsonl",
+      "sha256": "f6cb199da78a1a00725d4df5791ee4d2d61d5dc56ef217190da336cdd8d7307f"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823/errors.jsonl",
+      "sha256": "47961390df01e5c9ba4de404c64dc386f16fe96da0929b3b392087468348cd59"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823/manifest.json",
+      "sha256": "f8f6a0e3cdaa471a24813360f2b2ef885cc1b680faeb025e37703d31ee01b8ff"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823/message_events.jsonl",
+      "sha256": "87055da529978253531d9b1431a10e49d94874890c0847d823661c17ea11d213"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823/parser_review_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823/pause_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823/planned_trials.jsonl",
+      "sha256": "7025cf4007e8f62f94b13be63ca4b3243da75b4fae2db44959852f8dc8152a5b"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823/run_state.json",
+      "sha256": "5f1ba7007c611edcb5fa7a1119f6e42b5964d8c8484e4d44e52854aae35ac94a"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823/top_up_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/deepseek_v4_pro_on_confirmatory_qcv3_v2_20260823/trials.jsonl",
+      "sha256": "1c3fe687aaab1a8c3904d8d2af555d8cef928b151032c8057abcd65ad5e958b7"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_off_confirmatory_qcv3_20260823/api_attempts.jsonl",
+      "sha256": "fc5e09c9cdd22b41485a087a027374b3d575098b4249b09f046985b625538c78"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_off_confirmatory_qcv3_20260823/assignments.jsonl",
+      "sha256": "243a0c7f36e03245b9c84d5e2dd72d0300e014d082cf50280e8abad8528e84e8"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_off_confirmatory_qcv3_20260823/errors.jsonl",
+      "sha256": "18f4ef053e4b8b0482917aa7df39266fd0e1b316e7610587de2d2a7fa11db9da"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_off_confirmatory_qcv3_20260823/manifest.json",
+      "sha256": "54945b55b616afe0cad6ceba64d47a5a27596b1e9fdd2da1d0ecb4c95039fa1c"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_off_confirmatory_qcv3_20260823/message_events.jsonl",
+      "sha256": "339f20560a008154bbe5dd137ee42c750d2e1bfe3dc088ba89b731bd69cc642f"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_off_confirmatory_qcv3_20260823/parser_review_events.jsonl",
+      "sha256": "97201695c7c1a06972446ea70126e6190ab2c6a8f2fe4ba9eaef80054bf43c77"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_off_confirmatory_qcv3_20260823/pause_events.jsonl",
+      "sha256": "8a3a62119cd0442071f22909ada889baebfd80897bcaeceb123caad473053bae"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_off_confirmatory_qcv3_20260823/planned_trials.jsonl",
+      "sha256": "f9ca2561aecdba0f5347170c9612066310425aaa3f433d5c03dc1676f2a82ba1"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_off_confirmatory_qcv3_20260823/run_state.json",
+      "sha256": "6a99fc103f125e29d9d518bbaf3f3fb84495ab33acce20c7050f99eda36bc1de"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_off_confirmatory_qcv3_20260823/top_up_events.jsonl",
+      "sha256": "9c16ba18c492650b9436056807a1dc8b66f4cedded236eab735228e4baf8bc38"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_off_confirmatory_qcv3_20260823/trials.jsonl",
+      "sha256": "8ee375a06c2402799431c773f2b9f1cd4bcaff7bb4ad514d3b95d4e41d06eb41"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_on_confirmatory_qcv3_20260822/api_attempts.jsonl",
+      "sha256": "ca095b9b9ba2cead79404e8b696273526da7a59d23fb8e07445e6df2e7eabae6"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_on_confirmatory_qcv3_20260822/assignments.jsonl",
+      "sha256": "da008d29ec0c132dde8db1781f965dfbeabd9099b4451145d869c4d73a1c9aef"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_on_confirmatory_qcv3_20260822/errors.jsonl",
+      "sha256": "492de3454f3c635e1a4d6d8b9922f6ea600393dcad34677cc64cc512185cd294"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_on_confirmatory_qcv3_20260822/manifest.json",
+      "sha256": "829c99ac83dcf93e433d988a39468e75c83d455f02eadeb38b342beaa07958a3"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_on_confirmatory_qcv3_20260822/message_events.jsonl",
+      "sha256": "505b45daf258d0ae4a3816c2371dc151d4382f564e8a6785141d52673d1a515a"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_on_confirmatory_qcv3_20260822/parser_review_events.jsonl",
+      "sha256": "71689a4c66a50449bc7b37bf930fe3066c59d384340d5039d147df4a6bb668d2"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_on_confirmatory_qcv3_20260822/pause_events.jsonl",
+      "sha256": "1180e361e4fad8b46e085fb91def59f8ac87fb430c8a3a1916721688b018b2d1"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_on_confirmatory_qcv3_20260822/planned_trials.jsonl",
+      "sha256": "69791837b79cd812a0285a62f504f738d069818b4b43350dca9a12b6f9f6350e"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_on_confirmatory_qcv3_20260822/run_state.json",
+      "sha256": "f198b56cc412b274aae316d42ee4c78549da3a10e90e00cce6b28404cda13d46"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_on_confirmatory_qcv3_20260822/top_up_events.jsonl",
+      "sha256": "e9542c508a3aa6f3af1eb48a65b157386d0f0400e21645d07e94df619d20eccd"
+    },
+    {
+      "path": "runs/promise_switch/glm_5_2_on_confirmatory_qcv3_20260822/trials.jsonl",
+      "sha256": "90445b3a0459237d9645b82f7df70c1bfaee39d038bd9c35fade0c1c89c01d11"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918/api_attempts.jsonl",
+      "sha256": "7d76c8f8a6827ec6a3a0198332efe77a3f0637d5c39f4170cd42a9bccb396909"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918/assignments.jsonl",
+      "sha256": "7dd3e5132105dbbcd91dfb694abdc7c0971fe5584d6742ef13add24eb619eae4"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918/batch_jobs.jsonl",
+      "sha256": "201d94a617fc6132f648430c43805e20e06de30a94d88d4d97485812bbc5a76c"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918/batch_request_mappings.jsonl",
+      "sha256": "d1a34bae9ff853a9d85d29949e21ba1c7063a1382cd288dbec1198940554b0ae"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918/errors.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918/manifest.json",
+      "sha256": "8b226dd6d3384dffd3422522b016c069228667de307f062e143ea7294c2e3968"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918/message_events.jsonl",
+      "sha256": "599d28e4a6c1f6f155a3db17c58ad376aed3b7eecd6db274e3bed5971b0282af"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918/parser_review_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918/pause_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918/planned_trials.jsonl",
+      "sha256": "4d1e65c6847754688e279a4b123f971acb3f372cf465f60815d04fff543a7302"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918/run_state.json",
+      "sha256": "1391d0b4004a337ea38110c3f25d9a845c9f621253230de14f1e9b8a582764ab"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918/top_up_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_off_confirmatory_20260918/trials.jsonl",
+      "sha256": "d97f28950e9ffb1f7df3f71e1288c9e70eedda322522eb5b1cfe3b5fcc243355"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918/api_attempts.jsonl",
+      "sha256": "55ce96b6fcd2f6a46eb99adf7633edf4a0fff45dc8f2e011c06bee554e2ba610"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918/assignments.jsonl",
+      "sha256": "2df7021e7feb0e04e68402deb8cc9beb3f1f25698deb1fd3eeba018e80aec889"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918/batch_jobs.jsonl",
+      "sha256": "155ea46dfd0e2099a0f4a81dd729541025e45f502fc84dee80bec2dcf913363d"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918/batch_request_mappings.jsonl",
+      "sha256": "8eff4e4a4b40abb2cc1bb59ec3a898ecef0d33495e596dc6f54cadee1a6b97c4"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918/errors.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918/manifest.json",
+      "sha256": "b8ae8f1ebf5328b4bc95d2d24517e6dbbdecfd0b84fcb454b6a0b2f44d9d9f04"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918/message_events.jsonl",
+      "sha256": "9ada8efa8b9b20d4e09ac0f5a1ab12f9b72855e8680053acb08f49e3106bfbd3"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918/parser_review_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918/pause_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918/planned_trials.jsonl",
+      "sha256": "e18f649d058a0fe93a828f9d1a80667d10430b002a28f170705fb581be234037"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918/run_state.json",
+      "sha256": "9e4aebaaa5f67b0b8581ef5f3e5894682fbd9ca70ec75a27f2773cf6a27c4c18"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918/top_up_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/gpt_5_6_luna_on_medium_confirmatory_20260918/trials.jsonl",
+      "sha256": "5324b13c87690c4b82af0894ae8373c7e778ee50cf4f70ad6bcb6e9f7ee19214"
+    },
+    {
+      "path": "runs/promise_switch/gpt_oss_120b_nebius_confirmatory_qcv3_20260823/api_attempts.jsonl",
+      "sha256": "4649622f39c88a02863f73779a4b70ebcc3319cea48020f0147281e3bcd9ed61"
+    },
+    {
+      "path": "runs/promise_switch/gpt_oss_120b_nebius_confirmatory_qcv3_20260823/assignments.jsonl",
+      "sha256": "0c1c5ed0ad0d72454420a738a69c3ec34bf9834b7657cafc8cbf5ab4ff869e81"
+    },
+    {
+      "path": "runs/promise_switch/gpt_oss_120b_nebius_confirmatory_qcv3_20260823/errors.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/gpt_oss_120b_nebius_confirmatory_qcv3_20260823/manifest.json",
+      "sha256": "0e5aafa8c8b374b78d67532ea3ab8acb92698c98eaf7139747e00cd0b40429d6"
+    },
+    {
+      "path": "runs/promise_switch/gpt_oss_120b_nebius_confirmatory_qcv3_20260823/message_events.jsonl",
+      "sha256": "23637b3b0a3fb1e502e587819299f1103b44903bf634396e69f4fe3d4e214560"
+    },
+    {
+      "path": "runs/promise_switch/gpt_oss_120b_nebius_confirmatory_qcv3_20260823/parser_review_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/gpt_oss_120b_nebius_confirmatory_qcv3_20260823/pause_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/gpt_oss_120b_nebius_confirmatory_qcv3_20260823/planned_trials.jsonl",
+      "sha256": "5ca94706f529d5761532b417a7f5e86cff149e00fdbf4057e6540c21266cafee"
+    },
+    {
+      "path": "runs/promise_switch/gpt_oss_120b_nebius_confirmatory_qcv3_20260823/run_state.json",
+      "sha256": "5af28a5f502e27062dc04881219e91e89558aff9836c1ae08947db71123c192d"
+    },
+    {
+      "path": "runs/promise_switch/gpt_oss_120b_nebius_confirmatory_qcv3_20260823/top_up_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/gpt_oss_120b_nebius_confirmatory_qcv3_20260823/trials.jsonl",
+      "sha256": "c7bbeb4f1933aca35d9b05feb90e32a32814bad1f70496bb41cf28db5f01c592"
+    },
+    {
+      "path": "runs/promise_switch/kimi_k3_confirmatory_qcv3_20260823/api_attempts.jsonl",
+      "sha256": "03efc7d31537a87834f5207cf6058d5b6351dbb9503a6d99b40fde668623c171"
+    },
+    {
+      "path": "runs/promise_switch/kimi_k3_confirmatory_qcv3_20260823/assignments.jsonl",
+      "sha256": "b5ae8361252f6db1d088f1fd6afa8d3740fe90ed4f2b9937f8f8a0031d319f0c"
+    },
+    {
+      "path": "runs/promise_switch/kimi_k3_confirmatory_qcv3_20260823/errors.jsonl",
+      "sha256": "31a254542c5dc48a3bfdc940621d8088060193a9cb99cfb0493dfb2fe5e71810"
+    },
+    {
+      "path": "runs/promise_switch/kimi_k3_confirmatory_qcv3_20260823/manifest.json",
+      "sha256": "2e17691794bf3fa5b5ea17d56401fd562c89a316b749d354a8f5f759a168bb3d"
+    },
+    {
+      "path": "runs/promise_switch/kimi_k3_confirmatory_qcv3_20260823/message_events.jsonl",
+      "sha256": "1c5b81bbf9fce5252ed5b4b906b854cdd8fcb1fba92339897efcc6fb5538ef49"
+    },
+    {
+      "path": "runs/promise_switch/kimi_k3_confirmatory_qcv3_20260823/parser_review_events.jsonl",
+      "sha256": "3ecae020e02f4f6598869024eb89f58b03ea26ddc540fb7026519e2aa9432609"
+    },
+    {
+      "path": "runs/promise_switch/kimi_k3_confirmatory_qcv3_20260823/pause_events.jsonl",
+      "sha256": "5ce3b834ea6a20e10b6b8540ab637be57eb4987b5923a8955621408f4996bc22"
+    },
+    {
+      "path": "runs/promise_switch/kimi_k3_confirmatory_qcv3_20260823/planned_trials.jsonl",
+      "sha256": "458058e5e0282c2a0b956be486ea5691466f058e5429ef3c3d84c271cff7d0c7"
+    },
+    {
+      "path": "runs/promise_switch/kimi_k3_confirmatory_qcv3_20260823/run_state.json",
+      "sha256": "b15c6da0330ff7ac6e272632a4dc6d373b580af8ef6f4fd82801e27e3ce75c57"
+    },
+    {
+      "path": "runs/promise_switch/kimi_k3_confirmatory_qcv3_20260823/top_up_events.jsonl",
+      "sha256": "70779e8fd27c5b5054affdbc1beb8404425c45f802ab538fae1ad00ad32bb3c0"
+    },
+    {
+      "path": "runs/promise_switch/kimi_k3_confirmatory_qcv3_20260823/trials.jsonl",
+      "sha256": "f49cd46b70230e7f603ec9ce6321e8038c7661c9aa5265b2014933f4944b2edc"
+    },
+    {
+      "path": "runs/promise_switch/llama_3_3_70b_confirmatory_qcv3_20260823/api_attempts.jsonl",
+      "sha256": "00583ee560e4304a596ec2f887e777ea870e3296433ba4b7e8ee56bbaeaf98e5"
+    },
+    {
+      "path": "runs/promise_switch/llama_3_3_70b_confirmatory_qcv3_20260823/assignments.jsonl",
+      "sha256": "62e4cb5eaaeec0ecdba74cf365304e51da3d709a5355ddfb8054e3d6527cc981"
+    },
+    {
+      "path": "runs/promise_switch/llama_3_3_70b_confirmatory_qcv3_20260823/errors.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/llama_3_3_70b_confirmatory_qcv3_20260823/manifest.json",
+      "sha256": "acdee12b5984432d4d1c548b34ad8e805c52ebfae7e4f78a6691bbd6260f3b53"
+    },
+    {
+      "path": "runs/promise_switch/llama_3_3_70b_confirmatory_qcv3_20260823/message_events.jsonl",
+      "sha256": "08c511de6839fa6b8ac6be34ced3f136ce29a8bcf0cc2de427b49870ca123c04"
+    },
+    {
+      "path": "runs/promise_switch/llama_3_3_70b_confirmatory_qcv3_20260823/parser_review_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/llama_3_3_70b_confirmatory_qcv3_20260823/pause_events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/llama_3_3_70b_confirmatory_qcv3_20260823/planned_trials.jsonl",
+      "sha256": "e0762a0dc88ccf0c37e66b1eac7502843f6bf7a1248bdd027a5c47f9b3d42abf"
+    },
+    {
+      "path": "runs/promise_switch/llama_3_3_70b_confirmatory_qcv3_20260823/run_state.json",
+      "sha256": "3b393250cc7fb5a1b6332ce820190654fab49670836438c2a404e9167d3c2b10"
+    },
+    {
+      "path": "runs/promise_switch/llama_3_3_70b_confirmatory_qcv3_20260823/top_up_events.jsonl",
+      "sha256": "aedd8b90839a35b43af9bbd8bbbaf892a731bc33dc06a9d98a361d166637fb8b"
+    },
+    {
+      "path": "runs/promise_switch/llama_3_3_70b_confirmatory_qcv3_20260823/trials.jsonl",
+      "sha256": "2b10bcd6c0574fb397a5e2e320d9fef783bc34de71e39a0c13cd4bc1db94017d"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_off_confirmatory_qcv3_20260823/api_attempts.jsonl",
+      "sha256": "c64a50ab1923d8defe80e090893a1595a69cc17b67730770919f14b04e1a44ce"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_off_confirmatory_qcv3_20260823/assignments.jsonl",
+      "sha256": "02263db82ce0bc080a8f0041fe79b03f8ba2055264afd8c8a047db2484d351ac"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_off_confirmatory_qcv3_20260823/errors.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_off_confirmatory_qcv3_20260823/manifest.json",
+      "sha256": "8f6f8d427cd18a1a0a331866b9b0d70032896002cd54e5c29e182fa59af29dba"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_off_confirmatory_qcv3_20260823/message_events.jsonl",
+      "sha256": "f98d99a54385c96c58750d7e35b1b96d6c71825739616767304fb9de03157d3c"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_off_confirmatory_qcv3_20260823/parser_review_events.jsonl",
+      "sha256": "50a5e18488767ab0a62490e1227df3acfa76ea2e3334ea83b86e2ac39f5523f2"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_off_confirmatory_qcv3_20260823/pause_events.jsonl",
+      "sha256": "07b2b7487b80558af2b99b14fcce7cdc83b11854fb120d15ce36c75ddd3cc011"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_off_confirmatory_qcv3_20260823/planned_trials.jsonl",
+      "sha256": "0645b9eafd04a65f9a46544ef7d71c3066c640cbc2489a953624ccfc5b31977e"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_off_confirmatory_qcv3_20260823/run_state.json",
+      "sha256": "5e19f9b5c3131d777fc0a8ba6c1e98143d12f8d64b6543d703d6efb4f38717a7"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_off_confirmatory_qcv3_20260823/top_up_events.jsonl",
+      "sha256": "891f4f57fdacff118b9e83770f15c9ca83dea57dec6cffaa1c4929c6aeb3bae2"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_off_confirmatory_qcv3_20260823/trials.jsonl",
+      "sha256": "cfe5b94c77bb5ccb10cf7521f3968d1ec734a016ce680fc1e6c33da36fe06f06"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_on_confirmatory_qcv3_20260823/api_attempts.jsonl",
+      "sha256": "be9efc38d87ee5edf1aaaa450a65e4a78bf149e9f3c20bc6d9107e7bb7b1ff31"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_on_confirmatory_qcv3_20260823/assignments.jsonl",
+      "sha256": "56285ea7f1e39f9a6bd499e43522f8bdea93bffcf939825ebef985a17033ae1d"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_on_confirmatory_qcv3_20260823/errors.jsonl",
+      "sha256": "c0089517befb9fcf941be2d3eac003bb1b3fdf6b835a78a5e009d04ce3bc2971"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_on_confirmatory_qcv3_20260823/manifest.json",
+      "sha256": "5977cef0925df0be394fc522f78abe47991cbf51b43dea14d4c2374f20831143"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_on_confirmatory_qcv3_20260823/message_events.jsonl",
+      "sha256": "7fda1ed9facd5f506d62dcdff3b0b093fc63ac330b259db9c8652be06f4744e0"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_on_confirmatory_qcv3_20260823/parser_review_events.jsonl",
+      "sha256": "17523fb0bb0cac104aa397d9f8be6c74c11499a30b58bbb8985e617bd4109264"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_on_confirmatory_qcv3_20260823/pause_events.jsonl",
+      "sha256": "a6bec47cb095c716bb8e5b785ca91d086462e533c190666ca1e71aa7dbcad663"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_on_confirmatory_qcv3_20260823/planned_trials.jsonl",
+      "sha256": "a7f1ad3af3304d8a86ae4f504a1e267a57397b3b09c42774e8fa220eb0784311"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_on_confirmatory_qcv3_20260823/run_state.json",
+      "sha256": "2bc2abef07a31d71e20aa5414186efaf4503e9884929e2e31816c8aae4a8a329"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_on_confirmatory_qcv3_20260823/top_up_events.jsonl",
+      "sha256": "a08e9ce000431dc3a4cecfa5e76d0729d799bf7563cf075b69a40308aa5e98fe"
+    },
+    {
+      "path": "runs/promise_switch/minimax_m3_on_confirmatory_qcv3_20260823/trials.jsonl",
+      "sha256": "e421383d365fe9c1f9f4d7b4bc7414e9e06cf851990ed77de070cf770dd0c3e2"
+    },
+    {
+      "path": "runs/promise_switch/qwen3_32b_off_confirmatory_clean_20260822/api_attempts.jsonl",
+      "sha256": "173888b0dd0f0f9f7ca43445f0948333236901dca100107de1b4685fcf37d9ba"
+    },
+    {
+      "path": "runs/promise_switch/qwen3_32b_off_confirmatory_clean_20260822/assignments.jsonl",
+      "sha256": "e3f8f7e74ab4cbd86edbc5db788e25bdc942beb0f18a26f3621a6efeaeeb81dc"
+    },
+    {
+      "path": "runs/promise_switch/qwen3_32b_off_confirmatory_clean_20260822/errors.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runs/promise_switch/qwen3_32b_off_confirmatory_clean_20260822/manifest.json",
+      "sha256": "8479a30836bc4817212baf9db545aa796e757bd1ae8a83f61083f0d303d4ee15"
+    },
+    {
+      "path": "runs/promise_switch/qwen3_32b_off_confirmatory_clean_20260822/message_events.jsonl",
+      "sha256": "5197bfd3f9e0b6d254e7ab52b879a86a5f2ccd04357da124e3453a9bd2631921"
+    },
+    {
+      "path": "runs/promise_switch/qwen3_32b_off_confirmatory_clean_20260822/pause_events.jsonl",
+      "sha256": "d172090d0796a15884f7d85a818cf1975f708ebdb7d1d73ebffc474ed92fb636"
+    },
+    {
+      "path": "runs/promise_switch/qwen3_32b_off_confirmatory_clean_20260822/planned_trials.jsonl",
+      "sha256": "06ed62d9ac24bbff5dd46aa41e3a06b7b1b618bf1d601aa407b965a660cba7fe"
+    },
+    {
+      "path": "runs/promise_switch/qwen3_32b_off_confirmatory_clean_20260822/run_state.json",
+      "sha256": "de8aac516c74e1d5079a9c284a8471c2518cfe7bfbd604678416efb83fd891af"
+    },
+    {
+      "path": "runs/promise_switch/qwen3_32b_off_confirmatory_clean_20260822/top_up_events.jsonl",
+      "sha256": "eaf55555b7ac687f47afe21f64bfc39766fb93190b3cbcb1b7dde251445391a0"
+    },
+    {
+      "path": "runs/promise_switch/qwen3_32b_off_confirmatory_clean_20260822/trials.jsonl",
+      "sha256": "5d84f0de0abd15e66dbfafa27130002ea659de63e18b3c24477c5e44a753d0a7"
+    }
+  ],
+  "public_semantic_input": {
+    "manifest_path": "notes/promise_switch/semantic_coding/public_semantic_input_v1/manifest.json",
+    "private_linkage_required": false,
+    "row_count": 3538
+  },
+  "semantic_codebook_version": "promise_switch_message_codebook_v1",
+  "software_versions": {
+    "jsonschema": "4.23.0",
+    "matplotlib": "3.9.2",
+    "pandas": "2.2.3",
+    "python": "3.12.5",
+    "scipy": "1.14.1",
+    "statsmodels": "0.14.4"
+  },
+  "test_selection": "Two-sided Fisher exact if any expected 2x2 cell is <5; otherwise Pearson chi-square without Yates correction",
+  "validation": {
+    "api_attempts_used_as_analysis_units": false,
+    "condition_rows": 90,
+    "confirmatory_rows": 45,
+    "excluded_configuration_entered_inference": false,
+    "fisher_route_minimum_expected": 0.5,
+    "holm_test_input": [
+      0.01,
+      0.03,
+      0.5
+    ],
+    "holm_test_output": [
+      0.03,
+      0.06,
+      0.5
+    ],
+    "newcombe_boundary_cases": {
+      "all_vs_all": [
+        -0.03699349820698572,
+        0.03699349820698572
+      ],
+      "all_vs_zero": [
+        0.947683293116056,
+        1.0
+      ],
+      "zero_vs_all": [
+        -1.0,
+        -0.947683293116056
+      ],
+      "zero_vs_zero": [
+        -0.03699349820698569,
+        0.03699349820698569
+      ]
+    },
+    "pearson_route_minimum_expected": 45.0,
+    "profile": {
+      "assigned_trials": 9584,
+      "cell_count": 90,
+      "condition_count": 6,
+      "configuration_count": 15,
+      "configuration_order": [
+        "gpt-oss-120b",
+        "Qwen3-32B",
+        "DeepSeek-V4-Flash",
+        "DeepSeek-V4-Pro",
+        "DeepSeek-V4-Pro (r)",
+        "Kimi-K3",
+        "MiniMax-M3",
+        "MiniMax-M3 (r)",
+        "GLM-5.2",
+        "GLM-5.2 (r)",
+        "Llama-3.3-70B",
+        "GPT-5.6",
+        "GPT-5.6 (r)",
+        "Sonnet-5",
+        "Sonnet-5 (r)"
+      ],
+      "duplicate_exact_row_count": 0,
+      "duplicate_source_run_trial_id_count": 0,
+      "duplicate_trial_id_count": 0,
+      "gpt_oss_groq_present": false,
+      "missing_outcomes": 562,
+      "pre_randomization_failures": 6,
+      "qwen_reasoning_on_present": false,
+      "reasoning_settings_validated_for_all_configurations": true,
+      "source_run_count": 15,
+      "valid_outcomes": 9022
+    },
+    "voluntary_itt_rows": 15
+  },
+  "variance_decomposition": {
+    "logit": "Shapley explained-deviance decomposition",
+    "lpm": "Type III sums of squares with sum-to-zero contrasts",
+    "sample": "all valid final decisions",
+    "summary": {
+      "logit_condition_share": 0.33928317894149235,
+      "logit_configuration_share": 0.51816053789059,
+      "logit_interaction_share": 0.14255628316791763,
+      "logit_mcfadden_r_squared": 0.5909088156466691,
+      "lpm_condition_share": 0.17308099918559802,
+      "lpm_configuration_share": 0.2892875809010487,
+      "lpm_interaction_share": 0.1629139360079625,
+      "lpm_r_squared": 0.6261105331310941,
+      "lpm_residual_share": 0.37388946686890584
+    }
+  }
+}

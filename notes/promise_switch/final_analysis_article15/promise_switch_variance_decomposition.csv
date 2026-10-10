@@ -1,0 +1,10 @@
+analysis_sample,n_assigned,n_valid,n_missing,model_type,component,metric,value,notes
+manuscript_primary_promise_switch_15_configurations,9584,9022,562,linear_probability_model,configuration,share_total_variance,0.2892875809010487,Type III sums of squares; sum-to-zero contrasts
+manuscript_primary_promise_switch_15_configurations,9584,9022,562,linear_probability_model,condition,share_total_variance,0.17308099918559802,Type III sums of squares; sum-to-zero contrasts
+manuscript_primary_promise_switch_15_configurations,9584,9022,562,linear_probability_model,configuration_x_condition,share_total_variance,0.1629139360079625,Type III sums of squares; sum-to-zero contrasts
+manuscript_primary_promise_switch_15_configurations,9584,9022,562,linear_probability_model,residual,share_total_variance,0.37388946686890584,Type III sums of squares; sum-to-zero contrasts
+manuscript_primary_promise_switch_15_configurations,9584,9022,562,linear_probability_model,model,r_squared,0.6261105331310941,OLS linear probability model
+manuscript_primary_promise_switch_15_configurations,9584,9022,562,logistic_regression,configuration,share_explained_deviance,0.51816053789059,Shapley average over both main-effect orders; interaction after both
+manuscript_primary_promise_switch_15_configurations,9584,9022,562,logistic_regression,condition,share_explained_deviance,0.33928317894149235,Shapley average over both main-effect orders; interaction after both
+manuscript_primary_promise_switch_15_configurations,9584,9022,562,logistic_regression,configuration_x_condition,share_explained_deviance,0.14255628316791763,Shapley average over both main-effect orders; interaction after both
+manuscript_primary_promise_switch_15_configurations,9584,9022,562,logistic_regression,model,mcfadden_pseudo_r_squared,0.5909088156466691,1 - full-model log-likelihood / null-model log-likelihood

@@ -1,7 +1,0 @@
-{
-  "acquired_at": "2026-09-19T01:23:44.816191+00:00",
-  "authority": "OS advisory flock; file existence alone does not indicate activity",
-  "hostname": "MacBook-Air-David.local",
-  "pid": 19764,
-  "run_id": "gpt_5_6_luna_on_medium_minimal_preflight_20260918"
-}
